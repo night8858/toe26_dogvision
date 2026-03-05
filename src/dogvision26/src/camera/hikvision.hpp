@@ -4,8 +4,10 @@
 * Author: sumang
 * Description: grab img
 */
-#ifndef GRABIMG_H_
-#define GRABIMG_H_
+// #ifndef HIKVISION_HPP_
+// #define HIKVISION_HPP_
+
+#pragma once
 
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +15,20 @@
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
 #include "MvCameraControl.h"
-#include "common_struct.hpp"
+
+
+// 相机内参
+typedef struct
+{
+    int device_id;
+    int width;
+    int height;
+    int offset_x;
+    int offset_y;
+    int exposure;
+
+} s_camera_params;
+
 
 class HikGrab
 {
@@ -42,4 +57,5 @@ public:
 extern void __stdcall ImageCallBackEx(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo, void* pUser);
 extern cv::Mat img_rgb_;
 extern std::mutex img_mutex;
-#endif
+
+// #endif
