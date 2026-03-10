@@ -1,0 +1,19 @@
+# ======================
+# ROS / Catkin 特定规则
+# ======================
+# Catkin工作空间的构建和开发空间（必须忽略）
+build/
+devel/
+install/
+
+# Catkin工具生成的特定文件
+.catkin_workspace
+.catkin_tools/
+
+# 编译命令数据库（通常由编辑器生成，无需版本控制）
+compile_commands.json
+
+# ROS日志（通常放在用户主目录~/.ros/log，但在工作区内也避免误提交）
+log/
+logs/
+*.log

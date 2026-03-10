@@ -263,30 +263,30 @@ void detect_oponvino::decode_output(void)
 
 void detect_oponvino::nms(void)
 {
-    nms_results_.clear();
-    if (boxes_raw_.empty()) return;
+    // nms_results_.clear();
+    // if (boxes_raw_.empty()) return;
 
-    // 利用 OpenCV 内置 NMSBoxes，内部使用快速排序 + IoU 剪枝，效率高
-    std::vector<int> keep_indices;
-    cv::dnn::NMSBoxes(
-        boxes_raw_,
-        scores_raw_,
-        detect_config_.bbox_conf_thresh,
-        detect_config_.nms_thresh,
-        keep_indices
-    );
+    // // 利用 OpenCV 内置 NMSBoxes，内部使用快速排序 + IoU 剪枝，效率高
+    // std::vector<int> keep_indices;
+    // cv::dnn::NMSBoxes(
+    //     boxes_raw_,
+    //     scores_raw_,
+    //     detect_config_.bbox_conf_thresh,
+    //     detect_config_.nms_thresh,
+    //     keep_indices
+    // );
 
-    nms_results_.reserve(keep_indices.size());
-    for (int idx : keep_indices) {
-        Detection det;
-        const cv::Rect2f& r = boxes_raw_[idx];
-        det.bbox[0] = r.x;              // x1
-        det.bbox[1] = r.y;              // y1
-        det.bbox[2] = r.x + r.width;    // x2
-        det.bbox[3] = r.y + r.height;   // y2
-        det.conf     = scores_raw_[idx];
-        det.class_id = static_cast<float>(class_ids_raw_[idx]);
-        nms_results_.push_back(det);
-    }
+    // nms_results_.reserve(keep_indices.size());
+    // for (int idx : keep_indices) {
+    //     Detection det;
+    //     const cv::Rect2f& r = boxes_raw_[idx];
+    //     det.bbox[0] = r.x;              // x1
+    //     det.bbox[1] = r.y;              // y1
+    //     det.bbox[2] = r.x + r.width;    // x2
+    //     det.bbox[3] = r.y + r.height;   // y2
+    //     det.conf     = scores_raw_[idx];
+    //     det.class_id = static_cast<float>(class_ids_raw_[idx]);
+    //     nms_results_.push_back(det);
+    // }
 }
 
