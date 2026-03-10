@@ -91,9 +91,9 @@ endif()
 # flag project as catkin-based to distinguish if a find_package()-ed project is a catkin project
 set(dogvision26_FOUND_CATKIN_PROJECT TRUE)
 
-if(NOT " " STREQUAL " ")
+if(NOT "/home/toe/toe26_dogvision/src/dogvision26/include;/usr/local/include/opencv4 " STREQUAL " ")
   set(dogvision26_INCLUDE_DIRS "")
-  set(_include_dirs "")
+  set(_include_dirs "/home/toe/toe26_dogvision/src/dogvision26/include;/usr/local/include/opencv4")
   if(NOT " " STREQUAL " ")
     set(_report "Check the issue tracker '' and consider creating a ticket if the problem has not been reported yet.")
   elseif(NOT " " STREQUAL " ")
@@ -116,7 +116,7 @@ if(NOT " " STREQUAL " ")
   endforeach()
 endif()
 
-set(libraries "")
+set(libraries "/usr/local/lib/libopencv_calib3d.so.4.8.0;/usr/local/lib/libopencv_core.so.4.8.0;/usr/local/lib/libopencv_dnn.so.4.8.0;/usr/local/lib/libopencv_features2d.so.4.8.0;/usr/local/lib/libopencv_flann.so.4.8.0;/usr/local/lib/libopencv_gapi.so.4.8.0;/usr/local/lib/libopencv_highgui.so.4.8.0;/usr/local/lib/libopencv_imgcodecs.so.4.8.0;/usr/local/lib/libopencv_imgproc.so.4.8.0;/usr/local/lib/libopencv_ml.so.4.8.0;/usr/local/lib/libopencv_objdetect.so.4.8.0;/usr/local/lib/libopencv_photo.so.4.8.0;/usr/local/lib/libopencv_stitching.so.4.8.0;/usr/local/lib/libopencv_video.so.4.8.0;/usr/local/lib/libopencv_videoio.so.4.8.0")
 foreach(library ${libraries})
   # keep build configuration keywords, generator expressions, target names, and absolute libraries as-is
   if("${library}" MATCHES "^(debug|optimized|general)$")
@@ -187,7 +187,7 @@ foreach(t ${dogvision26_EXPORTED_TARGETS})
   endif()
 endforeach()
 
-set(depends "")
+set(depends "roscpp;rospy;std_msgs;image_transport;cv_bridge;sensor_msgs")
 foreach(depend ${depends})
   string(REPLACE " " ";" depend_list ${depend})
   # the package name of the dependency must be kept in a unique variable so that it is not overwritten in recursive calls

@@ -1,8 +1,8 @@
 # generated from catkin/cmake/template/pkg.context.pc.in
 CATKIN_PACKAGE_PREFIX = ""
-PROJECT_PKG_CONFIG_INCLUDE_DIRS = "".split(';') if "" != "" else []
-PROJECT_CATKIN_DEPENDS = "".replace(';', ' ')
-PKG_CONFIG_LIBRARIES_WITH_PREFIX = "".split(';') if "" != "" else []
+PROJECT_PKG_CONFIG_INCLUDE_DIRS = "/home/toe/toe26_dogvision/src/dogvision26/include;/usr/local/include/opencv4".split(';') if "/home/toe/toe26_dogvision/src/dogvision26/include;/usr/local/include/opencv4" != "" else []
+PROJECT_CATKIN_DEPENDS = "roscpp;rospy;std_msgs;image_transport;cv_bridge;sensor_msgs".replace(';', ' ')
+PKG_CONFIG_LIBRARIES_WITH_PREFIX = "/usr/local/lib/libopencv_calib3d.so.4.8.0;/usr/local/lib/libopencv_core.so.4.8.0;/usr/local/lib/libopencv_dnn.so.4.8.0;/usr/local/lib/libopencv_features2d.so.4.8.0;/usr/local/lib/libopencv_flann.so.4.8.0;/usr/local/lib/libopencv_gapi.so.4.8.0;/usr/local/lib/libopencv_highgui.so.4.8.0;/usr/local/lib/libopencv_imgcodecs.so.4.8.0;/usr/local/lib/libopencv_imgproc.so.4.8.0;/usr/local/lib/libopencv_ml.so.4.8.0;/usr/local/lib/libopencv_objdetect.so.4.8.0;/usr/local/lib/libopencv_photo.so.4.8.0;/usr/local/lib/libopencv_stitching.so.4.8.0;/usr/local/lib/libopencv_video.so.4.8.0;/usr/local/lib/libopencv_videoio.so.4.8.0".split(';') if "/usr/local/lib/libopencv_calib3d.so.4.8.0;/usr/local/lib/libopencv_core.so.4.8.0;/usr/local/lib/libopencv_dnn.so.4.8.0;/usr/local/lib/libopencv_features2d.so.4.8.0;/usr/local/lib/libopencv_flann.so.4.8.0;/usr/local/lib/libopencv_gapi.so.4.8.0;/usr/local/lib/libopencv_highgui.so.4.8.0;/usr/local/lib/libopencv_imgcodecs.so.4.8.0;/usr/local/lib/libopencv_imgproc.so.4.8.0;/usr/local/lib/libopencv_ml.so.4.8.0;/usr/local/lib/libopencv_objdetect.so.4.8.0;/usr/local/lib/libopencv_photo.so.4.8.0;/usr/local/lib/libopencv_stitching.so.4.8.0;/usr/local/lib/libopencv_video.so.4.8.0;/usr/local/lib/libopencv_videoio.so.4.8.0" != "" else []
 PROJECT_NAME = "dogvision26"
 PROJECT_SPACE_DIR = "/home/toe/toe26_dogvision/devel"
 PROJECT_VERSION = "0.0.0"

@@ -18,6 +18,13 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
+find_package(OpenVINO REQUIRED)
+
+# 设置OpenVINO路径（如果自动查找失败）
+#if(NOT OpenVINO_FOUND)
+#  set(OpenVINO_INCLUDE_DIRS "/usr/include/openvino/runtime" "/opt/intel/openvino/runtime/include/openvino")
+#  set(OpenVINO_LIBRARIES openvino:::runtime)
+#endif()
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -108,10 +115,11 @@ find_package(Threads REQUIRED)
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
+
 catkin_package(
   INCLUDE_DIRS include
   CATKIN_DEPENDS roscpp rospy std_msgs image_transport cv_bridge sensor_msgs
-  DEPENDS OpenCV Threads
+  DEPENDS OpenCV
 )
 
 ###########
@@ -124,13 +132,17 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${OpenVINO_INCLUDE_DIRS}
   src/ppocr_detector
   src/camera
+  src/detect
+  src/detect/yolo_detector
+  src/detect/ppocr_detector
 )
 
 ## Declare a C++ library for ppocr preprocessing
 add_library(ppocr_detector
-  src/ppocr_detector/preprocess.cpp
+  src/detect/ppocr_detector/preprocess.cpp
 )
 add_dependencies(ppocr_detector ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ppocr_detector ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
@@ -150,6 +162,7 @@ add_dependencies(yolo_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED
 target_link_libraries(yolo_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
+  ${OpenVINO_LIBRARIES}
   Threads::Threads
 )
 

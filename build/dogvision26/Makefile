@@ -56,6 +56,39 @@ CMAKE_BINARY_DIR = /home/toe/toe26_dogvision/build
 #=============================================================================
 # Targets provided globally by CMake.
 
+# Special rule for the target install/strip
+install/strip: preinstall
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing the project stripped..."
+	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
+.PHONY : install/strip
+
+# Special rule for the target install/strip
+install/strip/fast: preinstall/fast
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing the project stripped..."
+	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
+.PHONY : install/strip/fast
+
+# Special rule for the target list_install_components
+list_install_components:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Available install components are: \"Unspecified\""
+.PHONY : list_install_components
+
+# Special rule for the target list_install_components
+list_install_components/fast: list_install_components
+
+.PHONY : list_install_components/fast
+
+# Special rule for the target edit_cache
+edit_cache:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "No interactive CMake dialog available..."
+	/usr/bin/cmake -E echo No\ interactive\ CMake\ dialog\ available.
+.PHONY : edit_cache
+
+# Special rule for the target edit_cache
+edit_cache/fast: edit_cache
+
+.PHONY : edit_cache/fast
+
 # Special rule for the target install/local
 install/local: preinstall
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing only the local directory..."
@@ -79,38 +112,6 @@ rebuild_cache/fast: rebuild_cache
 
 .PHONY : rebuild_cache/fast
 
-# Special rule for the target edit_cache
-edit_cache:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "No interactive CMake dialog available..."
-	/usr/bin/cmake -E echo No\ interactive\ CMake\ dialog\ available.
-.PHONY : edit_cache
-
-# Special rule for the target edit_cache
-edit_cache/fast: edit_cache
-
-.PHONY : edit_cache/fast
-
-# Special rule for the target test
-test:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running tests..."
-	/usr/bin/ctest --force-new-ctest-process $(ARGS)
-.PHONY : test
-
-# Special rule for the target test
-test/fast: test
-
-.PHONY : test/fast
-
-# Special rule for the target list_install_components
-list_install_components:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Available install components are: \"Unspecified\""
-.PHONY : list_install_components
-
-# Special rule for the target list_install_components
-list_install_components/fast: list_install_components
-
-.PHONY : list_install_components/fast
-
 # Special rule for the target install
 install: preinstall
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Install the project..."
@@ -123,17 +124,16 @@ install/fast: preinstall/fast
 	/usr/bin/cmake -P cmake_install.cmake
 .PHONY : install/fast
 
-# Special rule for the target install/strip
-install/strip: preinstall
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing the project stripped..."
-	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
-.PHONY : install/strip
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running tests..."
+	/usr/bin/ctest --force-new-ctest-process $(ARGS)
+.PHONY : test
 
-# Special rule for the target install/strip
-install/strip/fast: preinstall/fast
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing the project stripped..."
-	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
-.PHONY : install/strip/fast
+# Special rule for the target test
+test/fast: test
+
+.PHONY : test/fast
 
 # The main all target
 all: cmake_check_build_system
@@ -168,199 +168,19 @@ depend:
 .PHONY : depend
 
 # Convenience name for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
 
 # Convenience name for target.
-std_msgs_generate_messages_py: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+rosgraph_msgs_generate_messages_py: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
 
-.PHONY : std_msgs_generate_messages_py
+.PHONY : rosgraph_msgs_generate_messages_py
 
 # fast build rule for target.
-std_msgs_generate_messages_py/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build
-.PHONY : std_msgs_generate_messages_py/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : std_msgs_generate_messages_nodejs
-
-# fast build rule for target.
-std_msgs_generate_messages_nodejs/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build
-.PHONY : std_msgs_generate_messages_nodejs/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_cpp: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-
-.PHONY : roscpp_generate_messages_cpp
-
-# fast build rule for target.
-roscpp_generate_messages_cpp/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build
-.PHONY : roscpp_generate_messages_cpp/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_eus: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-
-.PHONY : roscpp_generate_messages_eus
-
-# fast build rule for target.
-roscpp_generate_messages_eus/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build
-.PHONY : roscpp_generate_messages_eus/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_nodejs
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_nodejs/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build
-.PHONY : rosgraph_msgs_generate_messages_nodejs/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_lisp: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
-
-.PHONY : std_msgs_generate_messages_lisp
-
-# fast build rule for target.
-std_msgs_generate_messages_lisp/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build
-.PHONY : std_msgs_generate_messages_lisp/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_py: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
-
-.PHONY : roscpp_generate_messages_py
-
-# fast build rule for target.
-roscpp_generate_messages_py/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build
-.PHONY : roscpp_generate_messages_py/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_eus: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
-
-.PHONY : std_msgs_generate_messages_eus
-
-# fast build rule for target.
-std_msgs_generate_messages_eus/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build
-.PHONY : std_msgs_generate_messages_eus/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_nodejs: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-
-.PHONY : roscpp_generate_messages_nodejs
-
-# fast build rule for target.
-roscpp_generate_messages_nodejs/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build
-.PHONY : roscpp_generate_messages_nodejs/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_cpp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_cpp
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_cpp/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build
-.PHONY : rosgraph_msgs_generate_messages_cpp/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_cpp: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
-
-.PHONY : std_msgs_generate_messages_cpp
-
-# fast build rule for target.
-std_msgs_generate_messages_cpp/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build
-.PHONY : std_msgs_generate_messages_cpp/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_eus: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_eus
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_eus/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build
-.PHONY : rosgraph_msgs_generate_messages_eus/fast
-
-# Convenience name for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_lisp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_lisp
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_lisp/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build
-.PHONY : rosgraph_msgs_generate_messages_lisp/fast
+rosgraph_msgs_generate_messages_py/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build
+.PHONY : rosgraph_msgs_generate_messages_py/fast
 
 # Convenience name for target.
 dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/rule:
@@ -378,19 +198,475 @@ roscpp_generate_messages_lisp/fast:
 .PHONY : roscpp_generate_messages_lisp/fast
 
 # Convenience name for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule
 
 # Convenience name for target.
-rosgraph_msgs_generate_messages_py: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
+geometry_msgs_generate_messages_cpp: dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule
 
-.PHONY : rosgraph_msgs_generate_messages_py
+.PHONY : geometry_msgs_generate_messages_cpp
 
 # fast build rule for target.
-rosgraph_msgs_generate_messages_py/fast:
-	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build
-.PHONY : rosgraph_msgs_generate_messages_py/fast
+geometry_msgs_generate_messages_cpp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/build
+.PHONY : geometry_msgs_generate_messages_cpp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+geometry_msgs_generate_messages_nodejs/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/build
+.PHONY : geometry_msgs_generate_messages_nodejs/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_lisp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_lisp
+
+# fast build rule for target.
+rosgraph_msgs_generate_messages_lisp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build
+.PHONY : rosgraph_msgs_generate_messages_lisp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_eus: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_eus
+
+# fast build rule for target.
+rosgraph_msgs_generate_messages_eus/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build
+.PHONY : rosgraph_msgs_generate_messages_eus/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_cpp: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
+
+.PHONY : std_msgs_generate_messages_cpp
+
+# fast build rule for target.
+std_msgs_generate_messages_cpp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build
+.PHONY : std_msgs_generate_messages_cpp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_nodejs: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
+
+.PHONY : roscpp_generate_messages_nodejs
+
+# fast build rule for target.
+roscpp_generate_messages_nodejs/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build
+.PHONY : roscpp_generate_messages_nodejs/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_eus: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
+
+.PHONY : std_msgs_generate_messages_eus
+
+# fast build rule for target.
+std_msgs_generate_messages_eus/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build
+.PHONY : std_msgs_generate_messages_eus/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_lisp: dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_lisp
+
+# fast build rule for target.
+geometry_msgs_generate_messages_lisp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/build
+.PHONY : geometry_msgs_generate_messages_lisp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_py: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
+
+.PHONY : roscpp_generate_messages_py
+
+# fast build rule for target.
+roscpp_generate_messages_py/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build
+.PHONY : roscpp_generate_messages_py/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_lisp: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : std_msgs_generate_messages_lisp
+
+# fast build rule for target.
+std_msgs_generate_messages_lisp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build
+.PHONY : std_msgs_generate_messages_lisp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/yolo_node.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/yolo_node.dir/rule
+.PHONY : dogvision26/CMakeFiles/yolo_node.dir/rule
+
+# Convenience name for target.
+yolo_node: dogvision26/CMakeFiles/yolo_node.dir/rule
+
+.PHONY : yolo_node
+
+# fast build rule for target.
+yolo_node/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/build
+.PHONY : yolo_node/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+rosgraph_msgs_generate_messages_nodejs/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build
+.PHONY : rosgraph_msgs_generate_messages_nodejs/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_eus: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
+
+.PHONY : roscpp_generate_messages_eus
+
+# fast build rule for target.
+roscpp_generate_messages_eus/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build
+.PHONY : roscpp_generate_messages_eus/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_eus: dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_eus
+
+# fast build rule for target.
+sensor_msgs_generate_messages_eus/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/build
+.PHONY : sensor_msgs_generate_messages_eus/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_cpp: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
+
+.PHONY : roscpp_generate_messages_cpp
+
+# fast build rule for target.
+roscpp_generate_messages_cpp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build
+.PHONY : roscpp_generate_messages_cpp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_lisp: dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_lisp
+
+# fast build rule for target.
+sensor_msgs_generate_messages_lisp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/build
+.PHONY : sensor_msgs_generate_messages_lisp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+sensor_msgs_generate_messages_nodejs/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build
+.PHONY : sensor_msgs_generate_messages_nodejs/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_py: dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_py
+
+# fast build rule for target.
+sensor_msgs_generate_messages_py/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/build
+.PHONY : sensor_msgs_generate_messages_py/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_py: dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_py
+
+# fast build rule for target.
+geometry_msgs_generate_messages_py/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/build
+.PHONY : geometry_msgs_generate_messages_py/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/ppocr_detector.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/ppocr_detector.dir/rule
+.PHONY : dogvision26/CMakeFiles/ppocr_detector.dir/rule
+
+# Convenience name for target.
+ppocr_detector: dogvision26/CMakeFiles/ppocr_detector.dir/rule
+
+.PHONY : ppocr_detector
+
+# fast build rule for target.
+ppocr_detector/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/build
+.PHONY : ppocr_detector/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_py: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+
+.PHONY : std_msgs_generate_messages_py
+
+# fast build rule for target.
+std_msgs_generate_messages_py/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build
+.PHONY : std_msgs_generate_messages_py/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_cpp: dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_cpp
+
+# fast build rule for target.
+sensor_msgs_generate_messages_cpp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/build
+.PHONY : sensor_msgs_generate_messages_cpp/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : std_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+std_msgs_generate_messages_nodejs/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build
+.PHONY : std_msgs_generate_messages_nodejs/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_eus: dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_eus
+
+# fast build rule for target.
+geometry_msgs_generate_messages_eus/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/build
+.PHONY : geometry_msgs_generate_messages_eus/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/ppocr_node.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/ppocr_node.dir/rule
+.PHONY : dogvision26/CMakeFiles/ppocr_node.dir/rule
+
+# Convenience name for target.
+ppocr_node: dogvision26/CMakeFiles/ppocr_node.dir/rule
+
+.PHONY : ppocr_node
+
+# fast build rule for target.
+ppocr_node/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/build
+.PHONY : ppocr_node/fast
+
+# Convenience name for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_cpp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_cpp
+
+# fast build rule for target.
+rosgraph_msgs_generate_messages_cpp/fast:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build
+.PHONY : rosgraph_msgs_generate_messages_cpp/fast
+
+src/detect/ppocr_detector/preprocess.o: src/detect/ppocr_detector/preprocess.cpp.o
+
+.PHONY : src/detect/ppocr_detector/preprocess.o
+
+# target to build an object file
+src/detect/ppocr_detector/preprocess.cpp.o:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/src/detect/ppocr_detector/preprocess.cpp.o
+.PHONY : src/detect/ppocr_detector/preprocess.cpp.o
+
+src/detect/ppocr_detector/preprocess.i: src/detect/ppocr_detector/preprocess.cpp.i
+
+.PHONY : src/detect/ppocr_detector/preprocess.i
+
+# target to preprocess a source file
+src/detect/ppocr_detector/preprocess.cpp.i:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/src/detect/ppocr_detector/preprocess.cpp.i
+.PHONY : src/detect/ppocr_detector/preprocess.cpp.i
+
+src/detect/ppocr_detector/preprocess.s: src/detect/ppocr_detector/preprocess.cpp.s
+
+.PHONY : src/detect/ppocr_detector/preprocess.s
+
+# target to generate assembly for a file
+src/detect/ppocr_detector/preprocess.cpp.s:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/src/detect/ppocr_detector/preprocess.cpp.s
+.PHONY : src/detect/ppocr_detector/preprocess.cpp.s
+
+src/ppocr_node.o: src/ppocr_node.cpp.o
+
+.PHONY : src/ppocr_node.o
+
+# target to build an object file
+src/ppocr_node.cpp.o:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/src/ppocr_node.cpp.o
+.PHONY : src/ppocr_node.cpp.o
+
+src/ppocr_node.i: src/ppocr_node.cpp.i
+
+.PHONY : src/ppocr_node.i
+
+# target to preprocess a source file
+src/ppocr_node.cpp.i:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/src/ppocr_node.cpp.i
+.PHONY : src/ppocr_node.cpp.i
+
+src/ppocr_node.s: src/ppocr_node.cpp.s
+
+.PHONY : src/ppocr_node.s
+
+# target to generate assembly for a file
+src/ppocr_node.cpp.s:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/src/ppocr_node.cpp.s
+.PHONY : src/ppocr_node.cpp.s
+
+src/yolo_node.o: src/yolo_node.cpp.o
+
+.PHONY : src/yolo_node.o
+
+# target to build an object file
+src/yolo_node.cpp.o:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/src/yolo_node.cpp.o
+.PHONY : src/yolo_node.cpp.o
+
+src/yolo_node.i: src/yolo_node.cpp.i
+
+.PHONY : src/yolo_node.i
+
+# target to preprocess a source file
+src/yolo_node.cpp.i:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/src/yolo_node.cpp.i
+.PHONY : src/yolo_node.cpp.i
+
+src/yolo_node.s: src/yolo_node.cpp.s
+
+.PHONY : src/yolo_node.s
+
+# target to generate assembly for a file
+src/yolo_node.cpp.s:
+	cd /home/toe/toe26_dogvision/build && $(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/src/yolo_node.cpp.s
+.PHONY : src/yolo_node.cpp.s
 
 # Help Target
 help:
@@ -398,28 +674,50 @@ help:
 	@echo "... all (the default if no target is provided)"
 	@echo "... clean"
 	@echo "... depend"
-	@echo "... install/local"
-	@echo "... rebuild_cache"
-	@echo "... edit_cache"
-	@echo "... test"
-	@echo "... std_msgs_generate_messages_py"
-	@echo "... std_msgs_generate_messages_nodejs"
-	@echo "... roscpp_generate_messages_cpp"
-	@echo "... roscpp_generate_messages_eus"
-	@echo "... rosgraph_msgs_generate_messages_nodejs"
-	@echo "... list_install_components"
-	@echo "... std_msgs_generate_messages_lisp"
-	@echo "... roscpp_generate_messages_py"
-	@echo "... install"
-	@echo "... std_msgs_generate_messages_eus"
-	@echo "... roscpp_generate_messages_nodejs"
-	@echo "... rosgraph_msgs_generate_messages_cpp"
 	@echo "... install/strip"
-	@echo "... std_msgs_generate_messages_cpp"
-	@echo "... rosgraph_msgs_generate_messages_eus"
-	@echo "... rosgraph_msgs_generate_messages_lisp"
-	@echo "... roscpp_generate_messages_lisp"
+	@echo "... list_install_components"
+	@echo "... edit_cache"
 	@echo "... rosgraph_msgs_generate_messages_py"
+	@echo "... roscpp_generate_messages_lisp"
+	@echo "... geometry_msgs_generate_messages_cpp"
+	@echo "... geometry_msgs_generate_messages_nodejs"
+	@echo "... rosgraph_msgs_generate_messages_lisp"
+	@echo "... install/local"
+	@echo "... rosgraph_msgs_generate_messages_eus"
+	@echo "... std_msgs_generate_messages_cpp"
+	@echo "... roscpp_generate_messages_nodejs"
+	@echo "... std_msgs_generate_messages_eus"
+	@echo "... geometry_msgs_generate_messages_lisp"
+	@echo "... roscpp_generate_messages_py"
+	@echo "... std_msgs_generate_messages_lisp"
+	@echo "... yolo_node"
+	@echo "... rosgraph_msgs_generate_messages_nodejs"
+	@echo "... rebuild_cache"
+	@echo "... roscpp_generate_messages_eus"
+	@echo "... sensor_msgs_generate_messages_eus"
+	@echo "... roscpp_generate_messages_cpp"
+	@echo "... sensor_msgs_generate_messages_lisp"
+	@echo "... sensor_msgs_generate_messages_nodejs"
+	@echo "... sensor_msgs_generate_messages_py"
+	@echo "... geometry_msgs_generate_messages_py"
+	@echo "... install"
+	@echo "... ppocr_detector"
+	@echo "... std_msgs_generate_messages_py"
+	@echo "... sensor_msgs_generate_messages_cpp"
+	@echo "... std_msgs_generate_messages_nodejs"
+	@echo "... geometry_msgs_generate_messages_eus"
+	@echo "... ppocr_node"
+	@echo "... rosgraph_msgs_generate_messages_cpp"
+	@echo "... test"
+	@echo "... src/detect/ppocr_detector/preprocess.o"
+	@echo "... src/detect/ppocr_detector/preprocess.i"
+	@echo "... src/detect/ppocr_detector/preprocess.s"
+	@echo "... src/ppocr_node.o"
+	@echo "... src/ppocr_node.i"
+	@echo "... src/ppocr_node.s"
+	@echo "... src/yolo_node.o"
+	@echo "... src/yolo_node.i"
+	@echo "... src/yolo_node.s"
 .PHONY : help
 
 

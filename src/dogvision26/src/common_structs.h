@@ -9,7 +9,7 @@
 
 #include <string>
 #include <opencv2/opencv.hpp>
-
+#include "hikvision.hpp"
 typedef struct 
 {
     // file_path
@@ -49,6 +49,13 @@ typedef struct
     
 }s_detector_params;
 
+struct alignas(float) Detection
+{
+    float bbox[4];
+    float conf;
+    float class_id;
+};
+
 typedef struct
 {
     int device_id;
@@ -63,62 +70,30 @@ typedef struct
 
 typedef struct
 {
+    int device_id;
     int width;
     int height;
 
 }s_usbcamera_params;
 
 
-typedef struct
-{
-    int camp;
-}s_base_params;
 
-typedef struct
-{
-    cv::Point2f pts[5];
-
-    float x_c;
-    float y_c;
-    float z;
-
-    int t_size;
-    int type;
-    cv::Rect rect;
-    float conf;
-    int color;
-    float angle;
-
-}s_armor;
-
-typedef struct
-{
-    float x[6];
-    float y[6];
-    float z;
-
-    int t_size;
-    int type;
-    float conf;
-    int color;
-
-}s_nv_armor;
-
-typedef struct
-{
-    std::vector<s_armor> armor;
-}s_detections;
+// typedef struct
+// {
+//     std::vector<s_armor> armor;
+// }s_detections;
 
 typedef struct
 {
     s_detector_params detect_config;
-    s_base_params base_config;
-    s_camera_params camera_config;
+    s_hikcamera_params hikcamera_config;
+    s_usbcamera_params usbcamera_config[4];
 #ifdef TWO_CAMERAS
     s_camera_params camera2_config;
 #else
 #endif
 }Appconfig;
+
 
 typedef struct
 {
@@ -128,16 +103,12 @@ typedef struct
     int num_out;
 }s_OutLayer;
 
+
 typedef struct{
     int id;
     std::vector<cv::Point2f> merge_pts;
     std::vector<float> merge_confs;
 }pick_merge_store;
 
-struct armor_compare{
-    bool operator ()(const s_armor& a,const s_armor& b) {
-        return a.conf > b.conf; 
-    }
-};
 
 #endif

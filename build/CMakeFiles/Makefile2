@@ -79,7 +79,9 @@ clean: dogvision26/clean
 # Directory level rules for directory dogvision26
 
 # Recursive "all" directory target.
-dogvision26/all:
+dogvision26/all: dogvision26/CMakeFiles/yolo_node.dir/all
+dogvision26/all: dogvision26/CMakeFiles/ppocr_detector.dir/all
+dogvision26/all: dogvision26/CMakeFiles/ppocr_node.dir/all
 
 .PHONY : dogvision26/all
 
@@ -89,21 +91,34 @@ dogvision26/preinstall:
 .PHONY : dogvision26/preinstall
 
 # Recursive "clean" directory target.
-dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean
-dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/clean
 dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/yolo_node.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/ppocr_detector.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/ppocr_node.dir/clean
+dogvision26/clean: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean
 
 .PHONY : dogvision26/clean
 
@@ -409,355 +424,31 @@ gtest/googletest/CMakeFiles/gtest.dir/clean:
 .PHONY : gtest/googletest/CMakeFiles/gtest.dir/clean
 
 #=============================================================================
-# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir
+# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir
 
 # All Build rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_py"
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_py"
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
 
 # Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule: cmake_check_build_system
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule: cmake_check_build_system
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
 
 # Convenience name for target.
-std_msgs_generate_messages_py: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+rosgraph_msgs_generate_messages_py: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
 
-.PHONY : std_msgs_generate_messages_py
-
-# clean rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_nodejs"
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : std_msgs_generate_messages_nodejs
+.PHONY : rosgraph_msgs_generate_messages_py
 
 # clean rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_cpp"
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_cpp: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-
-.PHONY : roscpp_generate_messages_cpp
-
-# clean rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_eus"
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_eus: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-
-.PHONY : roscpp_generate_messages_eus
-
-# clean rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_nodejs"
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_nodejs
-
-# clean rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_lisp"
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_lisp: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
-
-.PHONY : std_msgs_generate_messages_lisp
-
-# clean rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_py.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_py"
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_py: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
-
-.PHONY : roscpp_generate_messages_py
-
-# clean rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_eus"
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_eus: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
-
-.PHONY : std_msgs_generate_messages_eus
-
-# clean rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_nodejs"
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_nodejs: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-
-.PHONY : roscpp_generate_messages_nodejs
-
-# clean rule for target.
-dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean
-.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_cpp"
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_cpp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_cpp
-
-# clean rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_cpp"
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-std_msgs_generate_messages_cpp: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
-
-.PHONY : std_msgs_generate_messages_cpp
-
-# clean rule for target.
-dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean
-.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_eus"
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_eus: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_eus
-
-# clean rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
-
-#=============================================================================
-# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir
-
-# All Build rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_lisp"
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
-
-# Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_lisp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_lisp
-
-# clean rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean
 
 #=============================================================================
 # Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir
@@ -787,31 +478,779 @@ dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/clean:
 .PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/clean
 
 #=============================================================================
-# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir
+# Target rules for target dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir
 
 # All Build rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/depend
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_py"
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target geometry_msgs_generate_messages_cpp"
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/all
 
 # Build rule for subdir invocation for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule: cmake_check_build_system
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule: cmake_check_build_system
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule
 
 # Convenience name for target.
-rosgraph_msgs_generate_messages_py: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
+geometry_msgs_generate_messages_cpp: dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/rule
 
-.PHONY : rosgraph_msgs_generate_messages_py
+.PHONY : geometry_msgs_generate_messages_cpp
 
 # clean rule for target.
-dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean:
-	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean
-.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/clean
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/clean
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target geometry_msgs_generate_messages_nodejs"
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_nodejs
+
+# clean rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/clean
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_lisp"
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_lisp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_lisp
+
+# clean rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_eus"
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_eus: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_eus
+
+# clean rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_cpp"
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_cpp: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/rule
+
+.PHONY : std_msgs_generate_messages_cpp
+
+# clean rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_nodejs"
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_nodejs: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
+
+.PHONY : roscpp_generate_messages_nodejs
+
+# clean rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_eus"
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_eus: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/rule
+
+.PHONY : std_msgs_generate_messages_eus
+
+# clean rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target geometry_msgs_generate_messages_lisp"
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_lisp: dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_lisp
+
+# clean rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/clean
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_py.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_py"
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_py: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/rule
+
+.PHONY : roscpp_generate_messages_py
+
+# clean rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_lisp"
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_lisp: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : std_msgs_generate_messages_lisp
+
+# clean rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/yolo_node.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/yolo_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
+	$(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num=13,14 "Built target yolo_node"
+.PHONY : dogvision26/CMakeFiles/yolo_node.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/yolo_node.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 2
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/yolo_node.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/yolo_node.dir/rule
+
+# Convenience name for target.
+yolo_node: dogvision26/CMakeFiles/yolo_node.dir/rule
+
+.PHONY : yolo_node
+
+# clean rule for target.
+dogvision26/CMakeFiles/yolo_node.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/yolo_node.dir/build.make dogvision26/CMakeFiles/yolo_node.dir/clean
+.PHONY : dogvision26/CMakeFiles/yolo_node.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_nodejs"
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_nodejs
+
+# clean rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_eus"
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_eus: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/rule
+
+.PHONY : roscpp_generate_messages_eus
+
+# clean rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_eus"
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_eus: dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_eus
+
+# clean rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/clean
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target roscpp_generate_messages_cpp"
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+roscpp_generate_messages_cpp: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
+
+.PHONY : roscpp_generate_messages_cpp
+
+# clean rule for target.
+dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean
+.PHONY : dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_lisp"
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_lisp: dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_lisp
+
+# clean rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_nodejs"
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_nodejs
+
+# clean rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_py"
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_py: dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_py
+
+# clean rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/clean
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target geometry_msgs_generate_messages_py"
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_py: dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_py
+
+# clean rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/clean
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/ppocr_detector.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_detector.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
+	$(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num=9,10 "Built target ppocr_detector"
+.PHONY : dogvision26/CMakeFiles/ppocr_detector.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/ppocr_detector.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 2
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/ppocr_detector.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/ppocr_detector.dir/rule
+
+# Convenience name for target.
+ppocr_detector: dogvision26/CMakeFiles/ppocr_detector.dir/rule
+
+.PHONY : ppocr_detector
+
+# clean rule for target.
+dogvision26/CMakeFiles/ppocr_detector.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/ppocr_detector.dir/build.make dogvision26/CMakeFiles/ppocr_detector.dir/clean
+.PHONY : dogvision26/CMakeFiles/ppocr_detector.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_py"
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_py: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/rule
+
+.PHONY : std_msgs_generate_messages_py
+
+# clean rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target sensor_msgs_generate_messages_cpp"
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+sensor_msgs_generate_messages_cpp: dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/rule
+
+.PHONY : sensor_msgs_generate_messages_cpp
+
+# clean rule for target.
+dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/clean
+.PHONY : dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target std_msgs_generate_messages_nodejs"
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+std_msgs_generate_messages_nodejs: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : std_msgs_generate_messages_nodejs
+
+# clean rule for target.
+dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/build.make dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean
+.PHONY : dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target geometry_msgs_generate_messages_eus"
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule
+
+# Convenience name for target.
+geometry_msgs_generate_messages_eus: dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/rule
+
+.PHONY : geometry_msgs_generate_messages_eus
+
+# clean rule for target.
+dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/build.make dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/clean
+.PHONY : dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/ppocr_node.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/roscpp_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/ppocr_detector.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_py.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/sensor_msgs_generate_messages_cpp.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/std_msgs_generate_messages_nodejs.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/geometry_msgs_generate_messages_eus.dir/all
+dogvision26/CMakeFiles/ppocr_node.dir/all: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
+	$(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num=11,12 "Built target ppocr_node"
+.PHONY : dogvision26/CMakeFiles/ppocr_node.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/ppocr_node.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 4
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/ppocr_node.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/ppocr_node.dir/rule
+
+# Convenience name for target.
+ppocr_node: dogvision26/CMakeFiles/ppocr_node.dir/rule
+
+.PHONY : ppocr_node
+
+# clean rule for target.
+dogvision26/CMakeFiles/ppocr_node.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/ppocr_node.dir/build.make dogvision26/CMakeFiles/ppocr_node.dir/clean
+.PHONY : dogvision26/CMakeFiles/ppocr_node.dir/clean
+
+#=============================================================================
+# Target rules for target dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir
+
+# All Build rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/depend
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/toe/toe26_dogvision/build/CMakeFiles --progress-num= "Built target rosgraph_msgs_generate_messages_cpp"
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
+
+# Build rule for subdir invocation for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/toe/toe26_dogvision/build/CMakeFiles 0
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
+
+# Convenience name for target.
+rosgraph_msgs_generate_messages_cpp: dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
+
+.PHONY : rosgraph_msgs_generate_messages_cpp
+
+# clean rule for target.
+dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean:
+	$(MAKE) -f dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean
+.PHONY : dogvision26/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

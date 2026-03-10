@@ -1,5 +1,5 @@
 {
-    "camera_0":
+    "hikcamera":
     {
       "device_id": 0,
       "width": 1920,
@@ -9,19 +9,42 @@
       "exposure":5000
     },
 
-    "camera_1":
+    "usbcamera0":
+    {
+      "device_id": 0,
+      "width": 1920,
+      "height": 1080,
+      "FPS":120
+    },
+    "usbcamera1":
     {
       "device_id": 1,
       "width": 1920,
       "height": 1080,
-      "offset_x":0,
-      "offset_y":0,
-      "exposure":5000
+      "FPS":120
     },
+
+    "usbcamera2":
+    {
+      "device_id": 2,
+      "width": 1920,
+      "height": 1080,
+      "FPS":120
+    },
+    "usbcamera3":
+    {
+      "device_id": 3,
+      "width": 1920,
+      "height": 1080,
+      "FPS":120
+    },
+
 
     "path":
     {
-
+      "openvino_bin_file_path": " ",
+      "openvino_xml_file_path": " ",
+      "ppocr_file_path": " "
     },
 
     "NCHW":
@@ -52,6 +75,7 @@
     "nums":
     {
         "classes": 4
+        
     }
 
 }
