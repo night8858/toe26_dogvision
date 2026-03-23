@@ -13,8 +13,24 @@ class detector
 {
 public:
     detector(Appconfig* config);
-    ~detector();
+    virtual ~detector();
 
+    void push_img(cv::Mat &giab_img , int cam_id );
+
+    void show_yolo_result(cv::Mat &show_img , Detection &det);
+    void show_ocr_result(void);
+
+    bool get_yolo_result(cv::Mat &input_img , std::vector<Detection> &res);
+    bool get_ocr_result(void);
+
+    void load_config(Appconfig& config, std::string json_file_path);
+
+    virtual void load_model(const std::string& model_path, const std::string& device) = 0;
+    virtual void preprocess(cv::Mat &src) = 0;
+    virtual void inference() = 0;
+    virtual void postprocess() = 0;
+
+protected:
     const int max_size_ = 10;
 
     std::vector<cv::Mat> input_imgs_hikvion;
@@ -33,23 +49,4 @@ public:
     cv::Mat show_img_usb[4];
 
     s_detector_params detect_config_;
-
-    //int yolo_inputtensor_size = 640 *640 * 3; // 640*640*3
-    
-public:
-    void push_img(cv::Mat &giab_img , int cam_id );
-
-    void show_yolo_result(cv::Mat &show_img , Detection &det);
-    void show_ocr_result(void);
-
-    bool get_yolo_result(cv::Mat &input_img , std::vector<Detection> &res);
-    bool get_ocr_result(void);
-
-    void load_config(Appconfig& config, std::string json_file_path);
-
-    virtual void preprocess(cv::Mat &src) = 0;
-    virtual void inference() = 0;
-    virtual void postprocess() = 0;
-
-
 };

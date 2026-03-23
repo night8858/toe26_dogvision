@@ -17,3 +17,6 @@ compile_commands.json
 log/
 logs/
 *.log
+
+#vscode生成的文件
+.vscode/

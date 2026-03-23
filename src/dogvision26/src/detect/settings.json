@@ -1,4 +1,5 @@
 {
+  //摄像头参数设置
     "hikcamera":
     {
       "device_id": 0,
@@ -39,7 +40,7 @@
       "FPS":120
     },
 
-
+// OpenVINO模型路径和PPOCR模型路径
     "path":
     {
       "openvino_bin_file_path": " ",
@@ -47,7 +48,10 @@
 
       "ppocr_det_model_path": " ",
       "ppocr_rec_model_path": " ",
-      "ppocr_cls_model_path": " "
+      "ppocr_cls_model_path": " ",
+
+      "ppocr_dict_path": "/home/toe/toe26_dogvision/src/dogvision26/src/data/ppocr/Dict/ppocr_keys_v1.txt"
+
     },
 
     "NCHW":
@@ -75,6 +79,7 @@
         "max_wellid_distance": 8
     },
 
+    //类别数量设置
     "nums":
     {
         "classes": 4

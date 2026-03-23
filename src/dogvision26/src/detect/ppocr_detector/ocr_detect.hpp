@@ -11,7 +11,19 @@
 //负责寻找检测结果中的文本区域，并将文本区域坐标传递给 rec 模块进行识别
 class detect_det_ppocr : public detector
 {
-    public:
+public:
+    explicit detect_det_ppocr(Appconfig* config) : detector(config) {}
+    ~detect_det_ppocr() override = default;
+
+    void load_model(const std::string& model_path, const std::string& device)  override;
+    void preprocess(cv::Mat &input_img)  override;
+    void inference() override;
+    void postprocess() override;
+
+    const std::vector<OCRBox>& get_det_boxes() const { return ocr_det_out_; }
+
+private:
+    std::array<cv::Point2f, 4> OrderPointsClockwise(const std::vector<cv::Point2f>& pts) const;
 
     ov::Core core_;
     ov::CompiledModel model_;
@@ -19,16 +31,7 @@ class detect_det_ppocr : public detector
     ov::Tensor input_tensor_;
     ov::Tensor output_tensor_;
 
-    void preprocess(cv::Mat &input_img)  override;
-    void inference() override;
-    void postprocess() override;
-    
-    std::array<cv::Point2f, 4> OrderPointsClockwise(const std::vector<cv::Point2f>& pts) const;
-
-    std::vector<OCRBox> ocr_det_out;
-
-    private:
-
+    std::vector<OCRBox> ocr_det_out_;
     DetResizeMeta Mate;
 
     
@@ -38,32 +41,46 @@ class detect_det_ppocr : public detector
 //负责对 det 模块传递过来的文本区域进行识别，输出文本内容
 class detect_rec_ppocr : public detector
 {
-    public:
+public:
+    explicit detect_rec_ppocr(Appconfig* config) : detector(config) {}
+    ~detect_rec_ppocr() override = default;
+
+    void loda_dict(const std::string& dict_path);
+
+    void load_model(const std::string& model_path, const std::string& device)  override;
+    void preprocess(cv::Mat &input_img)  override;
+    void inference() override;
+    void postprocess() override;
+
+private:
     ov::Core core_;
     ov::CompiledModel model_;
     ov::InferRequest infer_request_;
     ov::Tensor input_tensor_;
     ov::Tensor output_tensor_;
 
-    void preprocess(cv::Mat &input_img)  override;
-    void inference() override;
-    void postprocess() override;
-    
-
-
-    private:
-
+    std::vector<std::string> dict_;// OCR识别字典
+    cv::Mat chw_img; // 预处理后CHW格式的输入图像
+    float max_wh_ratio; // 文本行最大宽高比，超过则认为是异常文本行
 
 };
 
 //负责对文本区域进行方向分类，输出文本方向（可以不用，就是用来检查文本是否被倒置的）
 class detect_cls_ppocr : public detector
 {
-    public:
+public:
+    explicit detect_cls_ppocr(Appconfig* config) : detector(config) {}
+    ~detect_cls_ppocr() override = default;
 
+    void load_model(const std::string& model_path, const std::string& device) override;
+    void preprocess(cv::Mat &input_img) override;
+    void inference() override;
+    void postprocess() override;
 
-
-    private:
-
-
+private:
+    ov::Core core_;
+    ov::CompiledModel model_;
+    ov::InferRequest infer_request_;
+    ov::Tensor input_tensor_;
+    ov::Tensor output_tensor_;
 };

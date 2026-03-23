@@ -16,6 +16,7 @@ typedef struct
         std::string bin_file_path;
         std::string xml_file_path;
 
+        std::string yolo_device = "CPU";
     // NCHW
         int batch_size;
         int h;
@@ -45,7 +46,7 @@ typedef struct
     float z_scale;
     float z_scale_right;
 
-//////OCR
+/////////////OCR////////////////
 
     std::string ppocr_det_model_path;
     std::string ppocr_rec_model_path;

@@ -3,10 +3,22 @@
 #include <openvino/openvino.hpp> // OpenVINO 2025 API
 #include <vector>
 #include <algorithm>
+#include <fstream>
 
 #include "common_structs.h"
 #include "detector.hpp"
 #include "ocr_detect.hpp"
+
+void detect_det_ppocr::load_model(const std::string& model_path, const std::string& device)
+{
+    model_ = core_.compile_model(model_path, device);
+    infer_request_ = model_.create_infer_request();
+    // input_tensor_ = infer_request_.get_input_tensor();
+    // output_tensor_ = infer_request_.get_output_tensor();
+    // 这里实现PP-OCR的模型加载逻辑，使用OpenVINO加载模型并创建推理请求
+    // 根据配置选择设备（CPU/GPU/VPU等）加载模型
+}
+
 
 void detect_det_ppocr::preprocess(cv::Mat &input_img)
 {
@@ -119,8 +131,8 @@ void detect_det_ppocr::postprocess()
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(bin, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
 
-    //清理cortours，留下符合条件的文本区域轮廓，并将文本区域坐标转换为原图坐标，存储在ocr_det_out中
-    ocr_det_out.clear();
+    //清理cortours，留下符合条件的文本区域轮廓，并将文本区域坐标转换为原图坐标，存储在ocr_det_out_中
+    ocr_det_out_.clear();
 
     for (const auto &contour : contours)
     {
@@ -160,10 +172,10 @@ void detect_det_ppocr::postprocess()
             const float y = std::clamp(ordered[i].y / Mate.ratio_h, 0.0f, static_cast<float>(Mate.src_h - 1));
             box.pts[static_cast<size_t>(i)] = cv::Point2f(x, y);
         }
-        ocr_det_out.push_back(box);
+        ocr_det_out_.push_back(box);
     }
 
-    std::sort(ocr_det_out.begin(), ocr_det_out.end(), [](const OCRBox &a, const OCRBox &b)
+    std::sort(ocr_det_out_.begin(), ocr_det_out_.end(), [](const OCRBox &a, const OCRBox &b)
               {
         if (std::abs(a.pts[0].y - b.pts[0].y) < 10.0f) {
             return a.pts[0].x < b.pts[0].x;
@@ -176,6 +188,66 @@ void detect_det_ppocr::postprocess()
 }
 
 
+void detect_rec_ppocr::load_model(const std::string& model_path, const std::string& device)
+{
+    model_ = core_.compile_model(model_path, device);
+    infer_request_ = model_.create_infer_request();
+
+}
+
+//读字典
+void detect_rec_ppocr::loda_dict(const std::string& dict_path)
+{
+    dict_.clear();
+    dict_.push_back("blank");
+    std::ifstream ifs(dict_path);
+    std::string line;
+    while (std::getline(ifs, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        dict_.push_back(line);
+    }
+    dict_.push_back(" ");
+}
+
+void detect_rec_ppocr::preprocess(cv::Mat &input_img)
+{
+    const int img_c = detect_config_.rec_img_c;
+    const int img_h = detect_config_.rec_img_h;
+    const int img_w = static_cast<int>(img_h * max_wh_ratio);
+
+    const float ratio = static_cast<float>(input_img.cols) / static_cast<float>(input_img.rows);
+    int resized_w = static_cast<int>(std::ceil(img_h * ratio));
+    resized_w = std::min(resized_w, img_w);
+
+    cv::Mat resized;
+    cv::resize(input_img, resized, cv::Size(resized_w, img_h));
+    resized.convertTo(resized, CV_32FC3, 1.0 / 255.0);
+
+    cv::Mat chw(img_c, img_h * img_w, CV_32F, cv::Scalar(0));
+    std::vector<cv::Mat> channels;
+    cv::split(resized, channels);
+    for (int c = 0; c < img_c; ++c) {
+        cv::Mat dst = chw.row(c).reshape(1, img_h);
+        channels[c].copyTo(dst.colRange(0, resized_w));
+        dst = (dst - 0.5f) / 0.5f;
+    }
+
+    chw_img = chw;
+
+}
 
 
+void detect_rec_ppocr::inference()
+{
+    infer_request_.set_input_tensor(input_tensor_);
+    infer_request_.infer();
+    output_tensor_ = infer_request_.get_output_tensor();
+}
+
+void detect_rec_ppocr::postprocess()
+{
+
+}
 
