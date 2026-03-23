@@ -1,10 +1,10 @@
 #pragma once 
 
-
 #include <opencv2/opencv.hpp>
 #include <mutex>
 #include <vector>
 #include <nlohmann/json.hpp>
+
 #include "common_structs.h"
 
 
@@ -45,58 +45,11 @@ public:
     bool get_yolo_result(cv::Mat &input_img , std::vector<Detection> &res);
     bool get_ocr_result(void);
 
+    void load_config(Appconfig& config, std::string json_file_path);
+
     virtual void preprocess() = 0;
     virtual void inference() = 0;
     virtual void postprocess() = 0;
-
-private:
-
-    // int flag = 2;    //用来判断单路推理双路推理
-
-    // cv::Mat m_img_src;
-    // AffineMat m_dst2src;
-
-    // Detection det;
-    // Detection det1;
-    // Detection det2;
-
-    // std::vector<Detection> res;
-    // std::vector<Detection> res1;
-    // std::vector<Detection> res2;
-
-    // nvinfer1::Dims m_output_dims;
-    // int m_output_area;
-    // int m_total_objects;
-
-    // std::vector<unsigned char> engine_data_;
-    // std::unique_ptr<nvinfer1::IRuntime> runtime_;
-    // std::shared_ptr<nvinfer1::ICudaEngine> engine_;
-    // std::unique_ptr<nvinfer1::IExecutionContext> context_;
-
-    // int inputIndex;
-    // int outputIndex;
-
-    // // input
-    // float *input_host;
-
-    // float *device_buffers[2];          //存储输入输出的数据
-    // // output
-    // float *output_device_host;
-
-    // uint8_t *img_buffer_host_1;
-    // uint8_t *img_buffer_device_1;
-
-    // uint8_t *img_buffer_host_2;
-    // uint8_t *img_buffer_device_2;
-
-
-    // float *output_device;
-    // float *output_objects_device;
-    // float *output_objects_host;
-////////////////////////////////////////////
-
-   
-
 
 
 };

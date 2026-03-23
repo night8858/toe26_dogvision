@@ -4,7 +4,9 @@
 #include <fstream>
 #include <jsoncpp/json/json.h>
 #include <string>
-void load_config(Appconfig& config, std::string json_file_path)
+
+
+void detector::load_config(Appconfig& config, std::string json_file_path)
 {
     Json::Reader reader;
     Json::Value value;
@@ -65,6 +67,15 @@ void load_config(Appconfig& config, std::string json_file_path)
 
 detector::detector(Appconfig* config)
 {
+    hik_img_flag = 0;
+    for (int i = 0; i < 4; ++i) {
+        usb_img_flag[i] = 0;
+    }
+
+    if (config == nullptr) {
+        return;
+    }
+
     // 初始化模型参数
     detect_config_.xml_file_path = config->detect_config.xml_file_path;
     detect_config_.bin_file_path = config->detect_config.bin_file_path;

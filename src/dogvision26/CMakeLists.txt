@@ -19,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
 find_package(OpenVINO REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(JSONCPP jsoncpp)
 
 # 设置OpenVINO路径（如果自动查找失败）
 #if(NOT OpenVINO_FOUND)
@@ -133,11 +135,14 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${OpenVINO_INCLUDE_DIRS}
+  ${JSONCPP_INCLUDE_DIRS}
+  src/
   src/ppocr_detector
   src/camera
   src/detect
   src/detect/yolo_detector
   src/detect/ppocr_detector
+  /opt/MVS/include
 )
 
 ## Declare a C++ library for ppocr preprocessing
@@ -148,7 +153,9 @@ add_dependencies(ppocr_detector ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXP
 target_link_libraries(ppocr_detector ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
 ## Declare C++ executables
-add_executable(ppocr_node src/ppocr_node.cpp)
+add_executable(ppocr_node 
+src/ppocr_node.cpp
+)
 add_dependencies(ppocr_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ppocr_node
   ${catkin_LIBRARIES}
@@ -157,14 +164,33 @@ target_link_libraries(ppocr_node
   Threads::Threads
 )
 
-add_executable(yolo_node src/yolo_node.cpp)
+add_executable(yolo_node
+  src/yolo_node.cpp
+  src/detect/dtetctor.cpp
+  src/detect/yolo_detector/nuc_detect.cpp
+)
 add_dependencies(yolo_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(yolo_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
-  ${OpenVINO_LIBRARIES}
   Threads::Threads
 )
+
+if(TARGET openvino::runtime)
+  target_link_libraries(yolo_node openvino::runtime)
+else()
+  target_link_libraries(yolo_node ${OpenVINO_LIBRARIES})
+endif()
+
+if(TARGET jsoncpp_lib)
+  target_link_libraries(yolo_node jsoncpp_lib)
+elseif(TARGET jsoncpp_static)
+  target_link_libraries(yolo_node jsoncpp_static)
+elseif(JSONCPP_FOUND)
+  target_link_libraries(yolo_node ${JSONCPP_LIBRARIES})
+else()
+  target_link_libraries(yolo_node jsoncpp)
+endif()
 
 #############
 ## Install ##

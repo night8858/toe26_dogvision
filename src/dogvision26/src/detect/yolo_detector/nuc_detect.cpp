@@ -207,6 +207,11 @@ void detect_oponvino::postprocess()
     nms();
 }
 
+const std::vector<Detection>& detect_oponvino::get_nms_results() const
+{
+    return nms_results_;
+}
+
 
 void detect_oponvino::decode_output(void)
 {
@@ -266,7 +271,6 @@ void detect_oponvino::nms(void)
     // nms_results_.clear();
     // if (boxes_raw_.empty()) return;
 
-    // // 利用 OpenCV 内置 NMSBoxes，内部使用快速排序 + IoU 剪枝，效率高
     // std::vector<int> keep_indices;
     // cv::dnn::NMSBoxes(
     //     boxes_raw_,
@@ -280,10 +284,10 @@ void detect_oponvino::nms(void)
     // for (int idx : keep_indices) {
     //     Detection det;
     //     const cv::Rect2f& r = boxes_raw_[idx];
-    //     det.bbox[0] = r.x;              // x1
-    //     det.bbox[1] = r.y;              // y1
-    //     det.bbox[2] = r.x + r.width;    // x2
-    //     det.bbox[3] = r.y + r.height;   // y2
+    //     det.bbox[0] = r.x;
+    //     det.bbox[1] = r.y;
+    //     det.bbox[2] = r.width;
+    //     det.bbox[3] = r.height;
     //     det.conf     = scores_raw_[idx];
     //     det.class_id = static_cast<float>(class_ids_raw_[idx]);
     //     nms_results_.push_back(det);

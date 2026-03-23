@@ -88,10 +88,7 @@ typedef struct
     s_detector_params detect_config;
     s_hikcamera_params hikcamera_config;
     s_usbcamera_params usbcamera_config[4];
-#ifdef TWO_CAMERAS
-    s_camera_params camera2_config;
-#else
-#endif
+
 }Appconfig;
 
 
