@@ -47,7 +47,7 @@ public:
 
     void load_config(Appconfig& config, std::string json_file_path);
 
-    virtual void preprocess() = 0;
+    virtual void preprocess(cv::Mat &src) = 0;
     virtual void inference() = 0;
     virtual void postprocess() = 0;
 

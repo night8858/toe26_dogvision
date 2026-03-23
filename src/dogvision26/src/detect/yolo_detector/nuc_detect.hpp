@@ -25,7 +25,7 @@ public:
 
         bool inference_init(void);
 
-        void preprocess() override;
+        void preprocess(cv::Mat &input_img) override;
         void inference() override;
         void postprocess() override;
 
@@ -41,6 +41,7 @@ private:
         int pad_w_ = 0;      // 水平填充
         int pad_h_ = 0;      // 垂直填充
                              // 模型输入精度
+
         ov::element::Type input_precision_ = ov::element::f32;
         // letterbox 预处理函数
         cv::Mat letterbox(const cv::Mat &src, int target_w, int target_h);
@@ -60,4 +61,6 @@ private:
         int out_num_anchors_ = 0;  // anchor数量，如8400
         int out_num_classes_ = 0;  // 类别数
         int out_num_channels_ = 0; // 4 + num_classes
+
 };
+

@@ -1,0 +1,181 @@
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <openvino/openvino.hpp> // OpenVINO 2025 API
+#include <vector>
+#include <algorithm>
+
+#include "common_structs.h"
+#include "detector.hpp"
+#include "ocr_detect.hpp"
+
+void detect_det_ppocr::preprocess(cv::Mat &input_img)
+{
+    Mate.src_h = input_img.rows;
+    Mate.src_w = input_img.cols;
+
+    float ratio = 1.0f;
+    // 根据配置选择缩放策略，计算缩放比例
+    if (detect_config_.det_limit_type == "max")
+    {
+        const int max_side = std::max(Mate.src_h, Mate.src_w);
+        if (max_side > detect_config_.det_limit_side_len)
+        {
+            ratio = static_cast<float>(detect_config_.det_limit_side_len) / static_cast<float>(max_side);
+        }
+    }
+    else
+    {
+        const int min_side = std::min(Mate.src_h, Mate.src_w);
+        if (min_side < detect_config_.det_limit_side_len)
+        {
+            ratio = static_cast<float>(detect_config_.det_limit_side_len) / static_cast<float>(min_side);
+        }
+    }
+
+    int resize_h = std::max(32, static_cast<int>(std::round(Mate.src_h * ratio / 32.0f) * 32.0f));
+    int resize_w = std::max(32, static_cast<int>(std::round(Mate.src_w * ratio / 32.0f) * 32.0f));
+
+    Mate.resize_h = resize_h;
+    Mate.resize_w = resize_w;
+    Mate.ratio_h = static_cast<float>(resize_h) / static_cast<float>(Mate.src_h);
+    Mate.ratio_w = static_cast<float>(resize_w) / static_cast<float>(Mate.src_w);
+
+    cv::Mat resized;
+    cv::resize(input_img, resized, cv::Size(resize_w, resize_h));
+    resized.convertTo(resized, CV_32FC3, 1.0 / 255.0);
+
+    // 图像归一化标准化
+    const cv::Scalar mean(0.485, 0.456, 0.406);
+    const cv::Scalar std(0.229, 0.224, 0.225);
+    // 把每个通道的值减去对应通道的平均值
+    cv::subtract(resized, mean, resized);
+    // 把每个通道的值除以对应通道的标准差
+    cv::divide(resized, std, resized);
+
+    ov::Tensor input(ov::element::f32, {1, 3, static_cast<size_t>(resize_h), static_cast<size_t>(resize_w)});
+    float *data = input.data<float>();
+
+    std::vector<cv::Mat> channels(3);
+    for (int c = 0; c < 3; ++c)
+    {
+        channels[c] = cv::Mat(resize_h, resize_w, CV_32FC1, data + c * resize_h * resize_w);
+    }
+
+    cv::split(resized, channels);
+
+    input_tensor_ = input;
+    // 这里实现PP-OCR的预处理逻辑，将输入图像转换为模型输入张量
+    // 包括文本区域的裁剪、缩放、归一化等操作
+    // 返回预处理后的张量供后续推理使用
+}
+
+void detect_det_ppocr::inference()
+{
+    infer_request_.set_input_tensor(input_tensor_);
+    infer_request_.infer();
+    output_tensor_ = infer_request_.get_output_tensor();
+    // 这里实现PP-OCR的推理逻辑，使用OpenVINO进行模型推理
+    // 将预处理后的输入张量传递给模型，并获取输出张量
+}
+
+std::array<cv::Point2f, 4> detect_det_ppocr::OrderPointsClockwise(const std::vector<cv::Point2f> &pts) const
+{
+    std::array<cv::Point2f, 4> rect;
+    std::vector<float> s(4), d(4);
+    for (int i = 0; i < 4; ++i)
+    {
+        s[i] = pts[i].x + pts[i].y;
+        d[i] = pts[i].y - pts[i].x;
+    }
+    rect[0] = pts[static_cast<size_t>(std::distance(s.begin(), std::min_element(s.begin(), s.end())))];
+    rect[2] = pts[static_cast<size_t>(std::distance(s.begin(), std::max_element(s.begin(), s.end())))];
+    rect[1] = pts[static_cast<size_t>(std::distance(d.begin(), std::min_element(d.begin(), d.end())))];
+    rect[3] = pts[static_cast<size_t>(std::distance(d.begin(), std::max_element(d.begin(), d.end())))];
+    return rect;
+}
+
+void detect_det_ppocr::postprocess()
+{
+
+    const auto shape = output_tensor_.get_shape();
+    if (shape.size() != 4)
+    {
+        return;
+    }
+
+    const size_t h = shape[2];
+    const size_t w = shape[3];
+    const float *p = output_tensor_.data<const float>();
+
+    cv::Mat prob_map(static_cast<int>(h), static_cast<int>(w), CV_32FC1);
+    std::memcpy(prob_map.data, p, sizeof(float) * h * w);
+
+    cv::Mat bin;
+
+    cv::threshold(prob_map, bin, detect_config_.det_db_thresh, 255, cv::THRESH_BINARY);
+
+    bin.convertTo(bin, CV_8UC1);
+
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(bin, contours, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
+
+    //清理cortours，留下符合条件的文本区域轮廓，并将文本区域坐标转换为原图坐标，存储在ocr_det_out中
+    ocr_det_out.clear();
+
+    for (const auto &contour : contours)
+    {
+        if (contour.size() < 4)
+        {
+            continue;
+        }
+
+        cv::RotatedRect r = cv::minAreaRect(contour);
+        if (std::min(r.size.width, r.size.height) < 3.0f)
+        {
+            continue;
+        }
+
+        cv::Rect bbox = cv::boundingRect(contour);
+        bbox &= cv::Rect(0, 0, static_cast<int>(w), static_cast<int>(h));
+        if (bbox.empty())
+        {
+            continue;
+        }
+
+        const cv::Scalar mean_score = cv::mean(prob_map(bbox));
+        if (mean_score[0] < detect_config_.det_db_box_thresh)
+        {
+            continue;
+        }
+
+        cv::Point2f pts_arr[4];
+        r.points(pts_arr);
+        std::vector<cv::Point2f> pts{pts_arr, pts_arr + 4};
+        auto ordered = OrderPointsClockwise(pts);
+
+        OCRBox box;
+        for (int i = 0; i < 4; ++i)
+        {
+            const float x = std::clamp(ordered[i].x / Mate.ratio_w, 0.0f, static_cast<float>(Mate.src_w - 1));
+            const float y = std::clamp(ordered[i].y / Mate.ratio_h, 0.0f, static_cast<float>(Mate.src_h - 1));
+            box.pts[static_cast<size_t>(i)] = cv::Point2f(x, y);
+        }
+        ocr_det_out.push_back(box);
+    }
+
+    std::sort(ocr_det_out.begin(), ocr_det_out.end(), [](const OCRBox &a, const OCRBox &b)
+              {
+        if (std::abs(a.pts[0].y - b.pts[0].y) < 10.0f) {
+            return a.pts[0].x < b.pts[0].x;
+        }
+        return a.pts[0].y < b.pts[0].y; });
+
+    // 这里实现PP-OCR的后处理逻辑，将模型输出张量转换为可用的检测结果
+    // 包括文本区域的坐标、置信度等信息的提取和处理
+    // 返回最终的检测结果供后续使用
+}
+
+
+
+
+

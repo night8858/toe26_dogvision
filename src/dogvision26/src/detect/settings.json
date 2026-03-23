@@ -44,7 +44,10 @@
     {
       "openvino_bin_file_path": " ",
       "openvino_xml_file_path": " ",
-      "ppocr_file_path": " "
+
+      "ppocr_det_model_path": " ",
+      "ppocr_rec_model_path": " ",
+      "ppocr_cls_model_path": " "
     },
 
     "NCHW":

@@ -2,10 +2,10 @@
 
 ## 1. 包定位
 
-`dogvision26` 是一个 ROS1（catkin）视觉包，目标是实现：
+`dogvision26` 是一个 专用于toe2026足式机器人任务赛的ROS1（catkin）视觉包，目标是实现：
 
-- YOLO 检测（OpenVINO 推理）
-- PPOCR 文本识别（当前为骨架）
+- YOLO 检测（OpenVINO 推理）--即识别算术题
+- PPOCR 文本识别（当前为骨架）--即识别和先验物块类型
 - 相机采集（海康 + USB）
 
 当前代码中，YOLO 推理能力主要集中在 `detect/yolo_detector`，节点层（`yolo_node.cpp`）还在从“初始化”向“完整在线订阅推理”过渡。

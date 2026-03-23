@@ -20,7 +20,6 @@ void detector::load_config(Appconfig& config, std::string json_file_path)
     if (reader.parse(in, value))
     {
 
-        config.detect_config.ppocr_file_path = value["path"]["ppocr_file_path"].asString();
         config.detect_config.bin_file_path = value["path"]["openvino_bin_file_path"].asString();
         config.detect_config.xml_file_path = value["path"]["openvino_xml_file_path"].asString();
         
@@ -76,11 +75,10 @@ detector::detector(Appconfig* config)
         return;
     }
 
-    // 初始化模型参数
+    // 初始化模型路径参数
     detect_config_.xml_file_path = config->detect_config.xml_file_path;
     detect_config_.bin_file_path = config->detect_config.bin_file_path;
-    detect_config_.ppocr_file_path = config->detect_config.ppocr_file_path;
-
+   
     // 初始化其他检测参数
     detect_config_.batch_size = config->detect_config.batch_size;
     detect_config_.h = config->detect_config.h;

@@ -3,6 +3,9 @@ project(dogvision26)
 
 ## Compile as C++17, required by OpenVINO headers
 add_compile_options(-std=c++17)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -149,6 +152,7 @@ include_directories(
 add_library(ppocr_detector
   src/detect/ppocr_detector/preprocess.cpp
 )
+target_compile_features(ppocr_detector PUBLIC cxx_std_17)
 add_dependencies(ppocr_detector ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ppocr_detector ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
@@ -156,6 +160,7 @@ target_link_libraries(ppocr_detector ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 add_executable(ppocr_node 
 src/ppocr_node.cpp
 )
+target_compile_features(ppocr_node PRIVATE cxx_std_17)
 add_dependencies(ppocr_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ppocr_node
   ${catkin_LIBRARIES}
@@ -169,6 +174,7 @@ add_executable(yolo_node
   src/detect/dtetctor.cpp
   src/detect/yolo_detector/nuc_detect.cpp
 )
+target_compile_features(yolo_node PRIVATE cxx_std_17)
 add_dependencies(yolo_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(yolo_node
   ${catkin_LIBRARIES}

@@ -113,15 +113,15 @@ cv::Mat detect_oponvino::letterbox(const cv::Mat& src, int target_w, int target_
 }
 
 
-void detect_oponvino::preprocess()
+void detect_oponvino::preprocess(cv::Mat &input_img)
 {
     // 获取输入图像 (从基类获取)
-    cv::Mat& src = input_img_hik_;  // 或根据需要选择 input_img_usb_[cam_id]
+    //cv::Mat& src = input_img_hik_;  // 或根据需要选择 input_img_usb_[cam_id]
     
-    if (src.empty()) {
+    if (input_img.empty()) {
         return;
     }
-    cv::Mat letterboxed = letterbox(src, input_width_, input_height_);
+    cv::Mat letterboxed = letterbox(input_img, input_width_, input_height_);
     
     //  BGR -> RGB
     cv::Mat rgb;
