@@ -25,13 +25,16 @@ public:
 
         bool inference_init(void);
 
-        void preprocess(cv::Mat &input_img) override;
-        void inference() override;
-        void postprocess() override;
+        //运行推理
+        bool yolo_deect_run(cv::Mat &input_img, std::vector<Detection> &res);
 
         const std::vector<Detection> &get_nms_results() const;
+        
+        
 
 private:
+        const std::vector<Detection>* yolo_results_ptr() const override { return &nms_results_; }
+
         // letterbox 预处理相关
         int input_width_;  // YOLO输入宽度
         int input_height_; // YOLO输入高度
@@ -40,12 +43,16 @@ private:
         float scale_ = 1.0f; // 缩放比例
         int pad_w_ = 0;      // 水平填充
         int pad_h_ = 0;      // 垂直填充
-                             // 模型输入精度
+                            
 
-        ov::element::Type input_precision_ = ov::element::f32;
+        ov::element::Type input_precision_ = ov::element::f32; // 模型输入精度
+
+
         // letterbox 预处理函数
         cv::Mat letterbox(const cv::Mat &src, int target_w, int target_h);
-
+        void preprocess(cv::Mat &input_img) override;
+        void inference() override;
+        void postprocess() override;
         void decode_output(void);
         void nms(void);
 
@@ -56,7 +63,6 @@ private:
 
         // 最终 NMS 结果（供外部读取）
         std::vector<Detection> nms_results_;
-
         // 模型初始化时预读的输出张量信息（避免每帧重复解析）
         int out_num_anchors_ = 0;  // anchor数量，如8400
         int out_num_classes_ = 0;  // 类别数

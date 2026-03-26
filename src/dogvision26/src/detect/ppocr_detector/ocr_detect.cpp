@@ -249,5 +249,107 @@ void detect_rec_ppocr::inference()
 void detect_rec_ppocr::postprocess()
 {
 
+    result = Decode(output_tensor_);
+    // 这里实现PP-OCR的后处理逻辑，将模型输出张量转换为可用的识别结果
+    // 包括文本内容的解码、置信度计算等信息的提取和处理
+    // 返回最终的识别结果供后续使用
+    
 }
 
+
+std::vector<OCRRecResult> detect_rec_ppocr::Decode(const ov::Tensor& logits)
+{
+    const auto s = output_tensor_.get_shape();
+    const size_t batch = s[0];
+    const size_t time_step = s[1];
+    const size_t cls_num = s[2];
+    const float* p = output_tensor_.data<const float>();
+
+    std::vector<OCRRecResult> out(batch);
+    for (size_t b = 0; b < batch; ++b) {
+        std::string text;
+        float score_sum = 0.0f;
+        int count = 0;
+        int prev_idx = -1;
+
+        for (size_t t = 0; t < time_step; ++t) {
+            size_t best = 0;
+            float best_score = p[b * time_step * cls_num + t * cls_num];
+            for (size_t c = 1; c < cls_num; ++c) {
+                const float v = p[b * time_step * cls_num + t * cls_num + c];
+                if (v > best_score) {
+                    best_score = v;
+                    best = c;
+                }
+            }
+
+            if (static_cast<int>(best) == prev_idx) {
+                continue;
+            }
+            prev_idx = static_cast<int>(best);
+            if (best == 0) {
+                continue;
+            }
+            if (best < dict_.size()) {
+                text += dict_[best];
+            }
+            score_sum += best_score;
+            ++count;
+        }
+
+        out[b].text = text;
+        out[b].score = count > 0 ? score_sum / static_cast<float>(count) : 0.0f;
+    }
+
+    return out;
+
+}
+
+
+
+// std::vector<OCRRecResult> TextRecognizer::Run(const std::vector<cv::Mat>& crops) {
+//     std::vector<OCRRecResult> out(crops.size());
+//     if (crops.empty()) {
+//         return out;
+//     }
+
+//     std::vector<int> idx(crops.size());
+//     std::iota(idx.begin(), idx.end(), 0);
+//     std::sort(idx.begin(), idx.end(), [&crops](int a, int b) {
+//         const float ra = static_cast<float>(crops[a].cols) / static_cast<float>(crops[a].rows);
+//         const float rb = static_cast<float>(crops[b].cols) / static_cast<float>(crops[b].rows);
+//         return ra < rb;
+//     });
+
+//     for (size_t beg = 0; beg < crops.size(); beg += static_cast<size_t>(cfg_.rec_batch_num)) {
+//         const size_t end = std::min(crops.size(), beg + static_cast<size_t>(cfg_.rec_batch_num));
+//         const size_t bs = end - beg;
+
+//         float max_wh_ratio = static_cast<float>(cfg_.rec_img_w) / static_cast<float>(cfg_.rec_img_h);
+//         for (size_t i = beg; i < end; ++i) {
+//             const cv::Mat& m = crops[static_cast<size_t>(idx[i])];
+//             max_wh_ratio = std::max(max_wh_ratio, static_cast<float>(m.cols) / static_cast<float>(m.rows));
+//         }
+
+//         const int dyn_w = static_cast<int>(cfg_.rec_img_h * max_wh_ratio);
+//         ov::Tensor input(ov::element::f32, {bs, static_cast<size_t>(cfg_.rec_img_c), static_cast<size_t>(cfg_.rec_img_h), static_cast<size_t>(dyn_w)});
+//         float* data = input.data<float>();
+
+//         const size_t step = static_cast<size_t>(cfg_.rec_img_c * cfg_.rec_img_h * dyn_w);
+//         for (size_t i = 0; i < bs; ++i) {
+//             cv::Mat chw = ResizeNorm(crops[static_cast<size_t>(idx[beg + i])], max_wh_ratio);
+//             std::memcpy(data + i * step, chw.ptr<float>(), sizeof(float) * step);
+//         }
+
+//         infer_request_.set_input_tensor(input);
+//         infer_request_.infer();
+//         ov::Tensor output = infer_request_.get_output_tensor(0);
+
+//         std::vector<OCRRecResult> batch_res = DecodeCTC(output);
+//         for (size_t i = 0; i < bs; ++i) {
+//             out[static_cast<size_t>(idx[beg + i])] = batch_res[i];
+//         }
+//     } 
+
+//     return out;
+// }

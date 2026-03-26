@@ -150,11 +150,18 @@ include_directories(
 
 ## Declare a C++ library for ppocr preprocessing
 add_library(ppocr_detector
-  src/detect/ppocr_detector/preprocess.cpp
+  src/detect/dtetctor.cpp
+  src/detect/ppocr_detector/ocr_detect.cpp
 )
 target_compile_features(ppocr_detector PUBLIC cxx_std_17)
 add_dependencies(ppocr_detector ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ppocr_detector ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+if(TARGET openvino::runtime)
+  target_link_libraries(ppocr_detector openvino::runtime)
+else()
+  target_link_libraries(ppocr_detector ${OpenVINO_LIBRARIES})
+endif()
 
 ## Declare C++ executables
 add_executable(ppocr_node 
@@ -173,6 +180,7 @@ add_executable(yolo_node
   src/yolo_node.cpp
   src/detect/dtetctor.cpp
   src/detect/yolo_detector/nuc_detect.cpp
+
 )
 target_compile_features(yolo_node PRIVATE cxx_std_17)
 add_dependencies(yolo_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -197,6 +205,8 @@ elseif(JSONCPP_FOUND)
 else()
   target_link_libraries(yolo_node jsoncpp)
 endif()
+
+add_subdirectory(src/tool/onnx2openvino)
 
 #############
 ## Install ##

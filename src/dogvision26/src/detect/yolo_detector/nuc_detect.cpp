@@ -2,6 +2,31 @@
 #include <opencv2/opencv.hpp>
 #include "nuc_detect.hpp"
 
+namespace {
+
+float calc_iou(const cv::Rect2f& a, const cv::Rect2f& b)
+{
+    const float inter_x1 = std::max(a.x, b.x);
+    const float inter_y1 = std::max(a.y, b.y);
+    const float inter_x2 = std::min(a.x + a.width, b.x + b.width);
+    const float inter_y2 = std::min(a.y + a.height, b.y + b.height);
+
+    const float inter_w = std::max(0.0f, inter_x2 - inter_x1);
+    const float inter_h = std::max(0.0f, inter_y2 - inter_y1);
+    const float inter_area = inter_w * inter_h;
+
+    const float area_a = std::max(0.0f, a.width) * std::max(0.0f, a.height);
+    const float area_b = std::max(0.0f, b.width) * std::max(0.0f, b.height);
+    const float denom = area_a + area_b - inter_area;
+
+    if (denom <= 1e-6f) {
+        return 0.0f;
+    }
+    return inter_area / denom;
+}
+
+} // namespace
+
 
 bool detect_oponvino::inference_init(void)
 {
@@ -202,7 +227,7 @@ void detect_oponvino::inference()
 
 void detect_oponvino::postprocess()
 {
-    // 后处理逻辑（解码输出、NMS等）将在 decode_output() 和 nms() 中实现
+    nms_results_.clear();
     decode_output();
     nms();
 }
@@ -219,22 +244,34 @@ void detect_oponvino::decode_output(void)
     scores_raw_.clear();
     class_ids_raw_.clear();
 
-    // 直接使用初始化时缓存的输出张量形状，无需每帧重新解析
-    if (out_num_anchors_ <= 0 || out_num_classes_ <= 0) return;
+    const ov::Shape out_shape = output_tensor_.get_shape();
+    if (out_shape.size() != 3) {
+        return;
+    }
+
+    const int num_channels = static_cast<int>(out_shape[1]);
+    const int num_anchors = static_cast<int>(out_shape[2]);
+    constexpr int kNumClasses = 4;
+    constexpr int kBoxChannels = 4;
+
+    // 按用户需求：输出固定为 [1, 8, 8400]（4 bbox + 4 classes）
+    if (num_channels < (kBoxChannels + kNumClasses) || num_anchors <= 0) {
+        return;
+    }
 
     const float* data = output_tensor_.data<const float>();
     const float conf_thresh = detect_config_.bbox_conf_thresh;
 
-    // 原图尺寸
-    int src_w = input_img_hik_.cols;
-    int src_h = input_img_hik_.rows;
+    // 通过 letterbox 参数反推原图尺寸
+    const int src_w = std::max(1, static_cast<int>((input_width_ - 2 * pad_w_) / scale_));
+    const int src_h = std::max(1, static_cast<int>((input_height_ - 2 * pad_h_) / scale_));
 
-    for (int a = 0; a < out_num_anchors_; ++a) {
+    for (int a = 0; a < num_anchors; ++a) {
         // 找最高类别得分
         float best_score = 0.0f;
         int   best_cls   = 0;
-        for (int c = 0; c < out_num_classes_; ++c) {
-            float s = data[(4 + c) * out_num_anchors_ + a];
+        for (int c = 0; c < kNumClasses; ++c) {
+            const float s = data[(kBoxChannels + c) * num_anchors + a];
             if (s > best_score) {
                 best_score = s;
                 best_cls   = c;
@@ -243,22 +280,28 @@ void detect_oponvino::decode_output(void)
         if (best_score < conf_thresh) continue;
 
         // cx, cy, w, h (相对于 letterbox 输入尺寸)
-        float cx = data[0 * out_num_anchors_ + a];
-        float cy = data[1 * out_num_anchors_ + a];
-        float w  = data[2 * out_num_anchors_ + a];
-        float h  = data[3 * out_num_anchors_ + a];
+        const float cx = data[0 * num_anchors + a];
+        const float cy = data[1 * num_anchors + a];
+        const float w  = data[2 * num_anchors + a];
+        const float h  = data[3 * num_anchors + a];
 
         // 还原到原图坐标: 减去 padding 再除以 scale
         float x1 = (cx - w * 0.5f - pad_w_) / scale_;
         float y1 = (cy - h * 0.5f - pad_h_) / scale_;
-        float bw = w / scale_;
-        float bh = h / scale_;
+        float x2 = (cx + w * 0.5f - pad_w_) / scale_;
+        float y2 = (cy + h * 0.5f - pad_h_) / scale_;
 
         // 边界裁剪
-        x1 = std::max(0.0f, std::min(x1, static_cast<float>(src_w)));
-        y1 = std::max(0.0f, std::min(y1, static_cast<float>(src_h)));
-        bw = std::min(bw, static_cast<float>(src_w) - x1);
-        bh = std::min(bh, static_cast<float>(src_h) - y1);
+        x1 = std::max(0.0f, std::min(x1, static_cast<float>(src_w - 1)));
+        y1 = std::max(0.0f, std::min(y1, static_cast<float>(src_h - 1)));
+        x2 = std::max(0.0f, std::min(x2, static_cast<float>(src_w - 1)));
+        y2 = std::max(0.0f, std::min(y2, static_cast<float>(src_h - 1)));
+
+        const float bw = x2 - x1;
+        const float bh = y2 - y1;
+        if (bw <= 1.0f || bh <= 1.0f) {
+            continue;
+        }
 
         boxes_raw_.emplace_back(x1, y1, bw, bh);
         scores_raw_.push_back(best_score);
@@ -266,31 +309,62 @@ void detect_oponvino::decode_output(void)
     }
 }
 
+
+//非极大值抑制：同类别框之间计算IoU，去除重叠过大的框
 void detect_oponvino::nms(void)
 {
-    // nms_results_.clear();
-    // if (boxes_raw_.empty()) return;
+    nms_results_.clear();
+    if (boxes_raw_.empty()) {
+        return;
+    }
 
-    // std::vector<int> keep_indices;
-    // cv::dnn::NMSBoxes(
-    //     boxes_raw_,
-    //     scores_raw_,
-    //     detect_config_.bbox_conf_thresh,
-    //     detect_config_.nms_thresh,
-    //     keep_indices
-    // );
+    constexpr int kNumClasses = 4;
+    const float iou_thresh = detect_config_.nms_thresh;
 
-    // nms_results_.reserve(keep_indices.size());
-    // for (int idx : keep_indices) {
-    //     Detection det;
-    //     const cv::Rect2f& r = boxes_raw_[idx];
-    //     det.bbox[0] = r.x;
-    //     det.bbox[1] = r.y;
-    //     det.bbox[2] = r.width;
-    //     det.bbox[3] = r.height;
-    //     det.conf     = scores_raw_[idx];
-    //     det.class_id = static_cast<float>(class_ids_raw_[idx]);
-    //     nms_results_.push_back(det);
-    // }
+    for (int cls = 0; cls < kNumClasses; ++cls) {
+        std::vector<int> indices;
+        indices.reserve(class_ids_raw_.size());
+        for (size_t i = 0; i < class_ids_raw_.size(); ++i) {
+            if (class_ids_raw_[i] == cls) {
+                indices.push_back(static_cast<int>(i));
+            }
+        }
+
+        std::sort(indices.begin(), indices.end(), [this](int a, int b) {
+            return scores_raw_[a] > scores_raw_[b];
+        });
+
+        std::vector<bool> removed(indices.size(), false);
+        for (size_t i = 0; i < indices.size(); ++i) {
+            if (removed[i]) {
+                continue;
+            }
+            const int keep_idx = indices[i];
+
+            Detection det;
+            const cv::Rect2f& r = boxes_raw_[static_cast<size_t>(keep_idx)];
+            det.bbox[0] = r.x;
+            det.bbox[1] = r.y;
+            det.bbox[2] = r.width;
+            det.bbox[3] = r.height;
+            det.conf = scores_raw_[static_cast<size_t>(keep_idx)];
+            det.class_id = static_cast<float>(class_ids_raw_[static_cast<size_t>(keep_idx)]);
+            nms_results_.push_back(det);
+
+            for (size_t j = i + 1; j < indices.size(); ++j) {
+                if (removed[j]) {
+                    continue;
+                }
+                const int cand_idx = indices[j];
+                const float iou = calc_iou(
+                    boxes_raw_[static_cast<size_t>(keep_idx)],
+                    boxes_raw_[static_cast<size_t>(cand_idx)]
+                );
+                if (iou > iou_thresh) {
+                    removed[j] = true;
+                }
+            }
+        }
+    }
 }
 

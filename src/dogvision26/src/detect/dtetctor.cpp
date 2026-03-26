@@ -100,6 +100,11 @@ detector::~detector()
 
 }
 
+const std::vector<Detection>* detector::yolo_results_ptr() const
+{
+    return nullptr;
+}
+
 
 void detector::push_img(cv::Mat &grab_img , int cam_id)
 {
@@ -149,8 +154,12 @@ void detector::push_img(cv::Mat &grab_img , int cam_id)
 }
 
 
-void detector::show_yolo_result(cv::Mat &show_img , Detection &det)
+void detector::show_yolo_result(cv::Mat &show_img , const Detection &det)
 {
+    if (show_img.empty()) {
+        return;
+    }
+
     // 在show_img上绘制检测结果det
     // 绘制边界框和类别标签
     
@@ -169,6 +178,10 @@ void detector::show_yolo_result(cv::Mat &show_img , Detection &det)
     y = std::max(0, y);
     x2 = std::min(show_img.cols, x2);
     y2 = std::min(show_img.rows, y2);
+
+    if (x2 <= x || y2 <= y) {
+        return;
+    }
     
     // 根据类别ID选择颜色
     cv::Scalar color;
@@ -211,26 +224,42 @@ void detector::show_yolo_result(cv::Mat &show_img , Detection &det)
     cv::Size text_size = cv::getTextSize(label, font, font_scale, font_thickness, &baseline);
     
     // 绘制标签背景矩形
-    cv::rectangle(show_img, 
-                  cv::Point(x, y - text_size.height - 5),
-                  cv::Point(x + text_size.width, y),
+    const int text_top = std::max(0, y - text_size.height - 5);
+    const int text_bottom = std::max(0, y);
+    cv::rectangle(show_img,
+                  cv::Point(x, text_top),
+                  cv::Point(x + text_size.width, text_bottom),
                   color, -1);  // 填充矩形
     
     // 绘制文本标签
-    cv::putText(show_img, label, cv::Point(x, y - 5), 
+    cv::putText(show_img, label, cv::Point(x, std::max(0, y - 5)),
                 font, font_scale, cv::Scalar(255, 255, 255), font_thickness);
 }
 
-bool detector::get_yolo_result(cv::Mat &input_img , std::vector<Detection> &res)
+bool detector::yolo_run(cv::Mat &input_img, std::vector<Detection> &res)
 {
-    // YOLO结果处理函数
-    // 这里可以实现对YOLO结果的后处理，例如非极大值抑制、结果过滤等
-    return true;  // 返回处理结果
+    if (input_img.empty()) {
+        res.clear();
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(yolo_infer_mutex_);
+
+    preprocess(input_img);
+    inference();
+    postprocess();
+
+    const std::vector<Detection>* dets = yolo_results_ptr();
+    if (dets == nullptr) {
+        res.clear();
+        return false;
+    }
+
+    res = *dets;
+    return !res.empty();
+
 }
-
-
-
-
+    
 void detector::show_ocr_result(void)
 {
     // OCR结果显示函数

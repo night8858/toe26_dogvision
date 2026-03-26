@@ -15,13 +15,15 @@ public:
     explicit detect_det_ppocr(Appconfig* config) : detector(config) {}
     ~detect_det_ppocr() override = default;
 
-    void load_model(const std::string& model_path, const std::string& device)  override;
+    void load_model(const std::string& model_path, const std::string& device);
+
     void preprocess(cv::Mat &input_img)  override;
     void inference() override;
     void postprocess() override;
 
     const std::vector<OCRBox>& get_det_boxes() const { return ocr_det_out_; }
-
+    
+    std::vector<OCRBox> ocr_det_out_;
 private:
     std::array<cv::Point2f, 4> OrderPointsClockwise(const std::vector<cv::Point2f>& pts) const;
 
@@ -31,7 +33,7 @@ private:
     ov::Tensor input_tensor_;
     ov::Tensor output_tensor_;
 
-    std::vector<OCRBox> ocr_det_out_;
+    
     DetResizeMeta Mate;
 
     
@@ -46,11 +48,15 @@ public:
     ~detect_rec_ppocr() override = default;
 
     void loda_dict(const std::string& dict_path);
+    std::vector<OCRRecResult> Decode(const ov::Tensor& logits);
 
-    void load_model(const std::string& model_path, const std::string& device)  override;
+    void load_model(const std::string& model_path, const std::string& device);
+
     void preprocess(cv::Mat &input_img)  override;
     void inference() override;
     void postprocess() override;
+
+    std::vector<OCRRecResult> result;
 
 private:
     ov::Core core_;
@@ -59,6 +65,7 @@ private:
     ov::Tensor input_tensor_;
     ov::Tensor output_tensor_;
 
+    
     std::vector<std::string> dict_;// OCR识别字典
     cv::Mat chw_img; // 预处理后CHW格式的输入图像
     float max_wh_ratio; // 文本行最大宽高比，超过则认为是异常文本行
@@ -72,7 +79,7 @@ public:
     explicit detect_cls_ppocr(Appconfig* config) : detector(config) {}
     ~detect_cls_ppocr() override = default;
 
-    void load_model(const std::string& model_path, const std::string& device) override;
+    void load_model(const std::string& model_path, const std::string& device);
     void preprocess(cv::Mat &input_img) override;
     void inference() override;
     void postprocess() override;

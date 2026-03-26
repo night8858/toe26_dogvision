@@ -17,20 +17,24 @@ public:
 
     void push_img(cv::Mat &giab_img , int cam_id );
 
-    void show_yolo_result(cv::Mat &show_img , Detection &det);
+    void show_yolo_result(cv::Mat &show_img , const Detection &det);
     void show_ocr_result(void);
 
-    bool get_yolo_result(cv::Mat &input_img , std::vector<Detection> &res);
+    bool yolo_run(cv::Mat &input_img , std::vector<Detection> &res);
     bool get_ocr_result(void);
 
     void load_config(Appconfig& config, std::string json_file_path);
 
-    virtual void load_model(const std::string& model_path, const std::string& device) = 0;
+    
+protected:
+
+    virtual const std::vector<Detection>* yolo_results_ptr() const;
+
+    //virtual void load_model(const std::string& model_path, const std::string& device) = 0;
     virtual void preprocess(cv::Mat &src) = 0;
     virtual void inference() = 0;
     virtual void postprocess() = 0;
 
-protected:
     const int max_size_ = 10;
 
     std::vector<cv::Mat> input_imgs_hikvion;
@@ -38,6 +42,7 @@ protected:
 
     std::mutex hik_img_mutex_;
     std::mutex usb_img_mutex_[4];
+    std::mutex yolo_infer_mutex_;
 
     int hik_img_flag; // hik相机图像标志位
     int usb_img_flag[4]; // usb相机图像标志位

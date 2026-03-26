@@ -82,7 +82,11 @@
     //类别数量设置
     "nums":
     {
-        "classes": 4
+        "classes": 4,
+        "cls0":"food",
+        "cls1":"tool",
+        "cls2":"mid",
+        "cls3":"ins"
         
     }
 
