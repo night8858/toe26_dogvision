@@ -8,9 +8,10 @@
 
 本项目是一个基于 **ROS1 (catkin)** 的视觉处理工作空间，核心功能包括：
 
-- **YOLO 目标检测**：使用 OpenVINO 加载 ONNX/IR 模型，完成预处理→推理→后处理全流程
-- **PP-OCR 文字识别**：基于 PaddleOCR 的检测（det）+ 识别（rec）+ 方向分类（cls）三级管线
+- **YOLO 目标检测**：使用 OpenVINO 加载 ONNX/IR 模型，完成预处理→推理→后处理全流程，目前使用yolov8模型
+- **PP-OCR 文字识别**：基于 PaddleOCRV4 的检测
 - **多相机采集**：支持海康工业相机（MVS SDK）和 USB 摄像头（OpenCV VideoCapture）
+
 
 ---
 
@@ -98,7 +99,7 @@ settings.json ──→ load_config() ──→ Appconfig
                               │  preprocess()    │  letterbox + BGR→RGB + 归一化 → ov::Tensor
                               │  inference()     │  infer_request_.infer()
                               │  postprocess()   │  decode_output() + nms()
-                              └────────┬────────┘
+                              └────────┬────────┘       此处继承为一个yolo_run
                                        │
                               get_nms_results() ──→ std::vector<Detection>
                                        │
@@ -278,7 +279,3 @@ target_compile_features(... cxx_std_17)  # 目标级特性要求
 - [ ] 补充 launch 文件，参数化模型路径和话题名
 
 ---
-
-## 11. 许可证2
-
-TODO

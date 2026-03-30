@@ -163,6 +163,16 @@ else()
   target_link_libraries(ppocr_detector ${OpenVINO_LIBRARIES})
 endif()
 
+if(TARGET jsoncpp_lib)
+  target_link_libraries(ppocr_detector jsoncpp_lib)
+elseif(TARGET jsoncpp_static)
+  target_link_libraries(ppocr_detector jsoncpp_static)
+elseif(JSONCPP_FOUND)
+  target_link_libraries(ppocr_detector ${JSONCPP_LIBRARIES})
+else()
+  target_link_libraries(ppocr_detector jsoncpp)
+endif()
+
 ## Declare C++ executables
 add_executable(ppocr_node 
 src/ppocr_node.cpp

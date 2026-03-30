@@ -244,34 +244,26 @@ void detect_oponvino::decode_output(void)
     scores_raw_.clear();
     class_ids_raw_.clear();
 
-    const ov::Shape out_shape = output_tensor_.get_shape();
-    if (out_shape.size() != 3) {
-        return;
-    }
-
-    const int num_channels = static_cast<int>(out_shape[1]);
-    const int num_anchors = static_cast<int>(out_shape[2]);
-    constexpr int kNumClasses = 4;
-    constexpr int kBoxChannels = 4;
-
-    // 按用户需求：输出固定为 [1, 8, 8400]（4 bbox + 4 classes）
-    if (num_channels < (kBoxChannels + kNumClasses) || num_anchors <= 0) {
+    // 使用 inference_init 阶段预读的输出形状，避免每帧重复解析
+    // YOLOv8 输出格式: [1, 4+num_classes, num_anchors]，channel-major 排列
+    if (out_num_anchors_ <= 0 || out_num_classes_ <= 0) {
         return;
     }
 
     const float* data = output_tensor_.data<const float>();
     const float conf_thresh = detect_config_.bbox_conf_thresh;
 
-    // 通过 letterbox 参数反推原图尺寸
-    const int src_w = std::max(1, static_cast<int>((input_width_ - 2 * pad_w_) / scale_));
-    const int src_h = std::max(1, static_cast<int>((input_height_ - 2 * pad_h_) / scale_));
+    // 通过 letterbox 参数反推原图尺寸（浮点，避免整数截断误差）
+    const float src_w = static_cast<float>(input_width_  - 2 * pad_w_) / scale_;
+    const float src_h = static_cast<float>(input_height_ - 2 * pad_h_) / scale_;
 
-    for (int a = 0; a < num_anchors; ++a) {
-        // 找最高类别得分
+    for (int a = 0; a < out_num_anchors_; ++a) {
+        // 遍历所有类别，找最高置信度及对应类别
+        // 数据布局: data[channel * out_num_anchors_ + anchor]
         float best_score = 0.0f;
         int   best_cls   = 0;
-        for (int c = 0; c < kNumClasses; ++c) {
-            const float s = data[(kBoxChannels + c) * num_anchors + a];
+        for (int c = 0; c < out_num_classes_; ++c) {
+            const float s = data[(4 + c) * out_num_anchors_ + a];
             if (s > best_score) {
                 best_score = s;
                 best_cls   = c;
@@ -279,49 +271,47 @@ void detect_oponvino::decode_output(void)
         }
         if (best_score < conf_thresh) continue;
 
-        // cx, cy, w, h (相对于 letterbox 输入尺寸)
-        const float cx = data[0 * num_anchors + a];
-        const float cy = data[1 * num_anchors + a];
-        const float w  = data[2 * num_anchors + a];
-        const float h  = data[3 * num_anchors + a];
+        // 从 channel 0-3 读取 cx, cy, w, h（letterbox 空间坐标）
+        const float cx = data[0 * out_num_anchors_ + a];
+        const float cy = data[1 * out_num_anchors_ + a];
+        const float bw = data[2 * out_num_anchors_ + a];
+        const float bh = data[3 * out_num_anchors_ + a];
 
-        // 还原到原图坐标: 减去 padding 再除以 scale
-        float x1 = (cx - w * 0.5f - pad_w_) / scale_;
-        float y1 = (cy - h * 0.5f - pad_h_) / scale_;
-        float x2 = (cx + w * 0.5f - pad_w_) / scale_;
-        float y2 = (cy + h * 0.5f - pad_h_) / scale_;
+        // 逆 letterbox：减去对称 padding 再除以缩放比，还原到原图坐标
+        float x1 = (cx - bw * 0.5f - static_cast<float>(pad_w_)) / scale_;
+        float y1 = (cy - bh * 0.5f - static_cast<float>(pad_h_)) / scale_;
+        float x2 = (cx + bw * 0.5f - static_cast<float>(pad_w_)) / scale_;
+        float y2 = (cy + bh * 0.5f - static_cast<float>(pad_h_)) / scale_;
 
-        // 边界裁剪
-        x1 = std::max(0.0f, std::min(x1, static_cast<float>(src_w - 1)));
-        y1 = std::max(0.0f, std::min(y1, static_cast<float>(src_h - 1)));
-        x2 = std::max(0.0f, std::min(x2, static_cast<float>(src_w - 1)));
-        y2 = std::max(0.0f, std::min(y2, static_cast<float>(src_h - 1)));
+        // 边界裁剪到原图范围
+        x1 = std::max(0.0f, std::min(x1, src_w - 1.0f));
+        y1 = std::max(0.0f, std::min(y1, src_h - 1.0f));
+        x2 = std::max(0.0f, std::min(x2, src_w - 1.0f));
+        y2 = std::max(0.0f, std::min(y2, src_h - 1.0f));
 
-        const float bw = x2 - x1;
-        const float bh = y2 - y1;
-        if (bw <= 1.0f || bh <= 1.0f) {
-            continue;
-        }
+        const float rw = x2 - x1;
+        const float rh = y2 - y1;
+        if (rw <= 1.0f || rh <= 1.0f) continue;
 
-        boxes_raw_.emplace_back(x1, y1, bw, bh);
+        boxes_raw_.emplace_back(x1, y1, rw, rh);
         scores_raw_.push_back(best_score);
         class_ids_raw_.push_back(best_cls);
     }
 }
 
 
-//非极大值抑制：同类别框之间计算IoU，去除重叠过大的框
+//非极大值抑制：按类别分组，贪心保留置信度最高的框，抑制 IoU 超阈值的重叠框
 void detect_oponvino::nms(void)
 {
     nms_results_.clear();
-    if (boxes_raw_.empty()) {
+    if (boxes_raw_.empty() || out_num_classes_ <= 0) {
         return;
     }
 
-    constexpr int kNumClasses = 4;
     const float iou_thresh = detect_config_.nms_thresh;
 
-    for (int cls = 0; cls < kNumClasses; ++cls) {
+    for (int cls = 0; cls < out_num_classes_; ++cls) {
+        // 收集属于该类别的候选框索引
         std::vector<int> indices;
         indices.reserve(class_ids_raw_.size());
         for (size_t i = 0; i < class_ids_raw_.size(); ++i) {
@@ -329,39 +319,34 @@ void detect_oponvino::nms(void)
                 indices.push_back(static_cast<int>(i));
             }
         }
+        if (indices.empty()) continue;
 
+        // 按置信度降序排列
         std::sort(indices.begin(), indices.end(), [this](int a, int b) {
             return scores_raw_[a] > scores_raw_[b];
         });
 
-        std::vector<bool> removed(indices.size(), false);
+        std::vector<bool> suppressed(indices.size(), false);
         for (size_t i = 0; i < indices.size(); ++i) {
-            if (removed[i]) {
-                continue;
-            }
-            const int keep_idx = indices[i];
+            if (suppressed[i]) continue;
 
+            const int keep = indices[i];
             Detection det;
-            const cv::Rect2f& r = boxes_raw_[static_cast<size_t>(keep_idx)];
-            det.bbox[0] = r.x;
-            det.bbox[1] = r.y;
-            det.bbox[2] = r.width;
-            det.bbox[3] = r.height;
-            det.conf = scores_raw_[static_cast<size_t>(keep_idx)];
-            det.class_id = static_cast<float>(class_ids_raw_[static_cast<size_t>(keep_idx)]);
+            const cv::Rect2f& r = boxes_raw_[static_cast<size_t>(keep)];
+            det.bbox[0]  = r.x;
+            det.bbox[1]  = r.y;
+            det.bbox[2]  = r.width;
+            det.bbox[3]  = r.height;
+            det.conf     = scores_raw_[static_cast<size_t>(keep)];
+            det.class_id = static_cast<float>(cls);
             nms_results_.push_back(det);
 
+            // 抑制与 keep 框 IoU 超过阈值的后续候选框
             for (size_t j = i + 1; j < indices.size(); ++j) {
-                if (removed[j]) {
-                    continue;
-                }
-                const int cand_idx = indices[j];
-                const float iou = calc_iou(
-                    boxes_raw_[static_cast<size_t>(keep_idx)],
-                    boxes_raw_[static_cast<size_t>(cand_idx)]
-                );
-                if (iou > iou_thresh) {
-                    removed[j] = true;
+                if (suppressed[j]) continue;
+                if (calc_iou(boxes_raw_[static_cast<size_t>(keep)],
+                             boxes_raw_[static_cast<size_t>(indices[j])]) > iou_thresh) {
+                    suppressed[j] = true;
                 }
             }
         }

@@ -22,7 +22,12 @@ void detector::load_config(Appconfig& config, std::string json_file_path)
 
         config.detect_config.bin_file_path = value["path"]["openvino_bin_file_path"].asString();
         config.detect_config.xml_file_path = value["path"]["openvino_xml_file_path"].asString();
-        
+
+        config.detect_config.ppocr_det_model_path = value["path"]["ppocr_det_model_path"].asString();
+        config.detect_config.ppocr_rec_model_path = value["path"]["ppocr_rec_model_path"].asString();
+        config.detect_config.ppocr_cls_model_path = value["path"]["ppocr_cls_model_path"].asString();
+        config.detect_config.rec_char_dict_path   = value["path"]["ppocr_dict_path"].asString();
+
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();
         config.detect_config.w = value["NCHW"]["W"].asInt();
@@ -93,6 +98,11 @@ detector::detector(Appconfig* config)
     detect_config_.bbox_conf_thresh = config->detect_config.bbox_conf_thresh;
     detect_config_.merge_thresh = config->detect_config.merge_thresh;
     detect_config_.classes = config->detect_config.classes;
+
+    detect_config_.ppocr_det_model_path = config->detect_config.ppocr_det_model_path;
+    detect_config_.ppocr_rec_model_path = config->detect_config.ppocr_rec_model_path;
+    detect_config_.ppocr_cls_model_path = config->detect_config.ppocr_cls_model_path;
+    detect_config_.rec_char_dict_path   = config->detect_config.rec_char_dict_path;
 }
 
 detector::~detector()

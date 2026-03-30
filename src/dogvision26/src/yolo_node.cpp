@@ -19,7 +19,9 @@ using namespace std;
 //当前是尝试在node中直接调用detect_oponvino类进行视频推理，后续会根据需要调整代码结构，例如将推理部分封装成一个ROS节点类，或者使用ROS服务/动作接口等方式进行交互。
 int main(int argc, char **argv)
 {
+	//ros节点初始化
 	ros::init(argc, argv, "yolo_node");
+	//ROS节点句柄和图像发布者初始化
 	ros::NodeHandle nh;
 	ros::NodeHandle pnh("~");
 	image_transport::ImageTransport it(nh);
@@ -31,9 +33,9 @@ int main(int argc, char **argv)
 	string image_topic;
 	bool show_window = true;
 
-	pnh.param<string>("video_path", video_path, "");
+	pnh.param<string>("video_path", video_path, "/home/toe/toe26_dogvision/src/dogvision26/src/data/video/test1.mp4");
 	pnh.param<string>("config_path", json_config_path, "/home/toe/toe26_dogvision/src/dogvision26/src/detect/settings.json");
-	pnh.param<string>("output_video_path", output_video_path, "");
+	pnh.param<string>("output_video_path", output_video_path, "/home/toe/toe26_dogvision/src/dogvision26/src/data/video");
 	pnh.param<string>("result_topic", result_topic, "/yolo/result_text");
 	pnh.param<string>("image_topic", image_topic, "/yolo/result_image");
 	pnh.param<bool>("show_window", show_window, true);
@@ -45,9 +47,11 @@ int main(int argc, char **argv)
 	}
 
 	Appconfig config;
+	//加载配置文件并初始化检测器
 	detect_oponvino config_loader(nullptr);
 	config_loader.load_config(config, json_config_path);
 
+	//初始化YOLO检测器
 	detect_oponvino detector_ov(&config);
 	if (!detector_ov.inference_init())
 	{

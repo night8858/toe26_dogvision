@@ -58,7 +58,12 @@ public:
 
     std::vector<OCRRecResult> result;
 
+    void set_max_wh_ratio(float r) { max_wh_ratio = r; }
+
 private:
+    // 文本行最大宽高比（rec 输入图像 W/H），超过则压缩至最大宽度而非截断
+    // 默认值与 s_detector_params 中 rec_img_w/rec_img_h 一致（320/48）
+    float max_wh_ratio = 320.0f / 48.0f;
     ov::Core core_;
     ov::CompiledModel model_;
     ov::InferRequest infer_request_;
@@ -68,7 +73,6 @@ private:
     
     std::vector<std::string> dict_;// OCR识别字典
     cv::Mat chw_img; // 预处理后CHW格式的输入图像
-    float max_wh_ratio; // 文本行最大宽高比，超过则认为是异常文本行
 
 };
 
