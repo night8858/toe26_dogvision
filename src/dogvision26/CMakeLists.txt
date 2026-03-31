@@ -25,6 +25,16 @@ find_package(OpenVINO REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONCPP jsoncpp)
 
+# MVS (Hikvision) SDK
+find_library(MVS_LIB MvCameraControl
+  PATHS /opt/MVS/lib /opt/MVS/lib/64 /opt/MVS/lib/32
+  NO_DEFAULT_PATH
+)
+if(NOT MVS_LIB)
+  message(WARNING "MvCameraControl library not found under /opt/MVS/lib. Hikvision camera will not link.")
+  set(MVS_LIB "")
+endif()
+
 # 设置OpenVINO路径（如果自动查找失败）
 #if(NOT OpenVINO_FOUND)
 #  set(OpenVINO_INCLUDE_DIRS "/usr/include/openvino/runtime" "/opt/intel/openvino/runtime/include/openvino")
@@ -190,7 +200,7 @@ add_executable(yolo_node
   src/yolo_node.cpp
   src/detect/dtetctor.cpp
   src/detect/yolo_detector/nuc_detect.cpp
-
+  src/camera/hikvision.cpp
 )
 target_compile_features(yolo_node PRIVATE cxx_std_17)
 add_dependencies(yolo_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -198,6 +208,7 @@ target_link_libraries(yolo_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   Threads::Threads
+  ${MVS_LIB}
 )
 
 if(TARGET openvino::runtime)

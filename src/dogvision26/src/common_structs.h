@@ -81,6 +81,11 @@ typedef struct
 
     std::string rec_char_dict_path;
 
+    std::string class0;
+    std::string class1;
+    std::string class2;
+    std::string class3;
+    
 
 }s_detector_params;
 

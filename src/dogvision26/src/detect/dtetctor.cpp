@@ -42,14 +42,17 @@ void detector::load_config(Appconfig& config, std::string json_file_path)
         config.detect_config.merge_thresh = value["thresh"]["merge_thresh"].asFloat();
 
         config.detect_config.classes = value["nums"]["classes"].asInt();
+        config.detect_config.class0 = value["nums"]["cls0"].asString();
+        config.detect_config.class1 = value["nums"]["cls1"].asString();
+        config.detect_config.class2 = value["nums"]["cls2"].asString();
+        config.detect_config.class3 = value["nums"]["cls3"].asString();
 
-
-        config.hikcamera_config.device_id = value["camera_0"]["device_id"].asInt();
-        config.hikcamera_config.exposure = value["camera_0"]["exposure"].asInt();
-        config.hikcamera_config.height = value["camera_0"]["height"].asInt();
-        config.hikcamera_config.width = value["camera_0"]["width"].asInt();
-        config.hikcamera_config.offset_x = value["camera_0"]["offset_x"].asInt();
-        config.hikcamera_config.offset_y = value["camera_0"]["offset_y"].asInt();
+        config.hikcamera_config.device_id = value["hikcamera"]["device_id"].asInt();
+        config.hikcamera_config.exposure = value["hikcamera"]["exposure"].asInt();
+        config.hikcamera_config.height = value["hikcamera"]["height"].asInt();
+        config.hikcamera_config.width = value["hikcamera"]["width"].asInt();
+        config.hikcamera_config.offset_x = value["hikcamera"]["offset_x"].asInt();
+        config.hikcamera_config.offset_y = value["hikcamera"]["offset_y"].asInt();
 
 
         config.usbcamera_config[0].device_id = value["usbcamera0"]["device_id"].asInt();
@@ -103,6 +106,13 @@ detector::detector(Appconfig* config)
     detect_config_.ppocr_rec_model_path = config->detect_config.ppocr_rec_model_path;
     detect_config_.ppocr_cls_model_path = config->detect_config.ppocr_cls_model_path;
     detect_config_.rec_char_dict_path   = config->detect_config.rec_char_dict_path;
+
+    detect_config_.class0 = config->detect_config.class0;
+    detect_config_.class1 = config->detect_config.class1;
+    detect_config_.class2 = config->detect_config.class2;
+    detect_config_.class3 = config->detect_config.class3;
+
+
 }
 
 detector::~detector()
