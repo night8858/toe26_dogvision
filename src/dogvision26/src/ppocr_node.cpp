@@ -2,12 +2,15 @@
 
 #include <opencv2/opencv.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <regex>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -50,6 +53,172 @@ static cv::Mat crop_text_region(const cv::Mat &src, const OCRBox &box)
     return crop;
 }
 
+// ── 算术解析与求值 ─────────────────────────────────────────────────────────
+// 将 OCR 识别的所有文本拼接，提取第一个完整算术表达式并求值
+// 支持符号：+ - * / × ÷ 以及中文全角字符
+// 返回 true 表示解析成功，result 为整数结果（截断），expr_str 填充找到的原始表达式
+
+static std::string normalize_expr(const std::string &src)
+{
+    // 替换常见 OCR 误识别和中文运算符
+    std::string s = src;
+    const std::pair<std::string, std::string> repl[] = {
+        {"×", "*"}, {"÷", "/"}, {"＋", "+"}, {"－", "-"},
+        // 全角括号 → 半角
+        {"（", "("}, {"）", ")"},
+        // 常见 OCR 把乘号识别成字母
+        {"X", "*"}, {"x", "*"},
+        // 去掉无意义字符
+        {" ", ""}, {"=", ""}, {"?", ""}, {"？", ""},
+    };
+    for (const auto &p : repl) {
+        size_t pos = 0;
+        while ((pos = s.find(p.first, pos)) != std::string::npos) {
+            s.replace(pos, p.first.size(), p.second);
+            pos += p.second.size();
+        }
+    }
+    return s;
+}
+
+// ── 递归下降解析器（支持括号、标准运算优先级）─────────────────────────────
+// 语法：
+//   expr   = term  { ('+' | '-') term  }
+//   term   = factor{ ('*' | '/') factor}
+//   factor = '(' expr ')' | ['-'] number
+
+struct Parser {
+    const std::string &s;
+    size_t pos;
+
+    explicit Parser(const std::string &str) : s(str), pos(0) {}
+
+    void skip_ws() { while (pos < s.size() && s[pos] == ' ') ++pos; }
+
+    bool at_end() { skip_ws(); return pos >= s.size(); }
+
+    char peek() { skip_ws(); return pos < s.size() ? s[pos] : '\0'; }
+
+    char consume() { skip_ws(); return pos < s.size() ? s[pos++] : '\0'; }
+
+    // 读取数字（整数或小数，不含前缀负号，由 factor 处理）
+    bool read_number(double &val) {
+        skip_ws();
+        size_t j = pos;
+        while (j < s.size() && (std::isdigit((unsigned char)s[j]) || s[j] == '.')) ++j;
+        if (j == pos) return false;
+        val = std::stod(s.substr(pos, j - pos));
+        pos = j;
+        return true;
+    }
+
+    double factor() {
+        skip_ws();
+        if (pos >= s.size()) return 0.0;
+
+        // 括号子表达式
+        if (s[pos] == '(') {
+            ++pos;
+            double val = expr();
+            skip_ws();
+            if (pos < s.size() && s[pos] == ')') ++pos;
+            return val;
+        }
+
+        // 一元负号
+        bool neg = false;
+        if (s[pos] == '-') { neg = true; ++pos; }
+
+        double val = 0.0;
+        read_number(val);
+        return neg ? -val : val;
+    }
+
+    double term() {
+        double val = factor();
+        while (true) {
+            char c = peek();
+            if (c == '*' || c == '/') {
+                consume();
+                double rhs = factor();
+                val = (c == '*') ? val * rhs : val / rhs;
+            } else {
+                break;
+            }
+        }
+        return val;
+    }
+
+    double expr() {
+        double val = term();
+        while (true) {
+            char c = peek();
+            if (c == '+' || c == '-') {
+                consume();
+                double rhs = term();
+                val = (c == '+') ? val + rhs : val - rhs;
+            } else {
+                break;
+            }
+        }
+        return val;
+    }
+};
+
+static bool parse_simple_expr(const std::string &text, double &result, std::string &expr_str)
+{
+    std::string norm = normalize_expr(text);
+
+    // 从规范化字符串中找第一个包含运算符的子串（允许括号）
+    // 扫描：找到第一个数字/负号/左括号开始，到最后一个合法字符结束
+    // 简单策略：找到第一个运算符，向前/后扩展到完整表达式
+    // 使用正则定位表达式的起始位置（首个数字或左括号）
+    std::regex start_pat(R"([(\-]?\d|[(])");
+    std::smatch sm;
+    if (!std::regex_search(norm, sm, start_pat))
+        return false;
+
+    // 取从匹配位置到字符串末尾，解析器会自动在遇到非法字符时停止
+    std::string candidate = norm.substr(sm.position());
+
+    // 检查是否含有运算符（不只是一个数）
+    if (candidate.find_first_of("+-*/") == std::string::npos)
+        return false;
+
+    Parser parser(candidate);
+    double val = parser.expr();
+
+    // expr_str 为实际消费的部分
+    expr_str = candidate.substr(0, parser.pos);
+
+    // 必须至少消费了一个运算符
+    if (expr_str.find_first_of("+-*/") == std::string::npos)
+        return false;
+
+    result = val;
+    return true;
+}
+
+// 创建结果显示图像
+static void show_result_window(const std::string &expr_str, int mod_result)
+{
+    cv::Mat canvas(200, 500, CV_8UC3, cv::Scalar(30, 30, 30));
+
+    std::string line1 = "Expr: " + expr_str;
+    std::string line2 = "Result % 4 = " + std::to_string(mod_result);
+
+    cv::putText(canvas, line1,
+                cv::Point(20, 70), cv::FONT_HERSHEY_SIMPLEX,
+                0.9, cv::Scalar(0, 230, 0), 2, cv::LINE_AA);
+    cv::putText(canvas, line2,
+                cv::Point(20, 140), cv::FONT_HERSHEY_SIMPLEX,
+                1.1, cv::Scalar(0, 200, 255), 2, cv::LINE_AA);
+
+    cv::imshow("OCR Arithmetic Result", canvas);
+    cv::waitKey(0);
+    cv::destroyWindow("OCR Arithmetic Result");
+}
+
 // 在图像上绘制4点检测框和识别文本
 static void draw_ocr_result(cv::Mat &vis, const OCRBox &box, const OCRRecResult &rec)
 {
@@ -80,7 +249,7 @@ int main(int argc, char **argv)
     pnh.param<std::string>("image_path",  image_path,  "/home/toe/toe26_dogvision/src/dogvision26/src/data/img/image_143643394669487.png");
     pnh.param<std::string>("output_dir",  output_dir,  "/home/toe/toe26_dogvision/src/dogvision26/src/data/ocr_output");
     pnh.param<std::string>("config_path", config_path,
-        "/home/toe/toe26_dogvision/src/dogvision26/src/detect/settings.json");
+        "/home/toe/toe26_dogvision/src/dogvision26/src/settings.json");
 
     if (image_path.empty())
     {
@@ -165,6 +334,27 @@ int main(int argc, char **argv)
             ROS_INFO_STREAM("  [" << i << "] \""
                             << rec.result[0].text
                             << "\"  score=" << rec.result[0].score);
+        }
+    }
+
+    // ── 6b. 算术识别：汇总所有 OCR 文本，解析并计算 ─────────────────────────
+    {
+        std::string all_text;
+        for (const auto &item : ocr_items)
+            all_text += item.rec.text + " ";
+
+        ROS_INFO_STREAM("All OCR text: \"" << all_text << "\"");
+
+        double calc_result = 0.0;
+        std::string expr_str;
+        if (parse_simple_expr(all_text, calc_result, expr_str)) {
+            int int_result = static_cast<int>(std::round(calc_result));
+            int mod_result = ((int_result % 4) + 4) % 4;  // 保证非负
+            ROS_INFO("Expr: %s  =>  %d  %%4 = %d",
+                     expr_str.c_str(), int_result, mod_result);
+            show_result_window(expr_str, mod_result);
+        } else {
+            ROS_WARN("No arithmetic expression found in OCR output.");
         }
     }
 

@@ -3,11 +3,11 @@
     "hikcamera":
     {
       "device_id": 0,
-      "width": 1920,
+      "width": 1440,
       "height": 1080,
       "offset_x":0,
       "offset_y":0,
-      "exposure":9000
+      "exposure":11000
     },
 
     "usbcamera0":
@@ -85,8 +85,8 @@
         "classes": 4,
         "cls0":"food",
         "cls1":"tool",
-        "cls2":"mid",
-        "cls3":"ins"
+        "cls2":"medicine",
+        "cls3":"instrument"
         
     }
 

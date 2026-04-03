@@ -19,6 +19,8 @@
 // ================================================================
 static std::atomic<bool> g_triggered{false};
 
+std::string block[2][4];
+
 void trigger_callback(const std_msgs::String::ConstPtr& msg)
 {
     if (msg->data == "start_infer")
@@ -89,20 +91,21 @@ static void sort_raster(std::vector<Detection>& dets)
 // 构建 JSON 结果字符串（pos_id 从 1 开始）
 static std::string build_result_json(
     const std::vector<Detection>& dets,
-    const std::string class_names[4])
+    const std::vector<std::string>& class_names)
 {
+    int num_classes = (int)class_names.size();
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(4) << "{\"detections\":[";
     for (size_t i = 0; i < dets.size(); ++i) {
         const Detection& d = dets[i];
         int cls = (int)d.class_id;
-        const std::string& name = (cls >= 0 && cls < 4) ? class_names[cls] : std::to_string(cls);
+        const std::string name = (cls >= 0 && cls < num_classes) ? class_names[cls] : std::to_string(cls);
         if (i) oss << ",";
         oss << "{\"pos_id\":"  << (i + 1)
-            << ",\"class\":\""  << name << "\""
-            << ",\"conf\":"     << d.conf
-            << ",\"bbox\":["    << d.bbox[0] << "," << d.bbox[1]
-            << ","              << d.bbox[2] << "," << d.bbox[3] << "]}";
+            << ",\"class\":\"" << name << "\""
+            << ",\"conf\":"    << d.conf
+            << ",\"bbox\":["   << d.bbox[0] << "," << d.bbox[1]
+            << ","             << d.bbox[2] << "," << d.bbox[3] << "]}";
     }
     oss << "]}";
     return oss.str();
@@ -112,12 +115,13 @@ static std::string build_result_json(
 // show_window 为 false 时跳过，不创建任何窗口
 static void show_viz_image(
     const std::vector<Detection>& dets,
-    const cv::Mat& frame,
-    const std::string class_names[4],
+    const cv::Mat& frame, 
+    const std::vector<std::string>& class_names,
     bool show_window)
 {
     if (!show_window || frame.empty()) return;
 
+    int num_classes = (int)class_names.size();
     static const cv::Scalar kColors[5] = {
         {0,255,0}, {255,0,0}, {0,0,255}, {255,255,0}, {255,0,255}
     };
@@ -126,7 +130,7 @@ static void show_viz_image(
     for (size_t i = 0; i < dets.size(); ++i) {
         const Detection& d = dets[i];
         int cls = (int)d.class_id;
-        const std::string& name = (cls >= 0 && cls < 4) ? class_names[cls] : std::to_string(cls);
+        const std::string name = (cls >= 0 && cls < num_classes) ? class_names[cls] : std::to_string(cls);
         cv::Scalar color = kColors[cls % 5];
 
         int x  = std::max(0, (int)d.bbox[0]);
@@ -145,7 +149,91 @@ static void show_viz_image(
     }
 
     cv::imshow("yolo_result", vis);
-    cv::waitKey(1);  // 刷新窗口，不阻塞
+    // 不在此处调用 waitKey，由主循环统一驱动 GUI 事件
+}
+
+// ================================================================
+//  K-Means 鲁棒定位：将检测结果分配到 2 行 × 4 列网格
+// ================================================================
+
+// 将 dets 按 Y 中心用 K-Means 聚成 2 行，行内按 X 排列填充 block[2][4]
+// 不足 8 个目标的槽位设为 "null"
+static void assign_grid_kmeans(
+    const std::vector<Detection>& dets,
+    const std::vector<std::string>& class_names,
+    std::string block[2][4])
+{
+    int num_classes = (int)class_names.size();
+    // 初始化
+    for (int r = 0; r < 2; ++r)
+        for (int c = 0; c < 4; ++c)
+            block[r][c] = "null";
+
+    if (dets.empty()) return;
+
+    // 提取各目标中心
+    int N = (int)dets.size();
+    std::vector<float> cx(N), cy(N);
+    for (int i = 0; i < N; ++i) {
+        cx[i] = dets[i].bbox[0] + dets[i].bbox[2] * 0.5f;
+        cy[i] = dets[i].bbox[1] + dets[i].bbox[3] * 0.5f;
+    }
+
+    std::vector<int> row_labels(N, 0);
+
+    if (N == 1) {
+        row_labels[0] = 0;
+    } else {
+        // 对 Y 坐标做 1D K-Means（K=2）
+        cv::Mat y_data(N, 1, CV_32F);
+        for (int i = 0; i < N; ++i) y_data.at<float>(i, 0) = cy[i];
+
+        cv::Mat labels, centers;
+        int attempts = 5;
+        cv::kmeans(y_data, 2, labels,
+            cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 100, 0.01f),
+            attempts, cv::KMEANS_PP_CENTERS, centers);
+
+        // label 对应 row：Y 更小的聚类为 row 0
+        float c0y = centers.at<float>(0, 0);
+        float c1y = centers.at<float>(1, 0);
+        int top_label = (c0y <= c1y) ? 0 : 1;  // 哪个 label 是上行
+
+        for (int i = 0; i < N; ++i)
+            row_labels[i] = (labels.at<int>(i, 0) == top_label) ? 0 : 1;
+    }
+
+    // 按行分组，行内按 X 排序后填入列
+    for (int row = 0; row < 2; ++row) {
+        std::vector<std::pair<float, int>> items;
+        for (int i = 0; i < N; ++i)
+            if (row_labels[i] == row)
+                items.push_back({cx[i], i});
+        std::sort(items.begin(), items.end());
+        for (size_t col = 0; col < items.size() && col < 4; ++col) {
+            int idx = items[col].second;
+            int cls = (int)dets[idx].class_id;
+            block[row][col] = (cls >= 0 && cls < num_classes) ? class_names[cls] : "unknown";
+        }
+    }
+}
+
+// 将 block[2][4] 序列化为 JSON 字符串
+static std::string build_grid_json(const std::string block[2][4])
+{
+    std::ostringstream oss;
+    oss << "{\"block\":[";
+    for (int r = 0; r < 2; ++r) {
+        if (r) oss << ",";
+        oss << "[";
+        for (int c = 0; c < 4; ++c) {
+            if (c) oss << ",";
+            oss << "\"" << block[r][c] << "\"";
+        }
+        oss << "]";
+    }
+    oss << "]}";
+    return oss.str();
 }
 
 // ================================================================
@@ -160,6 +248,7 @@ int main(int argc, char** argv)
     // ---- 参数 ----
     std::string config_path, result_topic;
     bool show_window;
+
     pnh.param<std::string>("config_path",  config_path,
         "/home/toe/toe26_dogvision/src/dogvision26/src/settings.json");
     pnh.param<std::string>("result_topic", result_topic, "/yolo/result");
@@ -170,10 +259,17 @@ int main(int argc, char** argv)
     detect_oponvino config_loader(nullptr);
     config_loader.load_config(config, config_path);
 
-    const std::string class_names[4] = {
+    // 从 settings 动态读取类别名称（支持 classes 字段定义的数量）
+    const int num_classes = config.detect_config.classes;
+    const std::string cls_pool[4] = {
         config.detect_config.class0, config.detect_config.class1,
         config.detect_config.class2, config.detect_config.class3
     };
+    std::vector<std::string> class_names;
+    for (int i = 0; i < std::min(num_classes, 4); ++i)
+        class_names.push_back(cls_pool[i]);
+    ROS_INFO("Loaded %d classes: %s", num_classes,
+        [&]{ std::string s; for (auto& n:class_names) s+=n+" "; return s; }().c_str());
 
     // ---- 初始化 YOLO 检测器 ----
     detect_oponvino detector(&config);
@@ -197,6 +293,7 @@ int main(int argc, char** argv)
     // ---- ROS 话题 ----
     // latched：新订阅者自动获取上次结果，无需主动重发
     ros::Publisher  result_pub  = nh.advertise<std_msgs::String>(result_topic, 1, /*latch=*/true);
+    ros::Publisher  grid_pub    = nh.advertise<std_msgs::String>("/yolo/block_grid", 1, /*latch=*/true);
     ros::Subscriber trigger_sub = nh.subscribe("/yolo/trigger", 1, trigger_callback);
 
     // ---- 键盘监听线程（Enter 触发） ----
@@ -220,6 +317,8 @@ int main(int argc, char** argv)
         ros::spinOnce();
 
         if (!g_triggered.load()) {
+            // IDLE 期间持续驱动 OpenCV GUI 事件循环，保持 imshow 窗口可见
+            if (show_window) cv::waitKey(1);
             idle_rate.sleep();
             continue;
         }
@@ -248,15 +347,29 @@ int main(int argc, char** argv)
         sort_raster(final_dets);
         ROS_INFO_STREAM("Final detections: " << final_dets.size());
 
-        // ---- PUBLISH：话题仅发布 JSON 数据 ----
+        // ---- K-Means 网格定位 ----
+        assign_grid_kmeans(final_dets, class_names, block);
+        ROS_INFO("Block grid:");
+        for (int r = 0; r < 2; ++r) {
+            ROS_INFO("  row%d: [%s, %s, %s, %s]",
+                r, block[r][0].c_str(), block[r][1].c_str(),
+                    block[r][2].c_str(), block[r][3].c_str());
+        }
+
+        // ---- PUBLISH：结果 JSON ----
         std_msgs::String result_msg;
         result_msg.data = build_result_json(final_dets, class_names);
         result_pub.publish(result_msg);
 
+        // ---- PUBLISH：block 网格 JSON ----
+        std_msgs::String grid_msg;
+        grid_msg.data = build_grid_json(block);
+        grid_pub.publish(grid_msg);
+
         // ---- 本地可视化（受 show_window 参数控制） ----
         show_viz_image(final_dets, last_frame, class_names, show_window);
 
-        ROS_INFO("Published to %s. Waiting for next trigger.", result_topic.c_str());
+        ROS_INFO("Published to %s and /yolo/block_grid. Waiting for next trigger.", result_topic.c_str());
     }
 
     if (show_window)

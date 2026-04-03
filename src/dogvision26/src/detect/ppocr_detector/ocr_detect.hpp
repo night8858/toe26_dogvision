@@ -76,6 +76,7 @@ private:
 
 };
 
+//目前没写
 //负责对文本区域进行方向分类，输出文本方向（可以不用，就是用来检查文本是否被倒置的）
 class detect_cls_ppocr : public detector
 {
@@ -95,3 +96,4 @@ private:
     ov::Tensor input_tensor_;
     ov::Tensor output_tensor_;
 };
+
