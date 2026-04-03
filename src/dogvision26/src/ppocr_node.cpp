@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <ros/package.h>
 
 #include <opencv2/opencv.hpp>
 
@@ -246,10 +247,12 @@ int main(int argc, char **argv)
     std::string output_dir;
     std::string config_path;
 
-    pnh.param<std::string>("image_path",  image_path,  "/home/toe/toe26_dogvision/src/dogvision26/src/data/img/image_143643394669487.png");
-    pnh.param<std::string>("output_dir",  output_dir,  "/home/toe/toe26_dogvision/src/dogvision26/src/data/ocr_output");
+    pnh.param<std::string>("image_path",  image_path,
+        ros::package::getPath("dogvision26") + "/src/data/img/image_143643394669487.png");
+    pnh.param<std::string>("output_dir",  output_dir,
+        ros::package::getPath("dogvision26") + "/src/data/ocr_output");
     pnh.param<std::string>("config_path", config_path,
-        "/home/toe/toe26_dogvision/src/dogvision26/src/settings.json");
+        ros::package::getPath("dogvision26") + "/src/settings.json");
 
     if (image_path.empty())
     {

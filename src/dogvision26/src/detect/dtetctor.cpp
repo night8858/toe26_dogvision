@@ -3,6 +3,7 @@
 #include "common_structs.h"
 #include <fstream>
 #include <jsoncpp/json/json.h>
+#include <ros/package.h>
 #include <string>
 
 
@@ -19,14 +20,20 @@ void detector::load_config(Appconfig& config, std::string json_file_path)
     }
     if (reader.parse(in, value))
     {
+        // 获取包路径用于将 JSON 中的相对路径转为绝对路径
+        const std::string pkg = ros::package::getPath("dogvision26");
+        auto resolve = [&](const std::string& p) -> std::string {
+            if (p.empty() || p[0] == '/') return p;  // 已是绝对路径则直接使用
+            return pkg + "/" + p;
+        };
 
-        config.detect_config.bin_file_path = value["path"]["openvino_bin_file_path"].asString();
-        config.detect_config.xml_file_path = value["path"]["openvino_xml_file_path"].asString();
+        config.detect_config.bin_file_path = resolve(value["path"]["openvino_bin_file_path"].asString());
+        config.detect_config.xml_file_path = resolve(value["path"]["openvino_xml_file_path"].asString());
 
-        config.detect_config.ppocr_det_model_path = value["path"]["ppocr_det_model_path"].asString();
-        config.detect_config.ppocr_rec_model_path = value["path"]["ppocr_rec_model_path"].asString();
-        config.detect_config.ppocr_cls_model_path = value["path"]["ppocr_cls_model_path"].asString();
-        config.detect_config.rec_char_dict_path   = value["path"]["ppocr_dict_path"].asString();
+        config.detect_config.ppocr_det_model_path = resolve(value["path"]["ppocr_det_model_path"].asString());
+        config.detect_config.ppocr_rec_model_path = resolve(value["path"]["ppocr_rec_model_path"].asString());
+        config.detect_config.ppocr_cls_model_path = resolve(value["path"]["ppocr_cls_model_path"].asString());
+        config.detect_config.rec_char_dict_path   = resolve(value["path"]["ppocr_dict_path"].asString());
 
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();

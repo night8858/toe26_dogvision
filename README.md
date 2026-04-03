@@ -277,5 +277,6 @@ target_compile_features(... cxx_std_17)  # 目标级特性要求
 - [ ] `ppocr_node.cpp`：接入 `detect_det_ppocr` + `detect_rec_ppocr` 完成 OCR 全流程
 - [ ] `settings.json` / `load_config()`：统一相机配置键名
 - [ ] 补充 launch 文件，参数化模型路径和话题名
+- [ ] 提高图像对比度可以将图像的颜色增强
 
 ---

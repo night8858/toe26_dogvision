@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <std_msgs/String.h>
 #include <opencv2/opencv.hpp>
 
@@ -246,11 +247,15 @@ int main(int argc, char** argv)
     ros::NodeHandle pnh("~");
 
     // ---- 参数 ----
-    std::string config_path, result_topic;
+    std::string config_path, result_topic , img_path;
     bool show_window;
 
+	pnh.param<std::string>("img_path" , img_path,
+        ros::package::getPath("dogvision26") + "/src/data/img/402test.jpg");
+
     pnh.param<std::string>("config_path",  config_path,
-        "/home/toe/toe26_dogvision/src/dogvision26/src/settings.json");
+        ros::package::getPath("dogvision26") + "/src/settings.json");
+
     pnh.param<std::string>("result_topic", result_topic, "/yolo/result");
     pnh.param<bool>("show_window", show_window, true);  // 是否显示本地可视化窗口
 
@@ -334,6 +339,9 @@ int main(int argc, char** argv)
             cv::Mat frame;
             if (hik.get_one_frame(frame, cam_params.device_id) && !frame.empty()) {
                 last_frame = frame;
+				last_frame = cv::imread(img_path).clone();
+				//
+				frame = cv::imread(img_path).clone();
                 std::vector<Detection> dets;
                 detector.yolo_run(frame, dets);
                 all_dets.insert(all_dets.end(), dets.begin(), dets.end());
