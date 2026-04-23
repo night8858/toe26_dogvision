@@ -3,7 +3,9 @@
 #include <std_msgs/String.h>
 #include <opencv2/opencv.hpp>
 
+#include <array>
 #include <atomic>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -15,16 +17,38 @@
 #include "detector.hpp"
 #include "hikvision.hpp"
 
-// ================================================================
-//  全局触发标志
-// ================================================================
-static std::atomic<bool> g_triggered{false};
+namespace {
 
-std::string block[2][4];
+constexpr int kGridRows = 2;
+constexpr int kGridCols = 4;
+constexpr int kMaxConfigClasses = 4;
+constexpr double kInferDurationSec = 1.0;
+constexpr int kIdleLoopHz = 20;
+constexpr char kTriggerMessage[] = "start_infer";
+constexpr char kGridTopic[] = "/yolo/block_grid";
+
+static std::atomic<bool> g_triggered{false};
+using GridBlock = std::array<std::array<std::string, kGridCols>, kGridRows>;
+
+void reset_grid(GridBlock& block)
+{
+    for (auto& row : block)
+        for (auto& cell : row)
+            cell = "null";
+}
+
+std::string class_name_of(int cls, const std::vector<std::string>& class_names)
+{
+    return (cls >= 0 && cls < static_cast<int>(class_names.size()))
+        ? class_names[cls]
+        : std::to_string(cls);
+}
+
+}  // namespace
 
 void trigger_callback(const std_msgs::String::ConstPtr& msg)
 {
-    if (msg->data == "start_infer")
+    if (msg->data == kTriggerMessage)
         g_triggered.store(true);
 }
 
@@ -94,13 +118,12 @@ static std::string build_result_json(
     const std::vector<Detection>& dets,
     const std::vector<std::string>& class_names)
 {
-    int num_classes = (int)class_names.size();
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(4) << "{\"detections\":[";
     for (size_t i = 0; i < dets.size(); ++i) {
         const Detection& d = dets[i];
-        int cls = (int)d.class_id;
-        const std::string name = (cls >= 0 && cls < num_classes) ? class_names[cls] : std::to_string(cls);
+        const int cls = static_cast<int>(d.class_id);
+        const std::string name = class_name_of(cls, class_names);
         if (i) oss << ",";
         oss << "{\"pos_id\":"  << (i + 1)
             << ",\"class\":\"" << name << "\""
@@ -116,22 +139,23 @@ static std::string build_result_json(
 // show_window 为 false 时跳过，不创建任何窗口
 static void show_viz_image(
     const std::vector<Detection>& dets,
-    const cv::Mat& frame, 
+    const cv::Mat& frame,
     const std::vector<std::string>& class_names,
     bool show_window)
 {
     if (!show_window || frame.empty()) return;
 
-    int num_classes = (int)class_names.size();
-    static const cv::Scalar kColors[5] = {
+    static const cv::Scalar kColors[5] = 
+    {
         {0,255,0}, {255,0,0}, {0,0,255}, {255,255,0}, {255,0,255}
     };
 
     cv::Mat vis = frame.clone();
-    for (size_t i = 0; i < dets.size(); ++i) {
+    for (size_t i = 0; i < dets.size(); ++i) 
+    {
         const Detection& d = dets[i];
-        int cls = (int)d.class_id;
-        const std::string name = (cls >= 0 && cls < num_classes) ? class_names[cls] : std::to_string(cls);
+        const int cls = static_cast<int>(d.class_id);
+        const std::string name = class_name_of(cls, class_names);
         cv::Scalar color = kColors[cls % 5];
 
         int x  = std::max(0, (int)d.bbox[0]);
@@ -147,6 +171,7 @@ static void show_viz_image(
         int ty = std::max(y - 4, ts.height + 4);
         cv::rectangle(vis, {x, ty - ts.height - 4}, {x + ts.width, ty}, color, cv::FILLED);
         cv::putText(vis, label, {x, ty - 2}, cv::FONT_HERSHEY_SIMPLEX, 0.55, {255,255,255}, 1);
+
     }
 
     cv::imshow("yolo_result", vis);
@@ -157,18 +182,13 @@ static void show_viz_image(
 //  K-Means 鲁棒定位：将检测结果分配到 2 行 × 4 列网格
 // ================================================================
 
-// 将 dets 按 Y 中心用 K-Means 聚成 2 行，行内按 X 排列填充 block[2][4]
-// 不足 8 个目标的槽位设为 "null"
+// 将 dets 按 Y 中心用 K-Means 聚成 2 行，行内按 X 排列填充 
 static void assign_grid_kmeans(
     const std::vector<Detection>& dets,
     const std::vector<std::string>& class_names,
-    std::string block[2][4])
+    GridBlock& block)
 {
-    int num_classes = (int)class_names.size();
-    // 初始化
-    for (int r = 0; r < 2; ++r)
-        for (int c = 0; c < 4; ++c)
-            block[r][c] = "null";
+    reset_grid(block);
 
     if (dets.empty()) return;
 
@@ -205,29 +225,29 @@ static void assign_grid_kmeans(
     }
 
     // 按行分组，行内按 X 排序后填入列
-    for (int row = 0; row < 2; ++row) {
+    for (int row = 0; row < kGridRows; ++row) {
         std::vector<std::pair<float, int>> items;
         for (int i = 0; i < N; ++i)
             if (row_labels[i] == row)
                 items.push_back({cx[i], i});
         std::sort(items.begin(), items.end());
-        for (size_t col = 0; col < items.size() && col < 4; ++col) {
+        for (size_t col = 0; col < items.size() && col < static_cast<size_t>(kGridCols); ++col) {
             int idx = items[col].second;
-            int cls = (int)dets[idx].class_id;
-            block[row][col] = (cls >= 0 && cls < num_classes) ? class_names[cls] : "unknown";
+            const int cls = static_cast<int>(dets[idx].class_id);
+            block[row][col] = class_name_of(cls, class_names);
         }
     }
 }
 
 // 将 block[2][4] 序列化为 JSON 字符串
-static std::string build_grid_json(const std::string block[2][4])
+static std::string build_grid_json(const GridBlock& block)
 {
     std::ostringstream oss;
     oss << "{\"block\":[";
-    for (int r = 0; r < 2; ++r) {
+    for (int r = 0; r < kGridRows; ++r) {
         if (r) oss << ",";
         oss << "[";
-        for (int c = 0; c < 4; ++c) {
+        for (int c = 0; c < kGridCols; ++c) {
             if (c) oss << ",";
             oss << "\"" << block[r][c] << "\"";
         }
@@ -235,6 +255,67 @@ static std::string build_grid_json(const std::string block[2][4])
     }
     oss << "]}";
     return oss.str();
+}
+
+static std::vector<std::string> load_class_names(const Appconfig& config)
+{
+    const int num_classes = config.detect_config.classes;
+    const std::array<std::string, kMaxConfigClasses> cls_pool = {
+        config.detect_config.class0,
+        config.detect_config.class1,
+        config.detect_config.class2,
+        config.detect_config.class3,
+    };
+
+    std::vector<std::string> class_names;
+    for (int i = 0; i < std::min(num_classes, kMaxConfigClasses); ++i)
+        class_names.push_back(cls_pool[i]);
+    return class_names;
+}
+
+// 连续抓帧推理指定秒数，返回所有检测结果
+static std::vector<Detection> collect_detections(
+    HikGrab& hik,
+    const s_camera_params& cam_params,
+    detect_oponvino& detector,
+    bool enable_undistort,
+    cv::Mat& last_frame,
+    double duration_sec)
+{
+    std::vector<Detection> all_dets;
+    const ros::Time t_start = ros::Time::now();
+
+    while (ros::ok() && (ros::Time::now() - t_start).toSec() < duration_sec) {
+        cv::Mat frame;
+        if (!hik.get_one_frame(frame, cam_params.device_id) || frame.empty()) {
+            continue;
+        }
+
+        if (enable_undistort) {
+            frame = detector.diatorion(frame);
+        }
+
+        last_frame = frame;
+        std::vector<Detection> frame_dets;
+        detector.yolo_run(frame, frame_dets);
+        all_dets.insert(all_dets.end(), frame_dets.begin(), frame_dets.end());
+    }
+    return all_dets;
+}
+
+// 打印 block 网格内容到 ROS 日志（也可选调用 build_grid_json 发布到 ROS 话题）
+// 注意：block 内容仅为类别名称字符串，不包含坐标等信息
+static void log_grid(const GridBlock& block)
+{
+    ROS_INFO("Block grid:");
+    for (int r = 0; r < kGridRows; ++r) {
+        ROS_INFO("  row%d: [%s, %s, %s, %s]",
+            r,
+            block[r][0].c_str(),
+            block[r][1].c_str(),
+            block[r][2].c_str(),
+            block[r][3].c_str());
+    }
 }
 
 // ================================================================
@@ -247,33 +328,25 @@ int main(int argc, char** argv)
     ros::NodeHandle pnh("~");
 
     // ---- 参数 ----
-    std::string config_path, result_topic , img_path;
-    bool show_window;
-
-	pnh.param<std::string>("img_path" , img_path,
-        ros::package::getPath("dogvision26") + "/src/data/img/402test.jpg");
+    std::string config_path;
+    std::string result_topic;
+    bool show_window = true;
+    bool enable_undistort = true;
 
     pnh.param<std::string>("config_path",  config_path,
         ros::package::getPath("dogvision26") + "/src/settings.json");
 
     pnh.param<std::string>("result_topic", result_topic, "/yolo/result");
-    pnh.param<bool>("show_window", show_window, true);  // 是否显示本地可视化窗口
+    pnh.param<bool>("show_window", show_window, true);
+    pnh.param<bool>("enable_undistort", enable_undistort, true);
 
     // ---- 加载配置 ----
     Appconfig config;
     detect_oponvino config_loader(nullptr);
     config_loader.load_config(config, config_path);
 
-    // 从 settings 动态读取类别名称（支持 classes 字段定义的数量）
-    const int num_classes = config.detect_config.classes;
-    const std::string cls_pool[4] = {
-        config.detect_config.class0, config.detect_config.class1,
-        config.detect_config.class2, config.detect_config.class3
-    };
-    std::vector<std::string> class_names;
-    for (int i = 0; i < std::min(num_classes, 4); ++i)
-        class_names.push_back(cls_pool[i]);
-    ROS_INFO("Loaded %d classes: %s", num_classes,
+    std::vector<std::string> class_names = load_class_names(config);
+    ROS_INFO("Loaded %d classes: %s", config.detect_config.classes,
         [&]{ std::string s; for (auto& n:class_names) s+=n+" "; return s; }().c_str());
 
     // ---- 初始化 YOLO 检测器 ----
@@ -297,8 +370,9 @@ int main(int argc, char** argv)
 
     // ---- ROS 话题 ----
     // latched：新订阅者自动获取上次结果，无需主动重发
+    // 注意：图像仅用于本地窗口显示，不通过 ROS 话题传递。
     ros::Publisher  result_pub  = nh.advertise<std_msgs::String>(result_topic, 1, /*latch=*/true);
-    ros::Publisher  grid_pub    = nh.advertise<std_msgs::String>("/yolo/block_grid", 1, /*latch=*/true);
+    ros::Publisher  grid_pub    = nh.advertise<std_msgs::String>(kGridTopic, 1, /*latch=*/true);
     ros::Subscriber trigger_sub = nh.subscribe("/yolo/trigger", 1, trigger_callback);
 
     // ---- 键盘监听线程（Enter 触发） ----
@@ -309,10 +383,14 @@ int main(int argc, char** argv)
                 g_triggered.store(true);
     }).detach();
 
-    ROS_INFO("yolo_node ready. show_window=%s", show_window ? "true" : "false");
-    ROS_INFO("Publish 'start_infer' to /yolo/trigger, or press Enter.");
+    ROS_INFO("yolo_node ready. show_window=%s, enable_undistort=%s",
+             show_window ? "true" : "false",
+             enable_undistort ? "true" : "false");
+    ROS_INFO("Publish '%s' to /yolo/trigger, or press Enter.", kTriggerMessage);
 
-    ros::Rate idle_rate(20);
+    ros::Rate idle_rate(kIdleLoopHz);
+    GridBlock block;
+    reset_grid(block);
 
     // ================================================================
     //  主循环：IDLE ←→ INFER
@@ -330,23 +408,15 @@ int main(int argc, char** argv)
         g_triggered.store(false);
 
         // ---- INFER：连续抓帧推理 1 秒 ----
-        ROS_INFO("Triggered: collecting frames for 1 second...");
-        std::vector<Detection> all_dets;
+        ROS_INFO("Triggered: collecting frames for %.1f second(s)...", kInferDurationSec);
         cv::Mat last_frame;
-        ros::Time t_start = ros::Time::now();
-
-        while (ros::ok() && (ros::Time::now() - t_start).toSec() < 1.0) {
-            cv::Mat frame;
-            if (hik.get_one_frame(frame, cam_params.device_id) && !frame.empty()) {
-                last_frame = frame;
-				last_frame = cv::imread(img_path).clone();
-				//
-				frame = cv::imread(img_path).clone();
-                std::vector<Detection> dets;
-                detector.yolo_run(frame, dets);
-                all_dets.insert(all_dets.end(), dets.begin(), dets.end());
-            }
-        }
+        std::vector<Detection> all_dets = collect_detections(
+            hik,
+            cam_params,
+            detector,
+            enable_undistort,
+            last_frame,
+            kInferDurationSec);
         ROS_INFO_STREAM("Raw detections: " << all_dets.size());
 
         // ---- AGGREGATE：跨帧 NMS + 光栅排序 ----
@@ -357,12 +427,7 @@ int main(int argc, char** argv)
 
         // ---- K-Means 网格定位 ----
         assign_grid_kmeans(final_dets, class_names, block);
-        ROS_INFO("Block grid:");
-        for (int r = 0; r < 2; ++r) {
-            ROS_INFO("  row%d: [%s, %s, %s, %s]",
-                r, block[r][0].c_str(), block[r][1].c_str(),
-                    block[r][2].c_str(), block[r][3].c_str());
-        }
+        log_grid(block);
 
         // ---- PUBLISH：结果 JSON ----
         std_msgs::String result_msg;
@@ -377,7 +442,7 @@ int main(int argc, char** argv)
         // ---- 本地可视化（受 show_window 参数控制） ----
         show_viz_image(final_dets, last_frame, class_names, show_window);
 
-        ROS_INFO("Published to %s and /yolo/block_grid. Waiting for next trigger.", result_topic.c_str());
+        ROS_INFO("Published to %s and %s. Waiting for next trigger.", result_topic.c_str(), kGridTopic);
     }
 
     if (show_window)

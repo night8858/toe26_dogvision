@@ -85,8 +85,9 @@ typedef struct
     std::string class1;
     std::string class2;
     std::string class3;
-    
 
+    float D_matrix[4];
+    
 }s_detector_params;
 
 struct alignas(float) Detection

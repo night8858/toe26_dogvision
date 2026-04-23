@@ -19,7 +19,7 @@ public:
 
     void show_yolo_result(cv::Mat &show_img , const Detection &det);
     void show_ocr_result(void);
-
+    cv::Mat diatorion(cv::Mat &show_img);
     bool yolo_run(cv::Mat &input_img , std::vector<Detection> &res);
     bool get_ocr_result(void);
 
@@ -54,4 +54,5 @@ protected:
     cv::Mat show_img_usb[4];
 
     s_detector_params detect_config_;
+
 };

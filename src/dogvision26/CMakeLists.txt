@@ -12,11 +12,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
   rospy
   std_msgs
-  image_transport
-  cv_bridge
-  sensor_msgs
 )
 
 find_package(OpenCV REQUIRED)
@@ -30,6 +28,7 @@ find_library(MVS_LIB MvCameraControl
   PATHS /opt/MVS/lib /opt/MVS/lib/64 /opt/MVS/lib/32
   NO_DEFAULT_PATH
 )
+
 if(NOT MVS_LIB)
   message(WARNING "MvCameraControl library not found under /opt/MVS/lib. Hikvision camera will not link.")
   set(MVS_LIB "")
@@ -133,7 +132,7 @@ endif()
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS roscpp rospy std_msgs image_transport cv_bridge sensor_msgs
+  CATKIN_DEPENDS roscpp roslib rospy std_msgs
   DEPENDS OpenCV
 )
 
@@ -156,6 +155,7 @@ include_directories(
   src/detect/yolo_detector
   src/detect/ppocr_detector
   /opt/MVS/include
+
 )
 
 ## Declare a C++ library for ppocr preprocessing
@@ -184,6 +184,8 @@ else()
 endif()
 
 ## Declare C++ executables
+
+###OCR  NODE###
 add_executable(ppocr_node 
 src/ppocr_node.cpp
 )
@@ -196,6 +198,7 @@ target_link_libraries(ppocr_node
   Threads::Threads
 )
 
+##YOLO  NODE###
 add_executable(yolo_node
   src/yolo_node.cpp
   src/detect/dtetctor.cpp
@@ -227,7 +230,21 @@ else()
   target_link_libraries(yolo_node jsoncpp)
 endif()
 
+###INTERATION   NODE###
+add_executable(Arm_internation_node
+  src/Arm_internation_node.cpp
+  src/internation/arm_internation.cpp
+)
+target_compile_features(Arm_internation_node PRIVATE cxx_std_17)
+add_dependencies(Arm_internation_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(Arm_internation_node
+  ${catkin_LIBRARIES}
+  Threads::Threads
+)   
+
+
 add_subdirectory(src/tool/onnx2openvino)
+add_subdirectory(src/tool/Distortion_handling)
 
 #############
 ## Install ##
