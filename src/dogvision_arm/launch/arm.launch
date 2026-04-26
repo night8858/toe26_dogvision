@@ -1,0 +1,14 @@
+<!-- 启动机械臂串口通信节点与终端命令节点 -->
+<launch>
+  <node name="arm_internation_node" pkg="dogvision_arm" type="Arm_internation_node"
+        output="screen">
+    <param name="hw_id"      value="0483:5740"/>
+    <param name="baud_rate"  value="115200"/>
+    <param name="pos_scale"  value="0.01"/>
+    <param name="angle_scale" value="0.01"/>
+  </node>
+
+  <!-- launch-prefix="xterm -e" 可在独立终端中运行以便手动输入命令 -->
+  <node name="arm_cmd_terminal_node" pkg="dogvision_arm" type="arm_cmd_terminal_node"
+        output="screen" launch-prefix="xterm -e"/>
+</launch>

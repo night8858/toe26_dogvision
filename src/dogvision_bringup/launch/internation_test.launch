@@ -1,0 +1,17 @@
+<!-- 机械臂串口通信测试：启动 Arm_internation_node 和 arm_cmd_terminal_node -->
+<launch>
+
+  <!-- 串口通信节点 -->
+  <node name="arm_internation_node" pkg="dogvision_arm" type="Arm_internation_node"
+        output="screen">
+    <param name="hw_id"       value="0483:5740"/>
+    <param name="baud_rate"   value="115200"/>
+    <param name="pos_scale"   value="0.01"/>
+    <param name="angle_scale" value="0.01"/>
+  </node>
+
+  <!-- 终端命令节点（在独立终端窗口中运行，方便手动输入命令） -->
+  <node name="arm_cmd_terminal_node" pkg="dogvision_arm" type="arm_cmd_terminal_node"
+        output="screen" launch-prefix="gnome-terminal --"/>
+
+</launch>

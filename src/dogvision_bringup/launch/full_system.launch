@@ -1,0 +1,10 @@
+<!-- 全系统启动入口：机械臂通信 + 视觉检测 -->
+<launch>
+
+  <!-- 机械臂串口通信子系统 -->
+  <include file="$(find dogvision_bringup)/launch/internation_test.launch"/>
+
+  <!-- 视觉检测子系统 -->
+  <include file="$(find dogvision_bringup)/launch/vision.launch"/>
+
+</launch>

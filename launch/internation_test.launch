@@ -1,0 +1,11 @@
+<!-- 此处是一个测试文件，用于启动 Arm_internation_node 和 arm_cmd_terminal_node --> 
+<launch>
+
+  <!-- 启动 Arm_internation_node -->
+  <node name="arm_internation_node" pkg="dogvision_arm" type="Arm_internation_node" output="screen"/>
+
+  <!-- 启动 arm_cmd_terminal_node（需要独立终端接收键盘输入）-->
+  <node name="arm_cmd_terminal_node" pkg="dogvision_arm" type="arm_cmd_terminal_node" output="screen" launch-prefix="gnome-terminal --"/>
+
+
+</launch>

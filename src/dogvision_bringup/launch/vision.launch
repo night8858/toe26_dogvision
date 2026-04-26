@@ -1,0 +1,10 @@
+<!-- 启动视觉检测节点（YOLO + PPOCR） -->
+<launch>
+
+  <!-- YOLO 目标检测节点 -->
+  <node name="yolo_node" pkg="dogvision_vision" type="yolo_node" output="screen"/>
+
+  <!-- PPOCR 文字识别节点 -->
+  <node name="ppocr_node" pkg="dogvision_vision" type="ppocr_node" output="screen"/>
+
+</launch>
