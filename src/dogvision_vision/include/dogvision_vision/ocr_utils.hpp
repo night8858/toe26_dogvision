@@ -36,3 +36,14 @@ void show_result_window(const std::string& expr_str, int mod_result);
 /// 返回空 Rect2f（area()==0）表示未找到合适区域
 /// @note 裁剪示例：cv::Mat roi_img = img(cv::Rect(find_math_proble(img)));
 cv::Rect2f find_math_proble(const cv::Mat& input);
+
+/// 初始化鱼眼去畸变映射表（只需调用一次）
+/// @param image_width  相机图像宽度（如 1440）
+/// @param image_height 相机图像高度（如 1080）
+/// @return true 表示映射表初始化成功
+bool init_fisheye_undistort(int image_width, int image_height);
+
+/// 对输入图像执行鱼眼去畸变
+/// @note 必须先调用 init_fisheye_undistort()
+/// @note 若未初始化或禁用，返回原图拷贝
+cv::Mat undistort_image(const cv::Mat& input);

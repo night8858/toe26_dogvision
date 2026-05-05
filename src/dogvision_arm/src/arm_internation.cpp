@@ -2,7 +2,7 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <unistd.h>
-#include <termios.h>
+#include <termios.h>    //终端控制接口。用于配置异步串行通信端口。
 #include <chrono>
 #include <cctype>
 #include <cstring>
@@ -14,7 +14,10 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
+
+#include <libusb-1.0/libusb.h> //检查硬件设备用
 
 // ============================================================
 //  协议帧格式说明（见头文件注释）
@@ -214,6 +217,72 @@ namespace
         return !vendor.empty() && !product.empty();
     }
 
+    bool parse_hex_u16(const std::string &text, uint16_t &value)
+    {
+        if (text.empty() || text.size() > 4)
+        {
+            return false;
+        }
+
+        char *end_ptr = nullptr;
+        errno = 0;
+        const unsigned long parsed = std::strtoul(text.c_str(), &end_ptr, 16);
+        if (end_ptr == text.c_str() || *end_ptr != '\0' || errno != 0 || parsed > 0xFFFFUL)
+        {
+            return false;
+        }
+
+        value = static_cast<uint16_t>(parsed);
+        return true;
+    }
+
+    bool parse_hw_id_to_vid_pid(const std::string &hw_id, uint16_t &vendor_id, uint16_t &product_id)
+    {
+        std::string vendor;
+        std::string product;
+        if (!parse_hw_id(hw_id, vendor, product))
+        {
+            return false;
+        }
+        return parse_hex_u16(vendor, vendor_id) && parse_hex_u16(product, product_id);
+    }
+
+    bool has_usb_device_via_libusb(uint16_t vendor_id, uint16_t product_id)
+    {
+        libusb_context *ctx = nullptr;
+        if (libusb_init(&ctx) != 0)
+        {
+            // 无法初始化 libusb 时不判定为断线，避免误触发重连。
+            return true;
+        }
+
+        libusb_device **dev_list = nullptr;
+        const ssize_t count = libusb_get_device_list(ctx, &dev_list);
+        if (count < 0)
+        {
+            libusb_exit(ctx);
+            return true;
+        }
+
+        bool found = false;
+        for (ssize_t i = 0; i < count; ++i)
+        {
+            libusb_device_descriptor desc{};
+            if (libusb_get_device_descriptor(dev_list[i], &desc) == 0)
+            {
+                if (desc.idVendor == vendor_id && desc.idProduct == product_id)
+                {
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        libusb_free_device_list(dev_list, 1);
+        libusb_exit(ctx);
+        return found;
+    }
+
     bool parse_int_token(const std::string &token, int &value)
     {
         // 使用 strtol 做严格数值解析，要求整个 token 都是整数字符串。
@@ -361,6 +430,7 @@ bool arm_internation::open_by_HWid(const std::string &hw_id, int baud_rate, int 
         const std::string dev = find_ttyacm_by_HWid(hw_id);
         if (!dev.empty() && open(dev, baud_rate))
         {
+            last_usb_check_tp_ = std::chrono::steady_clock::now();
             std::cerr << "[arm_internation] Connected to " << dev << " for HW ID " << hw_id << std::endl;
             return true;
         }
@@ -404,7 +474,7 @@ bool arm_internation::parse_feedback_frame()
         // 查找帧头
         size_t start = 0;
         while (start + kFbFrameLenV1 <= rx_len_ &&
-               (rx_buf_[start] != kHeadA || rx_buf_[start + 1] != kCmdFb))
+               (rx_buf_[start] != 0xAA || rx_buf_[start + 1] != kCmdFb))
         {
             ++start;
         }
@@ -431,7 +501,7 @@ bool arm_internation::parse_feedback_frame()
             if (start + candidate_len > rx_len_) {
                 return false;
             }
-            if (rx_buf_[start + tail_a] != kTailA || rx_buf_[start + tail_b] != kTailB) {
+            if (rx_buf_[start + tail_a] != 0xFF || rx_buf_[start + tail_b] != 0xEE) {
                 return false;
             }
             return calc_crc8(rx_buf_ + start, crc) == rx_buf_[start + crc];
@@ -519,7 +589,28 @@ bool arm_internation::receive_once()
 {
     if (fd_ < 0)
     {
+        clear_report_state();
         return reconnect_blocking();
+    }
+
+    // 对绑定 HWID 的场景，使用 libusb 周期性确认 USB 设备是否仍在线。
+    // 一旦确认掉线，立即清空上报缓存并进入自动重连。
+    if (!reconnect_hw_id_.empty())
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (last_usb_check_tp_.time_since_epoch().count() == 0 ||
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - last_usb_check_tp_).count() >= usb_check_interval_ms_)
+        {
+            last_usb_check_tp_ = now;
+            if (!is_bound_hwid_online_libusb())
+            {
+                std::cerr << "[arm_internation] USB device " << reconnect_hw_id_
+                          << " not found by libusb, entering reconnect state" << std::endl;
+                close();
+                clear_report_state();
+                return reconnect_blocking();
+            }
+        }
     }
 
     // 极端情况下若缓存被占满，直接清空防止写越界。
@@ -537,6 +628,7 @@ bool arm_internation::receive_once()
             std::cerr << "[arm_internation] serial disconnected on read, errno=" << err
                       << ", entering reconnect state" << std::endl;
             close();
+            clear_report_state();
             reconnect_blocking();
         }
         return false;
@@ -612,6 +704,7 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 {
     if (fd_ < 0 && !reconnect_blocking())
     {
+        clear_report_state();
         return false;
     }
 
@@ -628,6 +721,7 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
                 std::cerr << "[arm_internation] serial disconnected on write, errno=" << err
                           << ", entering reconnect state" << std::endl;
                 close();
+                clear_report_state();
                 reconnect_blocking();
             }
             return false;
@@ -642,48 +736,54 @@ bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 {
     // AA 02 浮点控制帧：
     // [0]AA [1]02 [2]arm_id [3..6]x(float LE) [7..10]y(float LE)
-    // [11]CRC(覆盖[0]~[10]) [12]FF [13]EE
+    //  [11]FF [12]EE [13]CRC(覆盖[0]~[12])
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[14] = {kHeadA, kCmdArm, static_cast<uint8_t>(arm_id),
+    uint8_t buf[14] = {0xAA, kCmdArm, static_cast<uint8_t>(arm_id),
                        0, 0, 0, 0,
                        0, 0, 0, 0,
-                       0, kTailA, kTailB};
+                       0xFF, 0xEE,
+                       0};
     encode_float_le(x, buf + 3);
     encode_float_le(y, buf + 7);
-    buf[11] = calc_crc8(buf, 11);
+    buf[13] = calc_crc8(buf, 13);
     return write_bytes(buf, 14);
 }
 
-bool arm_internation::send_arm_cmd(int arm_id, int16_t x, int16_t y)
-{
-    // 兼容旧接口：旧代码仍可传 int16，内部统一走 float 帧。
-    return send_arm_cmd(arm_id, static_cast<float>(x), static_cast<float>(y));
-}
+// bool arm_internation::send_arm_cmd(int arm_id, int16_t x, int16_t y)
+// {
+//     // 兼容旧接口：旧代码仍可传 int16，内部统一走 float 帧。
+//     return send_arm_cmd(arm_id, static_cast<float>(x), static_cast<float>(y));
+// }
 
-bool arm_internation::send_gimbal_cmd(int gimbal_id, int16_t yaw, int16_t pitch)
+bool arm_internation::send_gimbal_cmd(int gimbal_id, float yaw, float pitch)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[10] = {kHeadA, kCmdGim, (uint8_t)gimbal_id, (uint8_t)(yaw >> 8), (uint8_t)yaw, (uint8_t)(pitch >> 8), (uint8_t)pitch, 0, kTailA, kTailB};
-    buf[7] = calc_crc8(buf, 7);
-    return write_bytes(buf, 10);
+    uint8_t buf[14] =  {0xAA, kCmdGim, (uint8_t)gimbal_id, 
+                        0, 0, 0, 0, 
+                        0, 0, 0, 0, 
+                        0xFF, 0xEE, 0};
+    encode_float_le(yaw, buf + 3);
+    encode_float_le(pitch, buf + 7);
+    buf[13] = calc_crc8(buf, 13);
+    return write_bytes(buf, 14);
 }
 
 bool arm_internation::send_valve_cmd(int valve_id, bool state)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[8] = {kHeadA, kCmdValv, (uint8_t)valve_id, (uint8_t)state, 0, kTailA, kTailB};
-    buf[4] = calc_crc8(buf, 4);
+    uint8_t buf[7] = {0xAA, kCmdValv, (uint8_t)valve_id, (uint8_t)state, 0xFF, 0xEE, 0};
+    buf[6] = calc_crc8(buf, 6);
     return write_bytes(buf, 7);
 }
 
 //发送任务赛的答案0-3
 bool arm_internation::send_answer_cmd(uint8_t answer)
 {
-    // answer 0-3 对应 4 个答案余数
+    // answer 0-3 对应 4 个答案余数 
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[8] = {kHeadA, kCmdAns, answer,0, 0, kTailA, kTailB};
-    buf[4] = calc_crc8(buf, 4);
-    return write_bytes(buf, 7);
+    uint8_t buf[8] = {0xAA, kCmdAns, answer,0, 0, 0xFF, 0xEE, 0};
+    buf[7] = calc_crc8(buf, 7);
+    return write_bytes(buf, 8);
 }
 
 
@@ -780,11 +880,13 @@ bool arm_internation::parse_int_after_prefix(const std::string &token, const std
     return parse_int_token(numeric, value);
 }
 
+// 从 token 中提取 float，要求 token 以特定前缀开头（如 "X" 或 "Y"），并支持多种分隔符。
 bool arm_internation::parse_float_token(const std::string &token, float &value)
 {
     return parse_float_token_impl(token, value);
 }
 
+// 从 token 中提取 float，要求 token 以特定前缀开头（如 "X" 或 "Y"），并支持多种分隔符。
 bool arm_internation::parse_float_after_prefix(const std::string &token, const std::string &prefix, float &value)
 {
     // 支持 X10.5 / X:10.5 / X=10.5 等写法。
@@ -804,6 +906,8 @@ bool arm_internation::parse_float_after_prefix(const std::string &token, const s
     return parse_float_token_impl(numeric, value);
 }
 
+
+// 解析机械臂别名，支持 LF/RF/LB/RB 以及历史兼容的 FL/FR/BL/BR，映射到 0-3 的 arm_id。
 bool arm_internation::parse_arm_alias(const std::string &alias, int &arm_id) const
 {
     // 机械臂 ID 映射：0=LF 1=RF 2=LB 3=RB
@@ -847,6 +951,78 @@ bool arm_internation::reconnect_blocking()
 
     std::cerr << "[arm_internation] start auto reconnect by HWid=" << reconnect_hw_id_ << std::endl;
     return open_by_HWid(reconnect_hw_id_, reconnect_baud_rate_, reconnect_retry_ms_);
+}
+
+bool arm_internation::is_bound_hwid_online_libusb() const
+{
+    if (reconnect_hw_id_.empty())
+    {
+        return true;
+    }
+
+    uint16_t vendor_id = 0;
+    uint16_t product_id = 0;
+    if (!parse_hw_id_to_vid_pid(reconnect_hw_id_, vendor_id, product_id))
+    {
+        // HWID 配置异常时不触发掉线判定，交由串口读写错误路径处理。
+        return true;
+    }
+
+    return has_usb_device_via_libusb(vendor_id, product_id);
+}
+
+void arm_internation::clear_report_state()
+{
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        for (auto &arm_pos : arm_pos_float_)
+        {
+            arm_pos.x = 0.0f;
+            arm_pos.y = 0.0f;
+        }
+
+        gimbal_float_.yaw = 0.0f;
+        gimbal_float_.pitch = 0.0f;
+        sensor_ = SensorStatus{};
+    }
+
+    rx_len_ = 0;
+}
+
+// 供外部调用的非阻塞重连尝试，适用于 receive_once() 内检测到断线后的快速恢复尝试，避免每次都进入长时间的 open_by_HWid 循环。
+bool arm_internation::try_reconnect_once()
+{
+    if (reconnect_hw_id_.empty())
+    {
+        return false;
+    }
+
+    // 加锁：避免与 reconnect_blocking() / receive_once() 并发修改 fd_
+    std::lock_guard<std::mutex> lock(reconnect_mutex_);
+    // 已经连接时无需操作
+    if (fd_ >= 0)
+    {
+        return true;
+    }
+
+    const std::string dev = find_ttyacm_by_HWid(reconnect_hw_id_);
+    if (dev.empty())
+    {
+        std::cerr << "[arm_internation] try_reconnect_once: HW ID "
+                  << reconnect_hw_id_ << " not found" << std::endl;
+        return false;
+    }
+
+    if (!open(dev, reconnect_baud_rate_))
+    {
+        std::cerr << "[arm_internation] try_reconnect_once: failed to open "
+                  << dev << std::endl;
+        return false;
+    }
+
+    std::cerr << "[arm_internation] try_reconnect_once: reconnected to "
+              << dev << std::endl;
+    return true;
 }
 
 // 解析文本命令的主入口，支持机械臂、云台、电磁阀等多种命令格式，具有一定容错能力。

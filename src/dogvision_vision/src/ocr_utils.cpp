@@ -10,6 +10,8 @@
 #include <string>
 #include <utility>
 
+#include <opencv2/calib3d.hpp>
+
 // ============================================================
 //  crop_text_region
 // ============================================================
@@ -286,4 +288,78 @@ cv::Rect2f find_math_proble(const cv::Mat& input)
                   best.x, best.y, best.width, best.height);
 
     return best;
+}
+
+// ============================================================
+//  鱼眼去畸变（与 detector.cpp 共享同一份标定参数）
+// ============================================================
+namespace {
+
+constexpr double kFisheyeBalance = 0.0;
+constexpr double kFisheyeFovScale = 1.0;
+
+// 从 fisheye_params.yaml 读取的 K 矩阵 (3×3)
+const cv::Mat K = (cv::Mat_<double>(3, 3) <<
+    8.2631010840557929e+02, 0., 7.3508237365876721e+02,
+    0., 8.3234495506807673e+02, 5.6784864582942498e+02,
+    0., 0., 1.);
+
+// 从 fisheye_params.yaml 读取的 D 矩阵 (4×1)
+const cv::Mat D = (cv::Mat_<double>(4, 1) <<
+    1.9474519085664992e-02,
+    2.2096711413330011e-02,
+   -4.1006640770500716e-02,
+    2.6220651979250005e-02);
+
+cv::Mat s_map1, s_map2;
+bool s_map_ready = false;
+
+} // anonymous namespace
+
+bool init_fisheye_undistort(int image_width, int image_height)
+{
+    if (image_width <= 0 || image_height <= 0)
+    {
+        ROS_ERROR("init_fisheye_undistort: invalid size %dx%d",
+                  image_width, image_height);
+        s_map_ready = false;
+        return false;
+    }
+
+    const cv::Size image_size(image_width, image_height);
+    cv::Mat new_camera_matrix;
+
+    cv::fisheye::estimateNewCameraMatrixForUndistortRectify(
+        K, D, image_size, cv::Matx33d::eye(),
+        new_camera_matrix, kFisheyeBalance,
+        image_size, kFisheyeFovScale);
+
+    cv::fisheye::initUndistortRectifyMap(
+        K, D, cv::Matx33d::eye(), new_camera_matrix,
+        image_size, CV_16SC2, s_map1, s_map2);
+
+    s_map_ready = !s_map1.empty() && !s_map2.empty();
+
+    if (s_map_ready)
+        ROS_INFO("Fisheye undistort initialized for %dx%d",
+                 image_width, image_height);
+    else
+        ROS_ERROR("Fisheye undistort init FAILED for %dx%d",
+                  image_width, image_height);
+
+    return s_map_ready;
+}
+
+cv::Mat undistort_image(const cv::Mat& input)
+{
+    if (input.empty())
+        return {};
+
+    if (!s_map_ready)
+        return input.clone();
+
+    cv::Mat result;
+    cv::remap(input, result, s_map1, s_map2,
+              cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+    return result;
 }

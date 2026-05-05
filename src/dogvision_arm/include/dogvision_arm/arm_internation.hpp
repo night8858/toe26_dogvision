@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -40,6 +41,11 @@ struct SensorStatus {
     std::array<bool, 4> microswitch = {};  ///< 微动开关 0-3：true = 触发
 };
 
+struct PumpStatus {
+        bool pump_on = false; ///< 泵状态：true = 开
+        float speed = 0.0f;   ///< 泵速（单位由下位机协议确定）
+};
+
 // ============================================================
 //  arm_internation：串口通讯管理类
 //
@@ -57,7 +63,9 @@ struct SensorStatus {
 //    AA 02  → 机械臂末端控制
 //    AA 03  → 云台角度控制
 //    AA 04  → 电磁阀控制
-//
+//    AA 05  → 泵控制
+//    AA 06  → 任务赛答案控制
+
 //  用法（典型）：
 //    arm_internation comm;
 //    comm.open("/dev/ttyUSB0", 115200);
@@ -70,6 +78,8 @@ struct SensorStatus {
 //    G,0,0             -> 控制云台 yaw/pitch
 //    V,1               -> 翻转电磁阀 1 的状态
 //    V,1,ON            -> 显式打开电磁阀 1
+//    P,ON,2000           -> 打开/关闭泵,并设置泵速（示例：P,ON,2000 打开泵并设置速度为 2000）
+//    A,0               -> 任务赛答案控制（示例：A,0 设置答案为 0）
 // ============================================================
 class arm_internation {
 public:
@@ -87,6 +97,9 @@ public:
     void close();
     /// 返回串口是否已打开。
     bool is_open() const;
+    /// 非阻塞单次重连尝试：扫描 ttyACM* 并尝试按原 hw_id/baud 打开。
+    /// 成功返回 true；未找到设备或打开失败立即返回 false，不等待。
+    bool try_reconnect_once();
 
     // ---- 接收 & 解析 --------------------------------------------
     /// 从串口读取数据并尝试解析一帧 AA 01。
@@ -114,11 +127,8 @@ public:
     /// AA 02：控制 arm_id 机械臂末端移动至 (x, y)，float 坐标，arm_id: 0-3。
     bool send_arm_cmd(int arm_id, float x, float y);
 
-    /// 兼容旧接口：内部会转为 float 帧发送。
-    bool send_arm_cmd(int arm_id, int16_t x, int16_t y);
-
-    /// AA 03：控制云台角度（当前协议仍为 int16 参数），gimbal_id 目前仅支持 0。
-    bool send_gimbal_cmd(int gimbal_id, int16_t yaw, int16_t pitch);
+    /// AA 03：控制云台角度（当前协议为 float 参数），gimbal_id 目前仅支持 0。
+    bool send_gimbal_cmd(int gimbal_id, float yaw, float pitch);
 
     /// AA 04：控制电磁阀，valve_id: 0-3，state: true = 开 / false = 关。
     bool send_valve_cmd(int valve_id, bool state);
@@ -172,6 +182,10 @@ private:
 
     /// 断开后自动重连（阻塞直到成功或无可用重连配置）。
     bool reconnect_blocking();
+    /// 使用 libusb 检查当前绑定 HWID 对应 USB 设备是否在线。
+    bool is_bound_hwid_online_libusb() const;
+    /// 断线期间将内部上报缓存清零，避免上层继续读取陈旧值。
+    void clear_report_state();
 
     // ---- 串口文件描述符 -----------------------------------------
     int fd_ = -1;
@@ -204,6 +218,10 @@ private:
     int reconnect_retry_ms_ = 1000;
     std::atomic<bool> auto_reconnect_enabled_{false};
     std::mutex reconnect_mutex_;
+
+    // ---- libusb 在线检测节流 -----------------------------------
+    std::chrono::steady_clock::time_point last_usb_check_tp_{};
+    int usb_check_interval_ms_ = 300;
 };
 
 

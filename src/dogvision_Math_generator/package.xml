@@ -1,19 +1,24 @@
-<?xml version="1.0"?>
+<?xml version="1.0"?> 
 <package format="2">
-  <name>dogvision_msgs</name>
+  <name>dogvision_Math_generator</name>
   <version>1.0.0</version>
-  <description>Custom ROS messages for dogvision26 project</description>
+  <description>Math Problem Generator utilities for dogvision26 project</description>
 
   <license>MIT</license>
 
   <maintainer email="developer@dogvision.local">dogvision Developer</maintainer>
 
+  <!-- 构建工具依赖 -->
   <buildtool_depend>catkin</buildtool_depend>
 
   <!-- 依赖 -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>roslib</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>message_generation</build_depend>
 
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>roslib</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>message_runtime</exec_depend>
 </package>

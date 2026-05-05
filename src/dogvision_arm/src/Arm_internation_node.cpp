@@ -86,20 +86,38 @@ int main(int argc, char **argv)
     // 其中 VALVE_BITS / MICRO_BITS 分别对应协议 [20]/[21] 与 [22]/[23] 的位语义。
     ros::Publisher data_pub = nh.advertise<std_msgs::String>(data_topic, 20);
     const ros::Duration publish_period(1.0 / 20.0);  // 20Hz
-    ros::Time next_publish_time = ros::Time::now();
 
     // ---------------- 主循环区 ----------------
     // 200Hz 原则上足够覆盖串口反馈处理与 ROS 回调调度。
     ros::Rate loop_rate(200);
-    
+    ros::Time next_publish_time  = ros::Time::now();
+    ros::Time next_conn_check_time = ros::Time::now();
+
     while (ros::ok())
     {
+        const ros::Time now = ros::Time::now();
+
+        // ---- 每秒执行一次设备在线检测 ----
+        if (now >= next_conn_check_time)
+        {
+            next_conn_check_time = now + ros::Duration(1.0);
+
+            if (!my_arm.is_open())
+            {
+                ROS_WARN("[Arm_internation_node] serial disconnected, attempting reconnect...");
+                if (my_arm.try_reconnect_once())
+                    ROS_INFO("[Arm_internation_node] reconnected successfully");
+                else
+                    ROS_WARN("[Arm_internation_node] reconnect failed, will retry in 1 s");
+            }
+        }
+
         // 读取并解析串口数据（成功解析时会刷新内部状态缓存）。
         my_arm.receive_once();
 
         // 按 20Hz 发布当前最新状态快照。
-        const ros::Time now = ros::Time::now();
-        if (now >= next_publish_time) {
+        if (now >= next_publish_time)
+        {
             const ArmEndPosFloat lf = my_arm.get_arm_pos_float(0);
             const ArmEndPosFloat rf = my_arm.get_arm_pos_float(1);
             const ArmEndPosFloat lb = my_arm.get_arm_pos_float(2);
@@ -135,7 +153,7 @@ int main(int argc, char **argv)
             data_pub.publish(msg);
 
             next_publish_time = now + publish_period;
-            ROS_INFO_STREAM("[Arm_internation_node] published state: " << msg.data);
+            //ROS_INFO_STREAM("[Arm_internation_node] published state: " << msg.data);
         }
 
         // 处理订阅回调（执行命令解析与发送）。

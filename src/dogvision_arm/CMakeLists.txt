@@ -12,6 +12,10 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(Threads REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
+
+
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES dogvision_arm_lib
@@ -21,6 +25,7 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${LIBUSB_INCLUDE_DIRS}
 )
 
 # ---- 串口通信库 ----
@@ -32,6 +37,7 @@ add_dependencies(dogvision_arm_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_
 target_link_libraries(dogvision_arm_lib
   ${catkin_LIBRARIES}
   Threads::Threads
+    ${LIBUSB_LIBRARIES}
 )
 
 # ---- Arm_internation_node ----
@@ -44,6 +50,7 @@ target_link_libraries(Arm_internation_node
   dogvision_arm_lib
   ${catkin_LIBRARIES}
   Threads::Threads
+  ${LIBUSB_LIBRARIES}
 )
 
 # ---- arm_cmd_terminal_node ----
@@ -55,4 +62,5 @@ add_dependencies(arm_cmd_terminal_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${cat
 target_link_libraries(arm_cmd_terminal_node
   ${catkin_LIBRARIES}
   Threads::Threads
+  ${LIBUSB_LIBRARIES}
 )
