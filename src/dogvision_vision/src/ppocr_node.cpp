@@ -94,14 +94,7 @@ static bool run_ocr_pipeline(cv::Mat &img,
                              int &mod_result,
                              cv::Rect2f *out_roi = nullptr)
 {
-    // ── 0. 鱼眼去畸变 ─────────────────────────────────────────────────────
-    cv::Mat undistorted = undistort_image(img);
-    if (undistorted.empty())
-    {
-        ROS_WARN("Undistortion failed, using raw image.");
-        undistorted = img;
-    }
-    img = undistorted;  // 后续处理使用去畸变后的图
+    // NOTE: 去畸变已在主循环中提前执行，img 已是矫正后的图像
 
     // ── 1. 定位白底算术题 ROI — 找不到则跳过推理 ───────────────────────────
     cv::Mat det_input;
@@ -266,7 +259,7 @@ int main(int argc, char **argv)
         // ── 2 秒间隔控制 ────────────────────────────────────────────────────
         static auto last_infer = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
-        // if (std::chrono::duration_cast<std::chrono::seconds>(now - last_infer).count() < 2)
+        // if (std::chrono::duration_cast<std::chrono::seconds>(now - last_infer).count() < 0.02)
         // {
         //     int k = cv::waitKey(10);
         //     if (k == 'q' || k == 'Q' || k == 27) break;
@@ -286,6 +279,15 @@ int main(int argc, char **argv)
             continue;
         }
 
+        // ── 鱼眼去畸变（在所有处理之前执行，保证后续推理和可视化都基于矫正图）─
+        {
+            cv::Mat undistorted = undistort_image(frame);
+            if (!undistorted.empty())
+                frame = undistorted;
+            else
+                ROS_WARN_THROTTLE(5, "Undistortion failed, using raw frame.");
+        }
+
         // ── OCR + 算术解析 ─────────────────────────────────────────────────
         last_infer = now;
         std::string expr_str;
@@ -300,7 +302,7 @@ int main(int argc, char **argv)
 #ifdef OCR_SHOW_VISUAL
             // 构建显示文本："12 + 3 * 5 - 8 / 2 = 23  (mod4: 3)"
             std::ostringstream disp;
-            disp << expr_str << int_result << "  (mod4: " << mod_result << ")";
+            disp << expr_str  << " = " << int_result << "  (mod4: " << mod_result << ")";
             std::string display_text = disp.str();
 
             // 绘制位置：ROI 左下角外侧（x=roi.x, y=roi.bottom + 偏移）
@@ -330,11 +332,6 @@ int main(int argc, char **argv)
                         cv::Point(text_x, text_y - 4),
                         cv::FONT_HERSHEY_DUPLEX, font_scale,
                         cv::Scalar(255, 255, 255), thickness, cv::LINE_AA);
-
-            // 全屏显示标注后的画面
-            cv::namedWindow("Math OCR", cv::WINDOW_NORMAL);
-            cv::setWindowProperty("Math OCR", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
-            cv::imshow("Math OCR", frame);
 #endif
 
             // 去重：相同表达式不重复写入
@@ -369,6 +366,11 @@ int main(int argc, char **argv)
                 ROS_INFO("Duplicate, skipped.");
             }
         }
+
+        // ── 实时可视化（始终显示已矫正的 frame，识别成功时含文字标注）────
+#ifdef OCR_SHOW_VISUAL
+        cv::imshow("Math OCR", frame);
+#endif
 
         // 键盘退出检测
         int key = cv::waitKey(10);

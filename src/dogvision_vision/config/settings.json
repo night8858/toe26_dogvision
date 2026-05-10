@@ -7,7 +7,8 @@
       "height": 1080,
       "offset_x":0,
       "offset_y":0,
-      "exposure":11000
+      "exposure":12000,
+      "gain":9
     },
 
     "lens_distortion":

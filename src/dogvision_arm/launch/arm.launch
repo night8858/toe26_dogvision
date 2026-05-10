@@ -1,4 +1,20 @@
-<!-- 启动机械臂串口通信节点与终端命令节点 -->
+<!--
+  机械臂串口通信节点 + 终端命令节点
+  =================================
+  启动两个节点：
+    - Arm_internation_node : 串口收发 + 低层命令解析
+    - arm_cmd_terminal_node : 终端输入（直接在当前终端输入命令）
+
+  测试命令：
+    STOW,ALL       收起
+    PICK,ALL       吸取
+    PLACE,LF       放置
+    VALVE,0,ON     电磁阀开
+    PUMP,ON,2500   气泵开
+
+  若要指定串口路径而非 hw_id 自动扫描：
+    <param name="port" value="/dev/ttyUSB0"/>
+-->
 <launch>
   <node name="arm_internation_node" pkg="dogvision_arm" type="Arm_internation_node"
         output="screen">
@@ -6,9 +22,12 @@
     <param name="baud_rate"  value="115200"/>
     <param name="pos_scale"  value="0.01"/>
     <param name="angle_scale" value="0.01"/>
+    <!--
+    <param name="port" value="/dev/ttyUSB0"/>
+    -->
   </node>
 
-  <!-- launch-prefix="xterm -e" 可在独立终端中运行以便手动输入命令 -->
+  <!-- 终端命令节点（输入 help 查看快捷键） -->
   <node name="arm_cmd_terminal_node" pkg="dogvision_arm" type="arm_cmd_terminal_node"
-        output="screen" launch-prefix="xterm -e"/>
+        output="screen"/>
 </launch>

@@ -63,8 +63,8 @@ struct PumpStatus {
 //    AA 02  → 机械臂末端控制
 //    AA 03  → 云台角度控制
 //    AA 04  → 电磁阀控制
-//    AA 05  → 泵控制
-//    AA 06  → 任务赛答案控制
+//    AA 06  → 泵控制
+//    AA 05  → 任务赛答案控制
 
 //  用法（典型）：
 //    arm_internation comm;
@@ -136,6 +136,9 @@ public:
     /// AA 05：发送任务赛答案，answer: 0-3。
     bool send_answer_cmd(uint8_t answer);
 
+    /// AA 06：控制气泵开关与速度，on=true 开泵并设 speed，on=false 关泵。
+    bool send_pump_cmd(bool on, int speed);
+
     /// 解析并执行字符串命令：
     /// RL,X:10,Y:10 -> 机械臂；G,0,0 -> 云台；V,ID[,STATE] -> 电磁阀。
     bool handle_text_command(const std::string& command_text);
@@ -148,8 +151,27 @@ private:
     static constexpr uint8_t kCmdGim  = 0x03u;  ///< 命令字：云台控制
     static constexpr uint8_t kCmdValv = 0x04u;  ///< 命令字：电磁阀控制
     static constexpr uint8_t kCmdAns  = 0x05u;  ///< 命令字：任务赛答案
+    static constexpr uint8_t kCmdPump = 0x06u;  ///< 命令字：气泵控制（on/off + 速度）
     static constexpr uint8_t kTailA   = 0xFFu;  ///< 帧尾第一字节
     static constexpr uint8_t kTailB   = 0xEEu;  ///< 帧尾第二字节
+
+
+    //收放位置
+    static constexpr float aimPos_start_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
+    static constexpr float aimPos_start_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
+
+    //放置物块位置
+    static constexpr float aimPos_place_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
+    static constexpr float aimPos_place_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
+
+    //取物块位置设定
+    static constexpr float aimPos_block_get_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
+    static constexpr float aimPos_block_get_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
+
+    // 任务赛特定：交接物块
+    static constexpr float aimPos_block_transfer_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
+    static constexpr float aimPos_block_transfer_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
+
 
 
     /// AA 01 帧总字节数：2(头) + 44(净荷) + 2(尾) + 1(CRC) = 49

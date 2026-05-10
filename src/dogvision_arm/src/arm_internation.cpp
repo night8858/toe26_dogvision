@@ -749,12 +749,6 @@ bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
     return write_bytes(buf, 14);
 }
 
-// bool arm_internation::send_arm_cmd(int arm_id, int16_t x, int16_t y)
-// {
-//     // 兼容旧接口：旧代码仍可传 int16，内部统一走 float 帧。
-//     return send_arm_cmd(arm_id, static_cast<float>(x), static_cast<float>(y));
-// }
-
 bool arm_internation::send_gimbal_cmd(int gimbal_id, float yaw, float pitch)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
@@ -784,6 +778,19 @@ bool arm_internation::send_answer_cmd(uint8_t answer)
     uint8_t buf[8] = {0xAA, kCmdAns, answer,0, 0, 0xFF, 0xEE, 0};
     buf[7] = calc_crc8(buf, 7);
     return write_bytes(buf, 8);
+}
+
+//发送气泵控制命令
+//帧格式：AA 06 [on:0/1] [speed_H] [speed_L] FF EE CRC
+//on=1：开泵并设置速度；on=0：关泵
+bool arm_internation::send_pump_cmd(bool on, int speed)
+{
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t on_off = on ? 1 : 0;
+    uint8_t buf[10] = {0xAA, kCmdPump, on_off, 0, 0,0,0, 0xFF, 0xEE, 0};
+    encode_float_le(speed, buf + 3);
+    buf[9] = calc_crc8(buf, 9);
+    return write_bytes(buf, 10);
 }
 
 
@@ -1158,6 +1165,37 @@ bool arm_internation::handle_text_command(const std::string &command_text)
         // 成功发送后更新缓存态，保证下一次翻转有依据。
         valve_cmd_state_[valve_id] = state;
         return true;
+    }
+
+    if (cmd == "P")
+    {
+        // 气泵命令：
+        // P,ON,2500    -> 打开气泵，设置速度 2500
+        // P,OFF        -> 关闭气泵
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        const std::string action = to_upper_copy(tokens[1]);
+        if (action == "ON" || action == "1" || action == "OPEN" || action == "TRUE")
+        {
+            int speed = 0;
+            if (tokens.size() >= 3)
+            {
+                if (!parse_int_token(tokens[2], speed) || speed < 0)
+                {
+                    return false;
+                }
+            }
+            return send_pump_cmd(true, speed);
+        }
+        else if (action == "OFF" || action == "0" || action == "CLOSE" || action == "FALSE")
+        {
+            return send_pump_cmd(false, 0);
+        }
+
+        return false;
     }
 
     return false;

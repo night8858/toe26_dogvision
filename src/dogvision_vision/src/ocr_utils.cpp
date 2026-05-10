@@ -214,34 +214,54 @@ cv::Rect2f find_math_proble(const cv::Mat& input)
     if (input.empty()) return {};
 
     // ── 1. HSV 白色掩码 ──────────────────────────────────────────────────────
-    // 白色定义：低饱和度（S < 50）+ 高明度（V > 180）
+    // 放宽阈值以支持远距离（亮度偏低）和轻微色偏场景
     cv::Mat hsv;
     cv::cvtColor(input, hsv, cv::COLOR_BGR2HSV);
 
     cv::Mat white_mask;
     cv::inRange(hsv,
-                cv::Scalar(0,   0, 180),
-                cv::Scalar(180, 50, 255),
+            cv::Scalar(0,   0,  70),  // V≥70 允许更暗的远距离目标
+            cv::Scalar(180, 90, 255), // S≤90 容忍更多环境色干扰
                 white_mask);
 
-    // ── 2. 形态学处理 ────────────────────────────────────────────────────────
-    // 核大小随图像分辨率自适应（最小 11px，约 1/60 图宽）
-    int ks = std::max(11, input.cols / 60);
-    if (ks % 2 == 0) ks++;   // 保持奇数
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, {ks, ks});
-    // 闭运算：连通字符之间的白色小孔，使白色区域完整
-    cv::morphologyEx(white_mask, white_mask, cv::MORPH_CLOSE, kernel);
-    // 开运算：消除孤立噪点
-    cv::morphologyEx(white_mask, white_mask, cv::MORPH_OPEN,  kernel);
+    // ── 2. 多级形态学处理 ────────────────────────────────────────────────────
+    // 使用一大一小两级核，分别处理近距离（大 ROI）和远距离（小 ROI）：
+    //
+    //   大核 ks_large = 常规尺寸（≈ 图像宽/60），用于连通近距离大目标的文字间隙
+    //   小核 ks_small = 小尺寸（固定 5px），保留远距离小目标的白色区域不被抹除
+    //
+    // 先闭后开是大核（去除文字孔洞+噪点），再对小核候选做保护性闭运算
+
+    int ks_large = std::max(11, input.cols / 60);
+    if (ks_large % 2 == 0) ks_large++;
+    const int ks_small = 5;  // 远距离小目标专用核
+
+    // ── 2a. 大核处理（保留常规/近距离目标）─────────────────────────────────
+    cv::Mat morph_large;
+    cv::Mat kernel_large = cv::getStructuringElement(cv::MORPH_RECT, {ks_large, ks_large});
+    cv::morphologyEx(white_mask, morph_large, cv::MORPH_CLOSE, kernel_large);
+    cv::morphologyEx(morph_large, morph_large, cv::MORPH_OPEN, kernel_large);
+
+    // ── 2b. 小核处理（保留远距离小目标）─────────────────────────────────────
+    cv::Mat morph_small;
+    cv::Mat kernel_small = cv::getStructuringElement(cv::MORPH_RECT, {ks_small, ks_small});
+    cv::morphologyEx(white_mask, morph_small, cv::MORPH_CLOSE, kernel_small);
+    // 小目标不再做开运算，避免被腐蚀掉
+
+    // ── 2c. 合并两侧：远距离小目标优先（避免被大核抹除）───────────────────
+    // 策略：大核结果保证大区域连续性，小核结果保留小区域；两者取并集
+    cv::Mat combined_mask = morph_large | morph_small;
 
     // ── 3. 轮廓检测 ──────────────────────────────────────────────────────────
     std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(white_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    cv::findContours(combined_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     if (contours.empty()) return {};
 
     // ── 4. 候选筛选 ──────────────────────────────────────────────────────────
     const float img_area = static_cast<float>(input.cols * input.rows);
-    const float min_area = img_area * 0.03f;   // 至少占画面 3%（排除零散噪点）
+
+    // 放宽面积下限到 0.5%，让远距离小目标能通过
+    const float min_area = img_area * 0.005f;  // 0.5%（原为 3%）
     const float max_area = img_area * 0.92f;   // 不超过 92%（排除满幅白背景）
 
     cv::Rect2f best;
@@ -267,7 +287,7 @@ cv::Rect2f find_math_proble(const cv::Mat& input)
         cv::Mat roi_mask = white_mask(br);
         float white_ratio = static_cast<float>(cv::countNonZero(roi_mask))
                             / static_cast<float>(br.area());
-        if (white_ratio < 0.55f) continue;   // 白色至少占 55%
+        if (white_ratio < 0.45f) continue;   // 白色至少占 45%（原 55%，放宽）
 
         // 综合评分：优先面积大且白色纯度高的区域
         float score = static_cast<float>(br.area()) * white_ratio;

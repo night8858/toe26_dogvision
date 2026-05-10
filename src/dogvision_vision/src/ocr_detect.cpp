@@ -539,7 +539,8 @@ std::vector<OCRRecResult> detect_rec_ppocr::Decode(const ov::Tensor& logits)
 }
 
 
-
+//////////////////////////////////////////////
+/*           目前没用上的正反检查模块           */
 // std::vector<OCRRecResult> TextRecognizer::Run(const std::vector<cv::Mat>& crops) {
 //     std::vector<OCRRecResult> out(crops.size());
 //     if (crops.empty()) {

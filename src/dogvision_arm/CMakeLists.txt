@@ -64,3 +64,14 @@ target_link_libraries(arm_cmd_terminal_node
   Threads::Threads
   ${LIBUSB_LIBRARIES}
 )
+
+# ---- arm_mission_node ----
+add_executable(arm_mission_node
+  src/arm_mission_node.cpp
+)
+target_compile_features(arm_mission_node PRIVATE cxx_std_17)
+add_dependencies(arm_mission_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(arm_mission_node
+  ${catkin_LIBRARIES}
+  Threads::Threads
+)

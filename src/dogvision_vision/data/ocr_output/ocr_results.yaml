@@ -1,0 +1,1146 @@
+ocr_results:
+  - id: 1
+    question: "7246471*1"
+    answer: 7246471
+    mod4: 3
+  - id: 2
+    question: "-4"
+    answer: -4
+    mod4: 0
+  - id: 3
+    question: "-2"
+    answer: -2
+    mod4: 2
+  - id: 4
+    question: "-2464."
+    answer: -2464
+    mod4: 0
+  - id: 5
+    question: "-16"
+    answer: -16
+    mod4: 0
+  - id: 6
+    question: "10-1-0.4"
+    answer: 9
+    mod4: 1
+  - id: 7
+    question: "10-160.5"
+    answer: -151
+    mod4: 1
+  - id: 8
+    question: "-0.4"
+    answer: 0
+    mod4: 0
+  - id: 9
+    question: "-20"
+    answer: -20
+    mod4: 0
+  - id: 10
+    question: "-0.4-2464"
+    answer: -2464
+    mod4: 0
+  - id: 11
+    question: "10-4"
+    answer: 6
+    mod4: 2
+  - id: 12
+    question: "-1"
+    answer: -1
+    mod4: 3
+  - id: 13
+    question: "-164.0+2"
+    answer: -162
+    mod4: 2
+  - id: 14
+    question: "4-264."
+    answer: -260
+    mod4: 0
+  - id: 15
+    question: "10.-164"
+    answer: -154
+    mod4: 2
+  - id: 16
+    question: "1-"
+    answer: 1
+    mod4: 1
+  - id: 17
+    question: "18-2"
+    answer: 16
+    mod4: 0
+  - id: 18
+    question: "43-1"
+    answer: 42
+    mod4: 2
+  - id: 19
+    question: "(3-2"
+    answer: 1
+    mod4: 1
+  - id: 20
+    question: "4*3-2"
+    answer: 10
+    mod4: 2
+  - id: 21
+    question: "3-2"
+    answer: 1
+    mod4: 1
+ocr_results:
+  - id: 1
+    question: "-2"
+    answer: -2
+    mod4: 2
+  - id: 2
+    question: "3-2"
+    answer: 1
+    mod4: 1
+  - id: 3
+    question: "(-2"
+    answer: -2
+    mod4: 2
+  - id: 4
+    question: "(-2-"
+    answer: -2
+    mod4: 2
+  - id: 5
+    question: "-2-"
+    answer: -2
+    mod4: 2
+ocr_results:
+  - id: 1
+    question: "1+5"
+    answer: 6
+    mod4: 2
+ocr_results:
+  - id: 1
+    question: "11+5"
+    answer: 16
+    mod4: 0
+  - id: 2
+    question: "1+5"
+    answer: 6
+    mod4: 2
+  - id: 3
+    question: "11+"
+    answer: 11
+    mod4: 3
+  - id: 4
+    question: "11+5-"
+    answer: 16
+    mod4: 0
+ocr_results:
+  - id: 1
+    question: "1-14/2"
+    answer: -6
+    mod4: 2
+  - id: 2
+    question: "-14/2"
+    answer: -7
+    mod4: 1
+  - id: 3
+    question: "13/1"
+    answer: 13
+    mod4: 1
+  - id: 4
+    question: "13/1-"
+    answer: 13
+    mod4: 1
+  - id: 5
+    question: "13/1-6"
+    answer: 7
+    mod4: 3
+  - id: 6
+    question: "13/1-6+"
+    answer: 7
+    mod4: 3
+  - id: 7
+    question: "13/1-0"
+    answer: 13
+    mod4: 1
+  - id: 8
+    question: "6+3*8"
+    answer: 30
+    mod4: 2
+  - id: 9
+    question: "13/1-6+6+3*8"
+    answer: 37
+    mod4: 1
+  - id: 10
+    question: "13/1-6+3.8"
+    answer: 11
+    mod4: 3
+  - id: 11
+    question: "13/1-6+3*8"
+    answer: 31
+    mod4: 3
+  - id: 12
+    question: "13/1-1"
+    answer: 12
+    mod4: 0
+  - id: 13
+    question: "13/1-6+6+3.8"
+    answer: 17
+    mod4: 1
+  - id: 14
+    question: "10-6+18/2*4"
+    answer: 40
+    mod4: 0
+  - id: 15
+    question: "10-"
+    answer: 10
+    mod4: 2
+  - id: 16
+    question: "6+18/2*"
+    answer: 6
+    mod4: 2
+  - id: 17
+    question: "11+510-"
+    answer: 521
+    mod4: 1
+  - id: 18
+    question: "11+5"
+    answer: 16
+    mod4: 0
+  - id: 19
+    question: "10-6+18/"
+    answer: -2147483648
+    mod4: 0
+  - id: 20
+    question: "10-6+18"
+    answer: 22
+    mod4: 2
+  - id: 21
+    question: "6+18"
+    answer: 24
+    mod4: 0
+  - id: 22
+    question: "10-6"
+    answer: 4
+    mod4: 0
+  - id: 23
+    question: "10-6+18."
+    answer: 22
+    mod4: 2
+  - id: 24
+    question: "10-6+1811+5"
+    answer: 1820
+    mod4: 0
+  - id: 25
+    question: "10-6+18.11+5"
+    answer: 27
+    mod4: 3
+  - id: 26
+    question: "10-11+5"
+    answer: 4
+    mod4: 0
+  - id: 27
+    question: "10-611+5"
+    answer: -596
+    mod4: 0
+  - id: 28
+    question: "11+5-"
+    answer: 16
+    mod4: 0
+  - id: 29
+    question: "18+4-11+5"
+    answer: 16
+    mod4: 0
+  - id: 30
+    question: "18+411+5"
+    answer: 434
+    mod4: 2
+  - id: 31
+    question: "18+11+5"
+    answer: 34
+    mod4: 2
+  - id: 32
+    question: "18+4.11+5"
+    answer: 27
+    mod4: 3
+  - id: 33
+    question: "18+-2011+5"
+    answer: -1988
+    mod4: 0
+  - id: 34
+    question: "18+4-2011+5"
+    answer: -1984
+    mod4: 0
+  - id: 35
+    question: "18+4-20"
+    answer: 2
+    mod4: 2
+  - id: 36
+    question: "18+4-20/11+5"
+    answer: 25
+    mod4: 1
+  - id: 37
+    question: "18+4.4-20/11+5"
+    answer: 26
+    mod4: 2
+  - id: 38
+    question: "18+4-4-20"
+    answer: -2
+    mod4: 2
+  - id: 39
+    question: "18+4-4-2011+5"
+    answer: -1988
+    mod4: 0
+  - id: 40
+    question: "1811+5"
+    answer: 1816
+    mod4: 0
+  - id: 41
+    question: "18+4.11+5."
+    answer: 27
+    mod4: 3
+  - id: 42
+    question: "18+11+5."
+    answer: 34
+    mod4: 2
+  - id: 43
+    question: "18+4-20/1"
+    answer: 2
+    mod4: 2
+  - id: 44
+    question: "7.16/4-7+20"
+    answer: 15
+    mod4: 3
+  - id: 45
+    question: "7*16/4-7+20"
+    answer: 41
+    mod4: 1
+  - id: 46
+    question: "7.16/4"
+    answer: 2
+    mod4: 2
+  - id: 47
+    question: "7*16/"
+    answer: -2147483648
+    mod4: 0
+  - id: 48
+    question: "7*16/+20"
+    answer: -2147483648
+    mod4: 0
+  - id: 49
+    question: "16/"
+    answer: -2147483648
+    mod4: 0
+  - id: 50
+    question: "11+54"
+    answer: 65
+    mod4: 1
+  - id: 51
+    question: "11+"
+    answer: 11
+    mod4: 3
+  - id: 52
+    question: "5-10*15"
+    answer: -145
+    mod4: 3
+  - id: 53
+    question: "-10*15+"
+    answer: -150
+    mod4: 2
+  - id: 54
+    question: "-10*15"
+    answer: -150
+    mod4: 2
+  - id: 55
+    question: "-20"
+    answer: -20
+    mod4: 0
+  - id: 56
+    question: "1-20"
+    answer: -19
+    mod4: 1
+  - id: 57
+    question: "5/1-20+20"
+    answer: 5
+    mod4: 1
+  - id: 58
+    question: "5/1-20+20+"
+    answer: 5
+    mod4: 1
+  - id: 59
+    question: "-20+20+"
+    answer: 0
+    mod4: 0
+  - id: 60
+    question: "1-20+20+1"
+    answer: 2
+    mod4: 2
+  - id: 61
+    question: "-20+20+1"
+    answer: 1
+    mod4: 1
+  - id: 62
+    question: "20+20+"
+    answer: 40
+    mod4: 0
+  - id: 63
+    question: "1-20+20+"
+    answer: 1
+    mod4: 1
+  - id: 64
+    question: "-20+20"
+    answer: 0
+    mod4: 0
+  - id: 65
+    question: "5/1-20**"
+    answer: 5
+    mod4: 1
+  - id: 66
+    question: "2*1*3+5"
+    answer: 11
+    mod4: 3
+  - id: 67
+    question: "2*1+3+5"
+    answer: 10
+    mod4: 2
+  - id: 68
+    question: "2*1*3+5-"
+    answer: 11
+    mod4: 3
+  - id: 69
+    question: "2*1*3+54"
+    answer: 60
+    mod4: 0
+  - id: 70
+    question: "2*1+3+5-"
+    answer: 10
+    mod4: 2
+  - id: 71
+    question: "2*1+3+54"
+    answer: 59
+    mod4: 3
+  - id: 72
+    question: "1*3+5"
+    answer: 8
+    mod4: 0
+  - id: 73
+    question: "(1*3+5"
+    answer: 8
+    mod4: 0
+  - id: 74
+    question: "3+5"
+    answer: 8
+    mod4: 0
+  - id: 75
+    question: "16+6*5"
+    answer: 46
+    mod4: 2
+  - id: 76
+    question: "16+6*5/2-"
+    answer: 31
+    mod4: 3
+  - id: 77
+    question: "16+6*5/2-4"
+    answer: 27
+    mod4: 3
+  - id: 78
+    question: "16+6*5/2"
+    answer: 31
+    mod4: 3
+  - id: 79
+    question: "146-20+2"
+    answer: 128
+    mod4: 0
+  - id: 80
+    question: "14-20+2+12/2"
+    answer: 2
+    mod4: 2
+  - id: 81
+    question: "14-20+2*12/2"
+    answer: 6
+    mod4: 2
+  - id: 82
+    question: "14-14-20+2+12/2"
+    answer: -12
+    mod4: 0
+  - id: 83
+    question: "4-20+2+12/2"
+    answer: -8
+    mod4: 0
+  - id: 84
+    question: "-20+2+12/2"
+    answer: -12
+    mod4: 0
+  - id: 85
+    question: "14-20+2+*12/2"
+    answer: -4
+    mod4: 0
+  - id: 86
+    question: "4-20+2*12/2"
+    answer: -4
+    mod4: 0
+  - id: 87
+    question: "-20+2*12/2"
+    answer: -8
+    mod4: 0
+  - id: 88
+    question: "20+2*12/"
+    answer: -2147483648
+    mod4: 0
+  - id: 89
+    question: "2+12/2"
+    answer: 8
+    mod4: 0
+  - id: 90
+    question: "2*12/2"
+    answer: 12
+    mod4: 0
+  - id: 91
+    question: "12/"
+    answer: -2147483648
+    mod4: 0
+  - id: 92
+    question: "12/2"
+    answer: 6
+    mod4: 2
+  - id: 93
+    question: "412/2"
+    answer: 206
+    mod4: 2
+  - id: 94
+    question: "4-20+2"
+    answer: -14
+    mod4: 2
+  - id: 95
+    question: "-20+2"
+    answer: -18
+    mod4: 2
+  - id: 96
+    question: "-20+3"
+    answer: -17
+    mod4: 3
+  - id: 97
+    question: "2*13+5"
+    answer: 31
+    mod4: 3
+  - id: 98
+    question: "2*1"
+    answer: 2
+    mod4: 2
+  - id: 99
+    question: "2*1*3"
+    answer: 6
+    mod4: 2
+  - id: 100
+    question: "2*1*"
+    answer: 0
+    mod4: 0
+  - id: 101
+    question: "2*1*1"
+    answer: 2
+    mod4: 2
+  - id: 102
+    question: "2*1*3-"
+    answer: 6
+    mod4: 2
+  - id: 103
+    question: "7*1*3+"
+    answer: 21
+    mod4: 1
+  - id: 104
+    question: "1*3+"
+    answer: 3
+    mod4: 3
+  - id: 105
+    question: "(1*3+"
+    answer: 3
+    mod4: 3
+  - id: 106
+    question: "3+"
+    answer: 3
+    mod4: 3
+ocr_results:
+  - id: 1
+    question: "2*1*3+5"
+    answer: 11
+    mod4: 3
+  - id: 2
+    question: "2*4"
+    answer: 8
+    mod4: 0
+  - id: 3
+    question: "2*1*3+54"
+    answer: 60
+    mod4: 0
+  - id: 4
+    question: "2*1+3+5"
+    answer: 10
+    mod4: 2
+  - id: 5
+    question: "2*1+3+5+"
+    answer: 10
+    mod4: 2
+  - id: 6
+    question: "2*1*3+5+"
+    answer: 11
+    mod4: 3
+  - id: 7
+    question: "2*1+8+5"
+    answer: 15
+    mod4: 3
+  - id: 8
+    question: "2*1+8+52"
+    answer: 62
+    mod4: 2
+  - id: 9
+    question: "2*1+8+"
+    answer: 10
+    mod4: 2
+  - id: 10
+    question: "2*1"
+    answer: 2
+    mod4: 2
+  - id: 11
+    question: "2*4-8"
+    answer: 0
+    mod4: 0
+  - id: 12
+    question: "2*1-3+5"
+    answer: 4
+    mod4: 0
+  - id: 13
+    question: "2+1"
+    answer: 3
+    mod4: 3
+  - id: 14
+    question: "213+5"
+    answer: 218
+    mod4: 2
+  - id: 15
+    question: "23*5"
+    answer: 115
+    mod4: 3
+  - id: 16
+    question: "243+5"
+    answer: 248
+    mod4: 0
+  - id: 17
+    question: "233+5"
+    answer: 238
+    mod4: 2
+  - id: 18
+    question: "23+5"
+    answer: 28
+    mod4: 0
+  - id: 19
+    question: "2*135"
+    answer: 270
+    mod4: 2
+  - id: 20
+    question: "2*13+5"
+    answer: 31
+    mod4: 3
+  - id: 21
+    question: "2*3+5"
+    answer: 11
+    mod4: 3
+  - id: 22
+    question: "2**3+5*"
+    answer: 0
+    mod4: 0
+  - id: 23
+    question: "2*2*3+5*"
+    answer: 12
+    mod4: 0
+  - id: 24
+    question: "21+3+5"
+    answer: 29
+    mod4: 1
+  - id: 25
+    question: "2*1*3+"
+    answer: 6
+    mod4: 2
+  - id: 26
+    question: "3*1+3"
+    answer: 6
+    mod4: 2
+  - id: 27
+    question: "17/7"
+    answer: 2
+    mod4: 2
+  - id: 28
+    question: "17/17"
+    answer: 1
+    mod4: 1
+  - id: 29
+    question: "-17117"
+    answer: -17117
+    mod4: 3
+  - id: 30
+    question: "-177"
+    answer: -177
+    mod4: 3
+  - id: 31
+    question: "16-177"
+    answer: -161
+    mod4: 3
+  - id: 32
+    question: "16--177"
+    answer: 193
+    mod4: 1
+  - id: 33
+    question: "8-"
+    answer: 8
+    mod4: 0
+  - id: 34
+    question: "8-1"
+    answer: 7
+    mod4: 3
+  - id: 35
+    question: "-14"
+    answer: -14
+    mod4: 2
+  - id: 36
+    question: "8-14"
+    answer: -6
+    mod4: 2
+  - id: 37
+    question: "88-14"
+    answer: 74
+    mod4: 2
+  - id: 38
+    question: "12-19*9/1+19"
+    answer: -140
+    mod4: 0
+  - id: 39
+    question: "12-"
+    answer: 12
+    mod4: 0
+  - id: 40
+    question: "2-19*9/1+19"
+    answer: -150
+    mod4: 2
+  - id: 41
+    question: "12--19.19"
+    answer: 31
+    mod4: 3
+  - id: 42
+    question: "1+19"
+    answer: 20
+    mod4: 0
+  - id: 43
+    question: "-19*9/19"
+    answer: -9
+    mod4: 3
+  - id: 44
+    question: "-4+6*11/6"
+    answer: 7
+    mod4: 3
+  - id: 45
+    question: "16-4+6*11/"
+    answer: -2147483648
+    mod4: 0
+  - id: 46
+    question: "16-"
+    answer: 16
+    mod4: 0
+  - id: 47
+    question: "16-6"
+    answer: 10
+    mod4: 2
+  - id: 48
+    question: "16-/6"
+    answer: 16
+    mod4: 0
+  - id: 49
+    question: "16--4+6*11/6"
+    answer: 31
+    mod4: 3
+  - id: 50
+    question: "16-4+6*11/6"
+    answer: 23
+    mod4: 3
+  - id: 51
+    question: "16-4-4+6*11/6"
+    answer: 19
+    mod4: 3
+  - id: 52
+    question: "16-4"
+    answer: 12
+    mod4: 0
+  - id: 53
+    question: "4+6*11/6"
+    answer: 15
+    mod4: 3
+  - id: 54
+    question: "4+6*11/"
+    answer: -2147483648
+    mod4: 0
+  - id: 55
+    question: "4+6*11//6"
+    answer: -2147483648
+    mod4: 0
+  - id: 56
+    question: "-4+6*11/"
+    answer: -2147483648
+    mod4: 0
+  - id: 57
+    question: "13+"
+    answer: 13
+    mod4: 1
+  - id: 58
+    question: "12/6-13+2*1"
+    answer: -9
+    mod4: 3
+  - id: 59
+    question: "16*10/16+10-1"
+    answer: 19
+    mod4: 3
+  - id: 60
+    question: "10/16+10-1"
+    answer: 10
+    mod4: 2
+  - id: 61
+    question: "7+15/5*18-10"
+    answer: 51
+    mod4: 3
+  - id: 62
+    question: "7+15/5+18-10"
+    answer: 18
+    mod4: 2
+  - id: 63
+    question: "7+15/5"
+    answer: 10
+    mod4: 2
+  - id: 64
+    question: "1+19-15"
+    answer: 5
+    mod4: 1
+  - id: 65
+    question: "2*1*"
+    answer: 0
+    mod4: 0
+  - id: 66
+    question: "2*1**"
+    answer: 0
+    mod4: 0
+  - id: 67
+    question: "2*1*2"
+    answer: 4
+    mod4: 0
+  - id: 68
+    question: "2*1*3"
+    answer: 6
+    mod4: 2
+  - id: 69
+    question: "2*1+3+54"
+    answer: 59
+    mod4: 3
+  - id: 70
+    question: "2*1+3+5-"
+    answer: 10
+    mod4: 2
+  - id: 71
+    question: "2*1*3+5-"
+    answer: 11
+    mod4: 3
+  - id: 72
+    question: "2*13+54"
+    answer: 80
+    mod4: 0
+  - id: 73
+    question: "3+5"
+    answer: 8
+    mod4: 0
+  - id: 74
+    question: "1*3+5"
+    answer: 8
+    mod4: 0
+  - id: 75
+    question: "1+3+5"
+    answer: 9
+    mod4: 1
+  - id: 76
+    question: "-3+5"
+    answer: 2
+    mod4: 2
+  - id: 77
+    question: "3+"
+    answer: 3
+    mod4: 3
+  - id: 78
+    question: "2*1*3+5."
+    answer: 11
+    mod4: 3
+  - id: 79
+    question: "17*8"
+    answer: 136
+    mod4: 0
+  - id: 80
+    question: "17*8-"
+    answer: 136
+    mod4: 0
+  - id: 81
+    question: "17*8+"
+    answer: 136
+    mod4: 0
+  - id: 82
+    question: "17*8+7"
+    answer: 143
+    mod4: 3
+  - id: 83
+    question: "17*8+77"
+    answer: 213
+    mod4: 1
+  - id: 84
+    question: "17*8+7/"
+    answer: -2147483648
+    mod4: 0
+  - id: 85
+    question: "17*"
+    answer: 0
+    mod4: 0
+  - id: 86
+    question: "17*8+2"
+    answer: 138
+    mod4: 2
+  - id: 87
+    question: "10-2*13-"
+    answer: -16
+    mod4: 0
+  - id: 88
+    question: "10-2*13"
+    answer: -16
+    mod4: 0
+  - id: 89
+    question: "10-2"
+    answer: 8
+    mod4: 0
+  - id: 90
+    question: "10-2*10"
+    answer: -10
+    mod4: 2
+  - id: 91
+    question: "10-2*1"
+    answer: 8
+    mod4: 0
+  - id: 92
+    question: "10-2*"
+    answer: 10
+    mod4: 2
+  - id: 93
+    question: "10-"
+    answer: 10
+    mod4: 2
+  - id: 94
+    question: "100-2"
+    answer: 98
+    mod4: 2
+  - id: 95
+    question: "10-2."
+    answer: 8
+    mod4: 0
+  - id: 96
+    question: "10-2*13/"
+    answer: -2147483648
+    mod4: 0
+  - id: 97
+    question: "10-2*13/1"
+    answer: -16
+    mod4: 0
+  - id: 98
+    question: "10-2*13/1."
+    answer: -16
+    mod4: 0
+  - id: 99
+    question: "10-2*13/17"
+    answer: 8
+    mod4: 0
+  - id: 100
+    question: "12/12+7*1"
+    answer: 8
+    mod4: 0
+  - id: 101
+    question: "12/12+7*"
+    answer: 1
+    mod4: 1
+  - id: 102
+    question: "12+"
+    answer: 12
+    mod4: 0
+  - id: 103
+    question: "12/"
+    answer: -2147483648
+    mod4: 0
+  - id: 104
+    question: "12/12+7*16"
+    answer: 113
+    mod4: 1
+  - id: 105
+    question: "12/1/12+"
+    answer: 1
+    mod4: 1
+  - id: 106
+    question: "12/112+"
+    answer: 0
+    mod4: 0
+  - id: 107
+    question: "12/1"
+    answer: 12
+    mod4: 0
+  - id: 108
+    question: "12//12+"
+    answer: -2147483648
+    mod4: 0
+  - id: 109
+    question: "12/12+7"
+    answer: 8
+    mod4: 0
+  - id: 110
+    question: "12/12+"
+    answer: 1
+    mod4: 1
+  - id: 111
+    question: "12/12-"
+    answer: 1
+    mod4: 1
+  - id: 112
+    question: "12/12+1"
+    answer: 2
+    mod4: 2
+  - id: 113
+    question: "16+"
+    answer: 16
+    mod4: 0
+  - id: 114
+    question: "16+11"
+    answer: 27
+    mod4: 3
+  - id: 115
+    question: "16+7*11/1"
+    answer: 93
+    mod4: 1
+  - id: 116
+    question: "16+7*11/"
+    answer: -2147483648
+    mod4: 0
+  - id: 117
+    question: "16+7*11"
+    answer: 93
+    mod4: 1
+  - id: 118
+    question: "16+7*"
+    answer: 16
+    mod4: 0
+  - id: 119
+    question: "16+7"
+    answer: 23
+    mod4: 3
+  - id: 120
+    question: "16+71"
+    answer: 87
+    mod4: 3
+  - id: 121
+    question: "16+7*11/15"
+    answer: 21
+    mod4: 1
+  - id: 122
+    question: "7*11/"
+    answer: -2147483648
+    mod4: 0
+  - id: 123
+    question: "2*14+"
+    answer: 28
+    mod4: 0
+  - id: 124
+    question: "3-"
+    answer: 3
+    mod4: 3
+  - id: 125
+    question: "4+3-"
+    answer: 7
+    mod4: 3
+  - id: 126
+    question: "14+3-"
+    answer: 17
+    mod4: 1
+  - id: 127
+    question: "14+3"
+    answer: 17
+    mod4: 1
+  - id: 128
+    question: "2*14+3-"
+    answer: 31
+    mod4: 3
+  - id: 129
+    question: "2*14+3"
+    answer: 31
+    mod4: 3
+  - id: 130
+    question: "2*14+3-2"
+    answer: 29
+    mod4: 1
+  - id: 131
+    question: "2*14+3-20"
+    answer: 11
+    mod4: 3
+  - id: 132
+    question: "2*14+3-20/"
+    answer: -2147483648
+    mod4: 0
+  - id: 133
+    question: "2*14+3-20/1"
+    answer: 11
+    mod4: 3
+  - id: 134
+    question: "2*14"
+    answer: 28
+    mod4: 0
+  - id: 135
+    question: "19-"
+    answer: 19
+    mod4: 3
+  - id: 136
+    question: "16+19-"
+    answer: 35
+    mod4: 3
+  - id: 137
+    question: "-20"
+    answer: -20
+    mod4: 0
+  - id: 138
+    question: "16+19-20"
+    answer: 15
+    mod4: 3
+  - id: 139
+    question: "16+19-20/"
+    answer: -2147483648
+    mod4: 0
+  - id: 140
+    question: "16+19-20/-"
+    answer: -2147483648
+    mod4: 0
+  - id: 141
+    question: "19-20"
+    answer: -1
+    mod4: 3
+  - id: 142
+    question: "16+19"
+    answer: 35
+    mod4: 3
+  - id: 143
+    question: "16+19-20/2"
+    answer: 25
+    mod4: 1
+  - id: 144
+    question: "16+19-20/20"
+    answer: 34
+    mod4: 2
+  - id: 145
+    question: "16+19-20/20*"
+    answer: 35
+    mod4: 3
+  - id: 146
+    question: "16+19-20/20*1"
+    answer: 34
+    mod4: 2
+  - id: 147
+    question: "16+19-20/20*15"
+    answer: 20
+    mod4: 0
+  - id: 148
+    question: "19-20/20*1"
+    answer: 18
+    mod4: 2
