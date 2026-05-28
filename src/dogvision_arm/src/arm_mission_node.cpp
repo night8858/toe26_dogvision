@@ -1,51 +1,38 @@
-#include <ros/ros.h>
-#include <std_msgs/String.h>
-#include <XmlRpc.h>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 
+#include <chrono>
+#include <cctype>
 #include <sstream>
 #include <string>
 #include <vector>
 
-// ============================================================
-//  arm_mission_node  高层指令编排节点
-// ------------------------------------------------------------
-//  订阅 /arm/mission_cmd（std_msgs/String），支持以下高层指令：
-//
-//    STOW[,ALL|alias]        -> 臂/所有臂移动到收起位置（纯运动）
-//    START[,ALL|alias]       -> 臂/所有臂移动到启动位置（纯运动）
-//    PICK[,ALL|alias]        -> 臂/所有臂移动到吸取位置（纯运动）
-//    PLACE,ALL|alias|id,X,Y  -> 臂移动到放置/指定位置（纯运动）
-//    VALVE/V,<id>|ALL,ON/OFF -> 电磁阀独立控制
-//    PUMP/P,ON[,speed]|OFF   -> 气泵独立控制
-//    PLACE_END               -> 关闭所有电磁阀 + 关气泵（复合指令）
-//    
-//  将高层指令拆解为低层指令序列，逐个发布到 /arm_internation/cmd，
-//  由 Arm_internation_node 执行。
-// ============================================================
+using namespace std::chrono_literals;
 
 namespace
 {
-
-// ---- 机械臂别名映射（与 arm_internation 一致）----
 const char* kArmAlias[4] = {"LF", "RF", "LB", "RB"};
+constexpr int kPumpSpeed = 2500;
+constexpr double kCmdInterval = 0.2;
 
-
-// ---- 位置配置（从 pos_set.yaml 加载）----
-// 收起位置
 float g_stow_pos[4][2] = {};
-// 吸取物块位置
 float g_pick_pos[4][2] = {};
-// 放置物块位置
 float g_place_pos[4][2] = {};
-// 启动位置
 float g_start_pos[4][2] = {};
+} // namespace
 
-// ---- 臂别名 → ID 映射（与 arm_internation 一致）----
-int arm_alias_to_id(const std::string& alias)
+/**
+ * @brief 将机械臂别名转换为数字编号。
+ * @param alias 机械臂别名，例如 LF、RF、LB、RB、FL、FR、BL、BR。
+ * @retval int 机械臂编号，范围为 [0,3]；未知别名返回 -1。
+ */
+static int arm_alias_to_id(const std::string& alias)
 {
     std::string upper;
     for (char c : alias)
+    {
         upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+    }
     if (upper == "LF" || upper == "FL") return 0;
     if (upper == "RF" || upper == "FR") return 1;
     if (upper == "LB" || upper == "BL") return 2;
@@ -53,445 +40,369 @@ int arm_alias_to_id(const std::string& alias)
     return -1;
 }
 
-// ---- 从 ROS 私有参数加载位置配置 ----
-void load_arm_positions(ros::NodeHandle& pnh, const std::string& prefix, float pos[4][2])
+/**
+ * @brief 从 ROS2 参数中声明并加载一组机械臂位置。
+ * @param node 持有参数的节点对象。
+ * @param prefix 位置参数组前缀。
+ * @param pos 输出位置表，按机械臂编号和坐标轴索引。
+ * @retval void
+ */
+static void load_arm_positions(const rclcpp::Node::SharedPtr& node, const std::string& prefix, float pos[4][2])
 {
-    // 默认值
-    for (int i = 0; i < 4; ++i) { pos[i][0] = 10.0f; pos[i][1] = 10.0f; }
-
-    XmlRpc::XmlRpcValue config;
-    if (!pnh.getParam(prefix, config)) return;
-    if (config.getType() != XmlRpc::XmlRpcValue::TypeStruct) return;
-
-    const char* aliases[4] = {"LF", "RF", "LB", "RB"};
     for (int i = 0; i < 4; ++i)
     {
-        if (config.hasMember(aliases[i]))
-        {
-            XmlRpc::XmlRpcValue& arm = config[aliases[i]];
-            if (arm.getType() == XmlRpc::XmlRpcValue::TypeStruct)
-            {
-                if (arm.hasMember("x"))
-                    pos[i][0] = static_cast<float>(static_cast<double>(arm["x"]));
-                if (arm.hasMember("y"))
-                    pos[i][1] = static_cast<float>(static_cast<double>(arm["y"]));
-            }
-        }
+        const std::string base = prefix + "." + kArmAlias[i];
+        node->declare_parameter<double>(base + ".x", 10.0);
+        node->declare_parameter<double>(base + ".y", 10.0);
+        pos[i][0] = static_cast<float>(node->get_parameter(base + ".x").as_double());
+        pos[i][1] = static_cast<float>(node->get_parameter(base + ".y").as_double());
     }
 }
 
-void load_all_positions(ros::NodeHandle& pnh)
+/**
+ * @brief 加载所有配置的机械臂位置组。
+ * @param node 持有参数的节点对象。
+ * @retval void
+ */
+static void load_all_positions(const rclcpp::Node::SharedPtr& node)
 {
-    load_arm_positions(pnh, "stow_pos", g_stow_pos);
-    load_arm_positions(pnh, "pick_pos", g_pick_pos);
-    load_arm_positions(pnh, "place_pos", g_place_pos);
-    load_arm_positions(pnh, "start_pos", g_start_pos);
+    load_arm_positions(node, "stow_pos", g_stow_pos);
+    load_arm_positions(node, "pick_pos", g_pick_pos);
+    load_arm_positions(node, "place_pos", g_place_pos);
+    load_arm_positions(node, "start_pos", g_start_pos);
 }
 
-// 默认气泵速度
-constexpr int kPumpSpeed = 2500;
-
-// 指令间延时（秒），给下位机执行时间
-constexpr double kCmdInterval = 0.2;
-
-// ---- 工具函数：发布低层指令并等待 ----
-void publish_and_sleep(ros::Publisher& pub, const std::string& cmd, double interval)
+/**
+ * @brief 发布一条低层机械臂命令并等待指定间隔。
+ * @param pub 低层命令发布器。
+ * @param logger 用于命令跟踪的日志对象。
+ * @param cmd 需要发布的命令字符串。
+ * @param interval 发布后的等待时间，单位为秒。
+ * @retval void
+ */
+static void publish_and_sleep(const rclcpp::Publisher<std_msgs::msg::String>::SharedPtr& pub,
+                              const rclcpp::Logger& logger,
+                              const std::string& cmd,
+                              double interval)
 {
-    std_msgs::String msg;
+    std_msgs::msg::String msg;
     msg.data = cmd;
-    pub.publish(msg);
-    ROS_INFO_STREAM("[arm_mission_node] >> " << cmd);
-    ros::Duration(interval).sleep();
+    pub->publish(msg);
+    RCLCPP_INFO(logger, "[arm_mission_node] >> %s", cmd.c_str());
+    rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(interval)));
 }
 
-// ---- 构造机械臂低层指令字符串 ----
-std::string make_arm_cmd(int arm_id, float x, float y)
+/**
+ * @brief 构建低层机械臂运动命令。
+ * @param arm_id 机械臂编号，范围为 [0,3]。
+ * @param x 目标 x 坐标。
+ * @param y 目标 y 坐标。
+ * @retval std::string 低层命令字符串。
+ */
+static std::string make_arm_cmd(int arm_id, float x, float y)
 {
     std::ostringstream oss;
     oss << kArmAlias[arm_id] << ",X:" << x << ",Y:" << y;
     return oss.str();
 }
 
-// ---- 构造电磁阀低层指令字符串 ----
-std::string make_valve_cmd(int valve_id, bool state)
+/**
+ * @brief 构建低层电磁阀命令。
+ * @param valve_id 电磁阀编号，范围为 [0,3]。
+ * @param state true 表示打开，false 表示关闭。
+ * @retval std::string 低层命令字符串。
+ */
+static std::string make_valve_cmd(int valve_id, bool state)
 {
     std::ostringstream oss;
     oss << "V," << valve_id << "," << (state ? "ON" : "OFF");
     return oss.str();
 }
 
-// ---- 发布执行完成反馈 ----
-void send_feedback(ros::Publisher* pub)
+/**
+ * @brief 发布任务完成反馈。
+ * @param pub 反馈发布器。
+ * @param logger 用于反馈跟踪的日志对象。
+ * @retval void
+ */
+static void send_feedback(const rclcpp::Publisher<std_msgs::msg::String>::SharedPtr& pub,
+                          const rclcpp::Logger& logger)
 {
-    if (!pub) return;
-    std_msgs::String msg;
+    std_msgs::msg::String msg;
     msg.data = "FEEDBACK:DONE";
     pub->publish(msg);
-    ROS_INFO("[arm_mission_node] FEEDBACK:DONE");
+    RCLCPP_INFO(logger, "[arm_mission_node] FEEDBACK:DONE");
 }
 
-// ---- 高层指令回调函数 ----
-void mission_callback(const std_msgs::String::ConstPtr& msg,
-                      ros::Publisher* cmd_pub,
-                      ros::Publisher* feedback_pub)
+/**
+ * @brief 归一化并拆分任务命令字符串。
+ * @param data 原始任务命令。
+ * @retval std::vector<std::string> 使用逗号或分号拆分后的大写 token 列表。
+ */
+static std::vector<std::string> tokenize_command(const std::string& data)
 {
-    const std::string& data = msg->data;
-
-    // 简单按逗号分割（不依赖 arm_internation::normalize_cmd_text）
     std::vector<std::string> tokens;
+    std::string tmp;
+    for (size_t i = 0; i < data.size(); ++i)
     {
-        std::string tmp;
-        for (size_t i = 0; i < data.size(); ++i)
+        const unsigned char uc = static_cast<unsigned char>(data[i]);
+        if (uc == ' ' || uc == '\t')
         {
-            const unsigned char uc = static_cast<unsigned char>(data[i]);
-            // 跳过空白字符
-            if (uc == ' ' || uc == '\t')
-                continue;
-
-            // ASCII 分隔符
-            if (uc == ',' || uc == ';')
-            {
-                if (!tmp.empty())
-                {
-                    tokens.push_back(tmp);
-                    tmp.clear();
-                }
-                continue;
-            }
-
-            // 中文字符（UTF-8 多字节序列）—— 原样保留
-            if (uc >= 0x80)
-            {
-                tmp.push_back(data[i]);  // 首字节
-                ++i;
-                while (i < data.size() && (static_cast<unsigned char>(data[i]) & 0xC0) == 0x80)
-                {
-                    tmp.push_back(data[i]);
-                    ++i;
-                }
-                --i;  // for 循环会再次 ++i
-                continue;
-            }
-
-            // ASCII 字母转大写
-            if (uc >= 'a' && uc <= 'z')
-                tmp.push_back(static_cast<char>(uc - 32));  // to upper
-            else
-                tmp.push_back(static_cast<char>(uc));
+            continue;
         }
-        if (!tmp.empty())
-            tokens.push_back(tmp);
+        if (uc == ',' || uc == ';')
+        {
+            if (!tmp.empty())
+            {
+                tokens.push_back(tmp);
+                tmp.clear();
+            }
+            continue;
+        }
+        if (uc >= 0x80)
+        {
+            tmp.push_back(data[i]);
+            ++i;
+            while (i < data.size() && (static_cast<unsigned char>(data[i]) & 0xC0) == 0x80)
+            {
+                tmp.push_back(data[i]);
+                ++i;
+            }
+            --i;
+            continue;
+        }
+        tmp.push_back(static_cast<char>(std::toupper(uc)));
     }
+    if (!tmp.empty())
+    {
+        tokens.push_back(tmp);
+    }
+    return tokens;
+}
 
+/**
+ * @brief 处理高层任务命令并发布低层命令序列。
+ * @param data 原始任务命令数据。
+ * @param cmd_pub 低层机械臂命令发布器。
+ * @param feedback_pub 完成反馈发布器。
+ * @param logger 用于警告和跟踪的日志对象。
+ * @retval void
+ */
+static void mission_callback(const std::string& data,
+                             const rclcpp::Publisher<std_msgs::msg::String>::SharedPtr& cmd_pub,
+                             const rclcpp::Publisher<std_msgs::msg::String>::SharedPtr& feedback_pub,
+                             const rclcpp::Logger& logger)
+{
+    const std::vector<std::string> tokens = tokenize_command(data);
     if (tokens.empty())
     {
-        ROS_WARN("[arm_mission_node] empty command");
+        RCLCPP_WARN(logger, "[arm_mission_node] empty command");
         return;
     }
 
     const std::string& cmd = tokens[0];
+    auto publish_arm_group = [&](float pos[4][2], const char* label) {
+        if (tokens.size() < 2 || tokens[1] == "ALL" || tokens[1] == "所有")
+        {
+            RCLCPP_INFO(logger, "[arm_mission_node] %s,ALL", label);
+            for (int i = 0; i < 4; ++i)
+            {
+                publish_and_sleep(cmd_pub, logger, make_arm_cmd(i, pos[i][0], pos[i][1]), kCmdInterval);
+            }
+        }
+        else
+        {
+            const int id = arm_alias_to_id(tokens[1]);
+            if (id < 0)
+            {
+                RCLCPP_WARN(logger, "[arm_mission_node] %s unknown alias: %s", label, tokens[1].c_str());
+                return;
+            }
+            RCLCPP_INFO(logger, "[arm_mission_node] %s,%s", label, kArmAlias[id]);
+            publish_and_sleep(cmd_pub, logger, make_arm_cmd(id, pos[id][0], pos[id][1]), kCmdInterval);
+        }
+        send_feedback(feedback_pub, logger);
+    };
 
-    // ================================================================
-    //  STOW：收起（纯运动，不操作电磁阀/气泵）
-    //  STOW               -> 所有臂收起（向后兼容）
-    //  STOW,ALL           -> 所有臂收起
-    //  STOW,LF/RF/LB/RB   -> 指定臂收起
-    // ================================================================
     if (cmd == "STOW" || cmd == "收起")
     {
-        if (tokens.size() < 2 || tokens[1] == "ALL" || tokens[1] == "所有")
-        {
-            ROS_INFO("[arm_mission_node] STOW,ALL");
-            for (int i = 0; i < 4; ++i)
-                publish_and_sleep(*cmd_pub, make_arm_cmd(i, g_stow_pos[i][0], g_stow_pos[i][1]), kCmdInterval);
-        }
-        else
-        {
-            int id = arm_alias_to_id(tokens[1]);
-            if (id < 0)
-            {
-                ROS_WARN("[arm_mission_node] STOW unknown alias: %s", tokens[1].c_str());
-                return;
-            }
-            ROS_INFO_STREAM("[arm_mission_node] STOW," << kArmAlias[id]);
-            publish_and_sleep(*cmd_pub, make_arm_cmd(id, g_stow_pos[id][0], g_stow_pos[id][1]), kCmdInterval);
-        }
-        send_feedback(feedback_pub);
+        publish_arm_group(g_stow_pos, "STOW");
         return;
     }
-
-    // ================================================================
-    //  PICK：吸取位置（纯运动，不操作电磁阀/气泵）
-    //  PICK               -> 所有臂到吸取位置（向后兼容）
-    //  PICK,ALL           -> 所有臂到吸取位置
-    //  PICK,LF/RF/LB/RB   -> 指定臂到吸取位置
-    // ================================================================
     if (cmd == "PICK" || cmd == "吸取")
     {
-        if (tokens.size() < 2 || tokens[1] == "ALL" || tokens[1] == "所有")
-        {
-            ROS_INFO("[arm_mission_node] PICK,ALL");
-            for (int i = 0; i < 4; ++i)
-                publish_and_sleep(*cmd_pub, make_arm_cmd(i, g_pick_pos[i][0], g_pick_pos[i][1]), kCmdInterval);
-        }
-        else
-        {
-            int id = arm_alias_to_id(tokens[1]);
-            if (id < 0)
-            {
-                ROS_WARN("[arm_mission_node] PICK unknown alias: %s", tokens[1].c_str());
-                return;
-            }
-            ROS_INFO_STREAM("[arm_mission_node] PICK," << kArmAlias[id]);
-            publish_and_sleep(*cmd_pub, make_arm_cmd(id, g_pick_pos[id][0], g_pick_pos[id][1]), kCmdInterval);
-        }
-        send_feedback(feedback_pub);
+        publish_arm_group(g_pick_pos, "PICK");
         return;
     }
-
-    // ================================================================
-    //  START：启动位置（纯运动，不操作电磁阀/气泵）
-    //  START              -> 所有臂到启动位置（向后兼容）
-    //  START,ALL          -> 所有臂到启动位置
-    //  START,LF/RF/LB/RB  -> 指定臂到启动位置
-    // ================================================================
     if (cmd == "START" || cmd == "启动")
     {
-        if (tokens.size() < 2 || tokens[1] == "ALL" || tokens[1] == "所有")
-        {
-            ROS_INFO("[arm_mission_node] START,ALL");
-            for (int i = 0; i < 4; ++i)
-                publish_and_sleep(*cmd_pub, make_arm_cmd(i, g_start_pos[i][0], g_start_pos[i][1]), kCmdInterval);
-        }
-        else
-        {
-            int id = arm_alias_to_id(tokens[1]);
-            if (id < 0)
-            {
-                ROS_WARN("[arm_mission_node] START unknown alias: %s", tokens[1].c_str());
-                return;
-            }
-            ROS_INFO_STREAM("[arm_mission_node] START," << kArmAlias[id]);
-            publish_and_sleep(*cmd_pub, make_arm_cmd(id, g_start_pos[id][0], g_start_pos[id][1]), kCmdInterval);
-        }
-        send_feedback(feedback_pub);
+        publish_arm_group(g_start_pos, "START");
         return;
     }
-
-    // ================================================================
-    //  PLACE：放置位置（纯运动，不操作电磁阀/气泵）
-    //  PLACE,ALL               -> 所有臂到放置位置
-    //  PLACE,LF/RF/LB/RB       -> 指定臂到预设放置位置
-    //  PLACE,<id>,<X>,<Y>      -> 指定 id 臂到显式坐标
-    // ================================================================
     if (cmd == "PLACE" || cmd == "放置")
     {
         if (tokens.size() < 2)
         {
-            ROS_WARN("[arm_mission_node] PLACE requires target: ALL, alias, or id,X,Y");
+            RCLCPP_WARN(logger, "[arm_mission_node] PLACE requires target: ALL, alias, or id,X,Y");
             return;
         }
-
-        // 全部臂到放置位置
         if (tokens[1] == "ALL" || tokens[1] == "所有")
         {
-            ROS_INFO("[arm_mission_node] PLACE,ALL");
             for (int i = 0; i < 4; ++i)
-                publish_and_sleep(*cmd_pub, make_arm_cmd(i, g_place_pos[i][0], g_place_pos[i][1]), kCmdInterval);
-            send_feedback(feedback_pub);
+            {
+                publish_and_sleep(cmd_pub, logger, make_arm_cmd(i, g_place_pos[i][0], g_place_pos[i][1]), kCmdInterval);
+            }
+            send_feedback(feedback_pub, logger);
             return;
         }
-
-        // 按别名到预设放置位置
+        const int alias_id = arm_alias_to_id(tokens[1]);
+        if (alias_id >= 0)
         {
-            int id = arm_alias_to_id(tokens[1]);
-            if (id >= 0)
-            {
-                ROS_INFO_STREAM("[arm_mission_node] PLACE," << kArmAlias[id]
-                                << " -> (" << g_place_pos[id][0] << ", " << g_place_pos[id][1] << ")");
-                publish_and_sleep(*cmd_pub, make_arm_cmd(id, g_place_pos[id][0], g_place_pos[id][1]), kCmdInterval);
-                send_feedback(feedback_pub);
-                return;
-            }
+            publish_and_sleep(cmd_pub, logger, make_arm_cmd(alias_id, g_place_pos[alias_id][0], g_place_pos[alias_id][1]), kCmdInterval);
+            send_feedback(feedback_pub, logger);
+            return;
         }
-
-        // 兼容旧格式：PLACE,id,X,Y
         if (tokens.size() >= 4)
         {
             try
             {
-                int id = std::stoi(tokens[1]);
-                float x = std::stof(tokens[2]);
-                float y = std::stof(tokens[3]);
+                const int id = std::stoi(tokens[1]);
+                const float x = std::stof(tokens[2]);
+                const float y = std::stof(tokens[3]);
                 if (id < 0 || id > 3)
                 {
-                    ROS_WARN("[arm_mission_node] PLACE id out of range [0-3]: %d", id);
+                    RCLCPP_WARN(logger, "[arm_mission_node] PLACE id out of range [0-3]: %d", id);
                     return;
                 }
-                ROS_INFO_STREAM("[arm_mission_node] PLACE,id=" << id << " X=" << x << " Y=" << y);
-                publish_and_sleep(*cmd_pub, make_arm_cmd(id, x, y), kCmdInterval);
-                send_feedback(feedback_pub);
+                publish_and_sleep(cmd_pub, logger, make_arm_cmd(id, x, y), kCmdInterval);
+                send_feedback(feedback_pub, logger);
             }
             catch (...)
             {
-                ROS_WARN("[arm_mission_node] PLACE invalid args: %s %s %s",
-                         tokens[1].c_str(), tokens[2].c_str(), tokens[3].c_str());
+                RCLCPP_WARN(logger, "[arm_mission_node] PLACE invalid args");
             }
             return;
         }
-
-        ROS_WARN("[arm_mission_node] PLACE: unrecognized arg '%s'", tokens[1].c_str());
+        RCLCPP_WARN(logger, "[arm_mission_node] PLACE: unrecognized arg '%s'", tokens[1].c_str());
         return;
     }
-
-    // ================================================================
-    //  VALVE：电磁阀独立控制
-    //  VALVE/V,<id>,ON/OFF    或  VALVE/V,ALL,ON/OFF
-    // ================================================================
     if (cmd == "VALVE" || cmd == "V" || cmd == "电磁阀")
     {
         if (tokens.size() < 3)
         {
-            ROS_WARN("[arm_mission_node] VALVE requires: id,ON/OFF");
+            RCLCPP_WARN(logger, "[arm_mission_node] VALVE requires: id,ON/OFF");
             return;
         }
-
-        bool state;
-        if (tokens[2] == "ON" || tokens[2] == "开")
-            state = true;
-        else if (tokens[2] == "OFF" || tokens[2] == "关")
-            state = false;
-        else
+        const bool state = (tokens[2] == "ON" || tokens[2] == "开");
+        if (!state && tokens[2] != "OFF" && tokens[2] != "关")
         {
-            ROS_WARN("[arm_mission_node] VALVE invalid state: %s (use ON/OFF)", tokens[2].c_str());
+            RCLCPP_WARN(logger, "[arm_mission_node] VALVE invalid state: %s", tokens[2].c_str());
             return;
         }
-
         if (tokens[1] == "ALL" || tokens[1] == "所有")
         {
-            ROS_INFO_STREAM("[arm_mission_node] VALVE,ALL," << (state ? "ON" : "OFF"));
             for (int i = 0; i < 4; ++i)
-                publish_and_sleep(*cmd_pub, make_valve_cmd(i, state), kCmdInterval * 0.3);
+            {
+                publish_and_sleep(cmd_pub, logger, make_valve_cmd(i, state), kCmdInterval * 0.3);
+            }
         }
         else
         {
             try
             {
-                int id = std::stoi(tokens[1]);
+                const int id = std::stoi(tokens[1]);
                 if (id < 0 || id > 3)
                 {
-                    ROS_WARN("[arm_mission_node] VALVE id out of range [0-3]: %d", id);
+                    RCLCPP_WARN(logger, "[arm_mission_node] VALVE id out of range [0-3]: %d", id);
                     return;
                 }
-                ROS_INFO_STREAM("[arm_mission_node] VALVE," << id << "," << (state ? "ON" : "OFF"));
-                publish_and_sleep(*cmd_pub, make_valve_cmd(id, state), kCmdInterval * 0.3);
+                publish_and_sleep(cmd_pub, logger, make_valve_cmd(id, state), kCmdInterval * 0.3);
             }
             catch (...)
             {
-                ROS_WARN("[arm_mission_node] VALVE invalid id: %s", tokens[1].c_str());
+                RCLCPP_WARN(logger, "[arm_mission_node] VALVE invalid id: %s", tokens[1].c_str());
             }
         }
-        send_feedback(feedback_pub);
+        send_feedback(feedback_pub, logger);
         return;
     }
-
-    // ================================================================
-    //  PUMP：气泵独立控制
-    //  PUMP/P,ON[,<speed>]    或  PUMP/P,OFF
-    // ================================================================
     if (cmd == "PUMP" || cmd == "P" || cmd == "气泵")
     {
         if (tokens.size() < 2)
         {
-            ROS_WARN("[arm_mission_node] PUMP requires: ON[,speed] or OFF");
+            RCLCPP_WARN(logger, "[arm_mission_node] PUMP requires: ON[,speed] or OFF");
             return;
         }
-
         if (tokens[1] == "ON" || tokens[1] == "开")
         {
             int speed = kPumpSpeed;
             if (tokens.size() >= 3)
             {
                 try { speed = std::stoi(tokens[2]); }
-                catch (...) { ROS_WARN("[arm_mission_node] PUMP invalid speed: %s, using default", tokens[2].c_str()); }
+                catch (...) { RCLCPP_WARN(logger, "[arm_mission_node] PUMP invalid speed, using default"); }
             }
-            std::ostringstream oss;
-            oss << "P,ON," << speed;
-            ROS_INFO_STREAM("[arm_mission_node] PUMP,ON," << speed);
-            publish_and_sleep(*cmd_pub, oss.str(), kCmdInterval);
+            publish_and_sleep(cmd_pub, logger, "P,ON," + std::to_string(speed), kCmdInterval);
         }
         else if (tokens[1] == "OFF" || tokens[1] == "关")
         {
-            ROS_INFO("[arm_mission_node] PUMP,OFF");
-            publish_and_sleep(*cmd_pub, "P,OFF", kCmdInterval);
+            publish_and_sleep(cmd_pub, logger, "P,OFF", kCmdInterval);
         }
         else
         {
-            ROS_WARN("[arm_mission_node] PUMP unrecognized arg: %s", tokens[1].c_str());
+            RCLCPP_WARN(logger, "[arm_mission_node] PUMP unrecognized arg: %s", tokens[1].c_str());
+            return;
         }
-        send_feedback(feedback_pub);
+        send_feedback(feedback_pub, logger);
         return;
     }
-
-    // ================================================================
-    //  PLACE_END：放置结束（复合指令，等效 VALVE,ALL,OFF + PUMP,OFF）
-    // ================================================================
     if (cmd == "PLACE_END" || cmd == "PLACEEND" || cmd == "放置结束")
     {
-        ROS_INFO("[arm_mission_node] PLACE_END: close all valves, stop pump");
         for (int i = 0; i < 4; ++i)
-            publish_and_sleep(*cmd_pub, make_valve_cmd(i, false), kCmdInterval * 0.3);
-        ros::Duration(kCmdInterval * 0.5).sleep();
-        publish_and_sleep(*cmd_pub, "P,OFF", kCmdInterval);
-        send_feedback(feedback_pub);
+        {
+            publish_and_sleep(cmd_pub, logger, make_valve_cmd(i, false), kCmdInterval * 0.3);
+        }
+        rclcpp::sleep_for(100ms);
+        publish_and_sleep(cmd_pub, logger, "P,OFF", kCmdInterval);
+        send_feedback(feedback_pub, logger);
         return;
     }
 
-    // ================================================================
-    //  无法识别的命令
-    // ================================================================
-    ROS_WARN_STREAM("[arm_mission_node] unknown mission cmd: " << data);
+    RCLCPP_WARN(logger, "[arm_mission_node] unknown mission cmd: %s", data.c_str());
 }
 
-} // namespace
-
-// ================================================================
-//  main
-// ================================================================
+/**
+ * @brief 运行 ROS2 机械臂任务编排节点。
+ * @param argc 命令行参数数量。
+ * @param argv 命令行参数数组。
+ * @retval int 进程退出码。
+ */
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "arm_mission_node");
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<rclcpp::Node>("arm_mission_node");
+    auto logger = node->get_logger();
 
-    ros::NodeHandle nh;
-    ros::NodeHandle pnh("~");
+    node->declare_parameter<std::string>("mission_topic", "/arm/mission_cmd");
+    node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");
+    const std::string mission_topic = node->get_parameter("mission_topic").as_string();
+    const std::string cmd_topic = node->get_parameter("cmd_topic").as_string();
 
-    std::string mission_topic = "/arm/mission_cmd";
-    std::string cmd_topic = "/arm_internation/cmd";
-    pnh.param<std::string>("mission_topic", mission_topic, mission_topic);
-    pnh.param<std::string>("cmd_topic", cmd_topic, cmd_topic);
+    load_all_positions(node);
+    RCLCPP_INFO(logger, "[arm_mission_node] position config loaded");
 
-    // 从 pos_set.yaml 加载位置配置（通过 ROS 参数服务器）
-    load_all_positions(pnh);
-    ROS_INFO("[arm_mission_node] position config loaded from namespace '~'");
-
-    // 发布低层指令到 Arm_internation_node
-    ros::Publisher cmd_pub = nh.advertise<std_msgs::String>(cmd_topic, 10);
-    // 发布执行完成反馈
-    ros::Publisher feedback_pub = nh.advertise<std_msgs::String>("/arm/mission_cmd", 10);
-
-    // 订阅高层指令
-    ros::Subscriber mission_sub = nh.subscribe<std_msgs::String>(
-        mission_topic, 10,
-        [&cmd_pub, &feedback_pub](const std_msgs::String::ConstPtr& msg) {
-            mission_callback(msg, &cmd_pub, &feedback_pub);
+    auto cmd_pub = node->create_publisher<std_msgs::msg::String>(cmd_topic, rclcpp::QoS(10));
+    auto feedback_pub = node->create_publisher<std_msgs::msg::String>("/arm/mission_cmd", rclcpp::QoS(10));
+    auto mission_sub = node->create_subscription<std_msgs::msg::String>(
+        mission_topic, rclcpp::QoS(10),
+        [cmd_pub, feedback_pub, logger](const std_msgs::msg::String::SharedPtr msg) {
+            mission_callback(msg->data, cmd_pub, feedback_pub, logger);
         });
 
-    ROS_INFO_STREAM("[arm_mission_node] Ready. Subscribing to: " << mission_topic);
-    ROS_INFO_STREAM("[arm_mission_node] Publishing low-level commands to: " << cmd_topic);
-    ROS_INFO_STREAM("[arm_mission_node] Publishing feedback to: /arm/mission_cmd");
-    ROS_INFO_STREAM("[arm_mission_node] Supported commands: STOW[,ALL|alias], START[,ALL|alias], PICK[,ALL|alias], PLACE,ALL|alias|id,X,Y, VALVE/V,id|ALL,ON/OFF, PUMP/P,ON[,speed]|OFF, PLACE_END");
+    RCLCPP_INFO(logger, "[arm_mission_node] Ready. Subscribing to: %s", mission_topic.c_str());
+    RCLCPP_INFO(logger, "[arm_mission_node] Publishing low-level commands to: %s", cmd_topic.c_str());
+    rclcpp::spin(node);
 
-    ros::spin();
-
+    (void)mission_sub;
+    rclcpp::shutdown();
     return 0;
 }

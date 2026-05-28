@@ -5,9 +5,13 @@
       "includePath": [
         "${workspaceFolder}/**",
         "${workspaceFolder}/src/**",
-        "/opt/ros/noetic/include/**",
+        "/opt/ros/jazzy/include/**",
         "/usr/local/include/**",
-        "/opt/MVS/include/**"
+        "/opt/MVS/include/**",
+        "${workspaceFolder}/src/dogvision_vision/include/dogvision_vision/**",
+        "${workspaceFolder}/src/dogvision_vision/include/dogvision_vision/camera/**",
+        "${workspaceFolder}/src/dogvision_vision/include/dogvision_vision/math/**",
+        "${workspaceFolder}/src/dogvision_arm/include/dogvision_arm/**"
       ],
       "compilerPath": "/usr/bin/gcc",
       "cStandard": "c17",

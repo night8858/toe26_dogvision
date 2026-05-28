@@ -1,358 +1,385 @@
 # toe26_dogvision
 
-基于 **ROS1 Noetic + catkin** 的机器狗视觉与机械臂控制工作空间。
-
----
-
-## 目录
-
-1. [项目结构](#1-项目结构)
-2. [功能概述](#2-功能概述)
-3. [依赖安装](#3-依赖安装)
-4. [构建](#4-构建)
-5. [配置](#5-配置)
-6. [快速使用](#6-快速使用)
-7. [话题与消息](#7-话题与消息)
-8. [节点参数](#8-节点参数)
-9. [串口协议说明](#9-串口协议说明)
-
----
+基于 **ROS2 Jazzy + colcon** 的机器狗视觉、机械臂控制与算术题识别工作空间。
 
 ## 1. 项目结构
 
-```
-toe26_dogvision/                        # catkin 工作空间根
-├── build/                              # 构建产物（自动生成）
-├── devel/                              # 开发空间（自动生成）
-├── launch/                             # 工作空间级 launch（测试用）
-│   └── internation_test.launch
-└── src/
-    ├── CMakeLists.txt                  # catkin 顶层 CMake
-    │
-    ├── dogvision_msgs/                 # 自定义消息包
-    │   └── msg/arm4_control.msg
-    │
-    ├── dogvision_arm/                  # 机械臂串口通信包
-    │   ├── include/dogvision_arm/
-    │   │   └── arm_internation.hpp     # 串口类（连接/收发/命令解析）
-    │   ├── src/
-    │   │   ├── arm_internation.cpp
-    │   │   ├── Arm_internation_node.cpp   # 串口通信节点（200Hz）
-    │   │   └── arm_cmd_terminal_node.cpp  # 终端命令输入节点
-    │   └── launch/arm.launch
-    │
-    ├── dogvision_camera/               # 相机驱动库包
-    │   ├── include/dogvision_camera/
-    │   │   ├── hikvision.hpp           # 海康工业相机（MVS SDK）
-    │   │   └── usbcam.hpp              # USB 摄像头（OpenCV）
-    │   └── src/
-    │       ├── hikvision.cpp
-    │       └── usbcam.cpp
-    │
-    ├── dogvision_vision/               # 视觉推理包
-    │   ├── include/dogvision_vision/
-    │   │   ├── common_structs.h        # 全局数据结构
-    │   │   ├── detector.hpp            # 检测器基类
-    │   │   ├── nuc_detect.hpp          # YOLO OpenVINO 检测器
-    │   │   ├── ocr_detect.hpp          # PPOCR 检测/识别器
-    │   │   ├── yolo_utils.hpp          # YOLO 工具函数
-    │   │   └── ocr_utils.hpp           # OCR 工具函数
-    │   ├── src/
-    │   │   ├── detector.cpp            # 基类：配置加载、鱼眼矫正
-    │   │   ├── nuc_detect.cpp          # YOLO 推理实现
-    │   │   ├── ocr_detect.cpp          # PPOCR 推理实现
-    │   │   ├── yolo_utils.cpp          # NMS/网格分配/JSON序列化
-    │   │   ├── ocr_utils.cpp           # 裁剪/算术解析/ROI定位
-    │   │   ├── yolo_node.cpp           # YOLO 节点入口
-    │   │   └── ppocr_node.cpp          # PPOCR 节点入口
-    │   ├── config/settings.json        # 运行时配置（模型路径/相机参数）
-    │   └── models/
-    │       ├── yolo/yolo/              # YOLO IR 模型（.xml/.bin）
-    │       └── ppocr/                  # PPOCRv4 Paddle 模型（.pdmodel）
-    │
-    └── dogvision_bringup/              # 启动文件与全局配置包
-        ├── launch/
-        │   ├── full_system.launch      # 一键启动全系统
-        │   ├── internation_test.launch # 仅启动机械臂子系统
-        │   └── vision.launch           # 仅启动视觉子系统
-        └── config/
-            ├── settings.json
-            └── fisheye_params.yaml
+```text
+toe26_dogvision/
+├── src/
+│   ├── dogvision_arm/               # 串口通信、任务编排、终端控制
+│   ├── dogvision_vision/            # 相机、YOLO、PPOCR、数学题与视觉测试
+│   └── dogvision_bringup/           # 系统 launch 与共享配置
+├── fisheye_params.yaml
+└── README.md
 ```
 
----
+核心代码按“纯 C++ 库 + ROS2 节点入口”组织，视觉推理、OCR 工具、机械臂协议和数学题生成逻辑都尽量保持可独立调用。
 
 ## 2. 功能概述
 
-| 包 | 节点 | 功能 |
+| 包 | 可执行文件 | 功能 |
 |---|---|---|
-| `dogvision_arm` | `Arm_internation_node` | 串口收发（53B 协议帧）、状态发布 20Hz、每秒断线检测重连 |
-| `dogvision_arm` | `arm_cmd_terminal_node` | 终端输入命令并转发到 `/arm_internation/cmd` |
-| `dogvision_vision` | `yolo_node` | 触发式抓帧→YOLO推理→跨帧NMS→2×4网格分配→JSON发布 |
-| `dogvision_vision` | `ppocr_node` | 白色算术题区域定位→PPOCR文本检测+识别→算术计算→结果发布 |
-
----
+| `dogvision_arm` | `arm_internation_node` | 串口收发、状态发布、断线重连 |
+| `dogvision_arm` | `arm_mission_node` | 高层任务指令拆解为低层机械臂命令 |
+| `dogvision_arm` | `arm_cmd_terminal_node` | 终端输入命令并发布到控制话题 |
+| `dogvision_vision` | `yolo_node` | 触发式单帧抓帧、YOLO 推理、2x4 网格 JSON 发布 |
+| `dogvision_vision` | `yolo_accuracy_test_node` | 连续实时 YOLO 测试、窗口可视化、标注视频保存 |
+| `dogvision_vision` | `ppocr_node` | 算术题 ROI、PPOCR 检测识别、表达式计算、JSON 发布 |
+| `dogvision_vision` | `math_generator_node` | 生成算术题、全屏显示、写入 YAML |
 
 ## 3. 依赖安装
 
-### 3.1 基础依赖（Ubuntu 20.04）
+目标环境为 Ubuntu 24.04 + ROS2 Jazzy。
+所需的库有：OpenVINO 2025 Archive、Hikvision MVS SDK、OpenCV、jsoncpp 和 libusb。
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y \
-    ros-noetic-desktop-full \
-    python3-catkin-tools \
-    libopencv-dev \
-    libjsoncpp-dev \
-    xterm
+sudo apt update
+sudo apt install -y \
+  ros-jazzy-desktop \
+  python3-colcon-common-extensions \
+  libopencv-dev \
+  libjsoncpp-dev \
+  libusb-1.0-0-dev
 ```
 
-### 3.2 OpenVINO（≥ 2024.0）
+安装 OpenVINO Archive 后，在构建和运行前加载环境。本项目当前验证使用的路径为：
 
 ```bash
-# 方式一：官方脚本（自动处理依赖）
-wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-echo "deb https://apt.repos.intel.com/openvino/2024 ubuntu20 main" \
-    | sudo tee /etc/apt/sources.list.d/intel-openvino-2024.list
-sudo apt-get update
-sudo apt-get install -y openvino-2024.0.0
-
-# 激活（每次新终端需执行，或写入 ~/.bashrc）
-source /opt/intel/openvino_2024/setupvars.sh
+source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_64/setupvars.sh
 ```
 
-> 也可从 [https://docs.openvino.ai](https://docs.openvino.ai) 下载离线安装包。（我是如此安装的）
+Hikvision MVS SDK 是强制依赖。请安装到默认路径，使以下文件存在：
 
-### 3.3 海康威视 MVS SDK（可选，使用工业相机时必须）
-
-1. 从[海康机器人官网](https://www.hikrobotics.com/cn/machinevision/service/download)下载 MVS Linux 安装包
-2. 解压后运行安装脚本：
-
-```bash
-tar -xzf MVS-x.x.x_x86_64_yyyymmdd.tar.gz
-cd MVS-x.x.x_x86_64
-sudo bash setup.sh
-# 头文件安装至 /opt/MVS/include，库文件至 /opt/MVS/lib
+```text
+/opt/MVS/include/MvCameraControl.h
+/opt/MVS/lib/libMvCameraControl.so
 ```
 
-### 3.4 PaddlePaddle 推理库（PPOCRv4 模型加载）
-
-PPOCRv4 模型通过 **OpenVINO 前端**直接加载 `.pdmodel`，无需安装 PaddlePaddle。  
-确保 OpenVINO 安装包含 Paddle 前端（`openvino-2024.0.0` 默认包含）。
-
-### 3.5 Python 工具（可选，串口调试）
-
-```bash
-pip3 install pyserial
-```
-
----
+若缺少 MVS SDK，`dogvision_vision` 会在 CMake 配置阶段直接失败。
 
 ## 4. 构建
 
 ```bash
 cd ~/toe26_dogvision
+source /opt/ros/jazzy/setup.bash
+source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_64/setupvars.sh
 
-# 加载 ROS 环境
-source /opt/ros/noetic/setup.bash
-
-# 全量构建
-catkin_make -j8
-
-# 加载工作空间环境（写入 ~/.bashrc 避免每次手动执行）
-source devel/setup.bash     
+colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+source install/setup.bash
 ```
-我们也可以选择zsh或fish，并将 `source devel/setup.bash` 替换为相应的 `setup.zsh` 或 `setup.fish`。
 
-**分包构建**（调试单个包时更快）：
+如果终端默认 Python 来自 Conda，ROS2 消息生成可能因为缺少 NumPy 失败。构建时固定 `-DPython3_EXECUTABLE=/usr/bin/python3`，可以避免误用 Conda Python。
+
+分包构建示例：
 
 ```bash
-catkin_make --only-pkg-with-deps dogvision_arm
-catkin_make --only-pkg-with-deps dogvision_vision
+colcon build --packages-up-to dogvision_vision --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+colcon build --packages-up-to dogvision_arm --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
 ```
-
----
 
 ## 5. 配置
 
-所有运行参数集中在：
+视觉配置位于：
 
-```
+```text
 src/dogvision_vision/config/settings.json
 ```
 
-必须在首次运行前检查以下字段：
+模型路径相对于 `dogvision_vision` 的安装 share 目录解析。例如：
 
 ```jsonc
 {
   "path": {
-    // YOLO 模型（OpenVINO IR 格式）
     "openvino_xml_file_path": "models/yolo/yolo/m26325.xml",
     "openvino_bin_file_path": "models/yolo/yolo/m26325.bin",
-
-    // PPOCRv4 模型（Paddle inference 格式）
     "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
     "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
-    "ppocr_dict_path":      "models/ppocr/ppocr/Dict/ppocr_keys_v1.txt"
-  },
-  "hikcamera": {
-    "device_id": 0,
-    "width": 1440, "height": 1080,
-    "exposure": 11000
-  },
-  "nums": {
-    "classes": 4,
-    "cls0": "food", "cls1": "tool", "cls2": "medicine", "cls3": "instrument"
+    "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt"
   }
 }
 ```
 
-路径均为相对于 `dogvision_vision` 包根目录的相对路径，由 `ros::package::getPath("dogvision_vision")` 自动拼接。
+机械臂任务位置参数位于：
 
----
+```text
+src/dogvision_arm/pos_set.yaml
+```
+
+该文件已使用 ROS2 参数格式，可由 `arm_test.launch` 和 `arm_control.launch` 直接加载。
 
 ## 6. 快速使用
 
-> 所有操作均需先执行 `source devel/setup.bash`
-
-### 6.1 启动全系统（机械臂 + 视觉）
+所有命令需先加载工作空间：
 
 ```bash
-cd ~/toe26_dogvision
-roslaunch dogvision_bringup full_system.launch
+source /opt/ros/jazzy/setup.bash
+source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_64/setupvars.sh
+source install/setup.bash
 ```
 
-### 6.2 仅启动机械臂子系统
+启动全系统。默认是生产模式，包含机械臂控制、任务节点、YOLO 和 PPOCR，不启动终端输入节点：
 
 ```bash
-roslaunch dogvision_bringup internation_test.launch
+ros2 launch dogvision_bringup full_system.launch
 ```
 
-`arm_cmd_terminal_node` 会在 xterm 窗口中等待命令输入，支持如下格式：
-
-```
-RL,X:100,Y:50      # 控制左前臂移动至 (100, 50)
-RF,X:0,Y:0         # 控制右前臂回零
-G,30,10            # 云台 yaw=30 pitch=10（int16 角度）
-V,1,ON             # 打开电磁阀 1
-V,2                # 翻转电磁阀 2 状态
-quit               # 退出节点
-```
-
-### 6.3 仅启动视觉子系统
+仅启动视觉：
 
 ```bash
-roslaunch dogvision_bringup vision.launch
+ros2 launch dogvision_bringup vision.launch
 ```
 
-手动触发 YOLO 推理：
+YOLO 准确性测试，会打开可视化窗口并在退出后保存 AVI/MJPG 标注视频：
 
 ```bash
-rostopic pub /yolo/trigger std_msgs/String "data: 'start_infer'" --once
+ros2 launch dogvision_vision yolo_accuracy_test.launch
 ```
 
-查看 YOLO 结果：
+PPOCR 连续测试模式：
 
 ```bash
-rostopic echo /yolo/result          # JSON 检测结果
-rostopic echo /yolo/block_grid      # 2×4 网格分配结果
+ros2 launch dogvision_vision ppocr_test.launch
 ```
 
-查看机械臂状态：
+数学题生成器：
 
 ```bash
-rostopic echo /arm_internation/data
+ros2 launch dogvision_vision math_generator.launch
 ```
 
-### 6.4 单独运行节点（调试）
+触发 YOLO：
 
 ```bash
-rosrun dogvision_arm Arm_internation_node
-rosrun dogvision_arm arm_cmd_terminal_node
-rosrun dogvision_vision yolo_node
-rosrun dogvision_vision ppocr_node
+ros2 topic pub --once /yolo/trigger std_msgs/msg/String "{data: start_infer}"
 ```
 
----
+查看结果：
 
-## 7. 话题与消息
+```bash
+ros2 topic echo /yolo/result
+ros2 topic echo /yolo/block_grid
+ros2 topic echo /ocr/result
+```
+
+YOLO 每次触发后只执行一次单帧推理，并默认保存带检测框、类别和置信度的结果图到：
+
+```text
+install/dogvision_vision/share/dogvision_vision/data/yolorun
+```
+
+仅启动机械臂测试：
+
+```bash
+ros2 launch dogvision_arm arm_test.launch
+```
+
+仅启动机械臂生产控制：
+
+```bash
+ros2 launch dogvision_arm arm_control.launch
+```
+
+单独运行节点：
+
+```bash
+ros2 run dogvision_arm arm_internation_node
+ros2 run dogvision_arm arm_cmd_terminal_node
+ros2 run dogvision_arm arm_mission_node
+ros2 run dogvision_vision yolo_node
+ros2 run dogvision_vision yolo_accuracy_test_node
+ros2 run dogvision_vision ppocr_node --ros-args -p mode:=production
+ros2 run dogvision_vision math_generator_node
+```
+
+## 7. Launch 参数
+
+### `dogvision_bringup full_system.launch`
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `hw_id` | `0483:5740` | 机械臂 USB 设备 VID:PID |
+| `baud_rate` | `115200` | 机械臂串口波特率 |
+| `port` | 空字符串 | 指定串口路径，非空时跳过 HWID 扫描 |
+| `pos_scale` | `0.01` | 机械臂坐标换算比例 |
+| `angle_scale` | `0.01` | 云台角度换算比例 |
+| `mission_config` | `<share>/dogvision_arm/config/pos_set.yaml` | 机械臂任务位置配置 |
+| `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
+| `show_window` | `false` | YOLO 是否显示 OpenCV 窗口 |
+| `enable_undistort` | `true` | YOLO 是否启用去畸变 |
+| `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
+| `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
+| `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
+| `ppocr_show_visual` | `true` | PPOCR 是否显示可视化窗口 |
+| `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
+
+### `dogvision_vision yolo_accuracy_test.launch`
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
+| `enable_undistort` | `true` | 是否启用去畸变 |
+| `output_dir` | `<share>/dogvision_vision/data/yolotest` | 测试视频输出目录 |
+| `video_fps` | `20.0` | 保存视频的帧率 |
+| `visual_nms_thresh` | `0.7` | 测试可视化 NMS 阈值，较高时更容易保留同帧多个目标 |
+
+### `dogvision_arm arm_control.launch` 与 `arm_test.launch`
+
+两者参数相同，`arm_control.launch` 面向生产运行，`arm_test.launch` 额外启动 `arm_cmd_terminal_node` 便于手动输入命令。
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `hw_id` | `0483:5740` | USB 设备 VID:PID |
+| `baud_rate` | `115200` | 串口波特率 |
+| `port` | 空字符串 | 指定串口路径 |
+| `pos_scale` | `0.01` | 坐标换算比例 |
+| `angle_scale` | `0.01` | 角度换算比例 |
+| `mission_config` | `<share>/dogvision_arm/config/pos_set.yaml` | 任务位置配置 |
+
+### `dogvision_bringup vision.launch`
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
+| `show_window` | `false` | YOLO 是否显示 OpenCV 窗口 |
+| `enable_undistort` | `true` | YOLO 是否启用去畸变 |
+| `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
+| `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
+| `ppocr_mode` | `production` | PPOCR 模式 |
+| `ppocr_show_visual` | `true` | PPOCR 是否显示可视化窗口 |
+| `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
+
+## 8. 话题与消息
 
 | 话题 | 类型 | 方向 | 说明 |
 |---|---|---|---|
-| `/arm_internation/data` | `std_msgs/String` | 发布 | 机械臂 + 云台 + 传感器状态，20Hz |
-| `/arm_internation/cmd` | `std_msgs/String` | 订阅 | 文本控制命令 |
-| `/yolo/trigger` | `std_msgs/String` | 订阅 | 发布 `"start_infer"` 触发一次推理 |
-| `/yolo/result` | `std_msgs/String` | 发布 | 检测结果 JSON（latched） |
-| `/yolo/block_grid` | `std_msgs/String` | 发布 | 2×4 网格 JSON（latched） |
+| `/arm_internation/data` | `std_msgs/msg/String` | 发布 | 机械臂、云台、传感器状态，20Hz |
+| `/arm_internation/cmd` | `std_msgs/msg/String` | 订阅 | 低层文本控制命令 |
+| `/arm/mission_cmd` | `std_msgs/msg/String` | 订阅/反馈 | 高层任务命令与完成反馈 |
+| `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `start_infer` 触发一次单帧推理 |
+| `/yolo/result` | `std_msgs/msg/String` | 发布 | transient_local YOLO JSON 结果 |
+| `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | transient_local 2x4 网格 JSON |
+| `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 触发生产模式 OCR |
+| `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local OCR JSON 结果 |
 
-**`/arm_internation/data` 格式示例：**
-```
+`/arm_internation/data` 示例：
+
+```text
 LF:2.547,2.547;RF:-276.225,-337.042;LB:276.225,337.042;RB:276.225,-337.042;YAW:0.000;PITCH:0.000;VALVE_BITS:0;MICRO_BITS:0
 ```
 
-**`/yolo/result` 格式示例：**
+`/yolo/result` 示例：
+
 ```json
 {"detections":[{"pos_id":1,"class":"food","conf":0.8821,"bbox":[120.0,80.0,200.0,150.0]}]}
 ```
 
-**`/yolo/block_grid` 格式示例：**
+`/yolo/block_grid` 示例：
+
 ```json
 {"block":[["food","tool","null","null"],["medicine","null","null","null"]]}
 ```
 
----
+`/ocr/result` 示例：
 
-## 8. 节点参数
+```json
+{"expr":"12+3*4","result":24,"mod4":0}
+```
 
-### `Arm_internation_node`
+## 9. 节点参数
+
+### `arm_internation_node`
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `~hw_id` | `"0483:5740"` | USB 设备 VID:PID（用于自动定位 ttyACM*） |
-| `~baud_rate` | `115200` | 串口波特率 |
-| `~cmd_topic` | `/arm_internation/cmd` | 订阅命令的话题 |
-| `~data_topic` | `/arm_internation/data` | 发布状态的话题 |
-| `~pos_scale` | `0.01` | float→int16 坐标换算比例 |
-| `~angle_scale` | `0.01` | float→int16 角度换算比例 |
+| `hw_id` | `0483:5740` | USB 设备 VID:PID |
+| `baud_rate` | `115200` | 串口波特率 |
+| `port` | 空字符串 | 指定串口路径，非空时跳过 HWID 扫描 |
+| `cmd_topic` | `/arm_internation/cmd` | 低层命令订阅话题 |
+| `data_topic` | `/arm_internation/data` | 状态发布话题 |
+| `pos_scale` | `0.01` | 坐标换算比例 |
+| `angle_scale` | `0.01` | 角度换算比例 |
+
+### `arm_mission_node`
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `mission_topic` | `/arm/mission_cmd` | 高层任务命令订阅话题 |
+| `cmd_topic` | `/arm_internation/cmd` | 低层命令发布话题 |
+| `stow_pos.*` | 见 `pos_set.yaml` | 收起位置 |
+| `pick_pos.*` | 见 `pos_set.yaml` | 吸取位置 |
+| `place_pos.*` | 见 `pos_set.yaml` | 放置位置 |
+| `start_pos.*` | 见 `pos_set.yaml` | 启动位置 |
 
 ### `yolo_node`
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `~config_path` | `<pkg>/config/settings.json` | 配置文件路径 |
-| `~result_topic` | `/yolo/result` | 结果发布话题 |
-| `~show_window` | `true` | 是否显示 OpenCV 可视化窗口 |
-| `~enable_undistort` | `true` | 是否对图像做鱼眼矫正 |
+| `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
+| `result_topic` | `/yolo/result` | 检测结果发布话题 |
+| `show_window` | `false` | 是否显示本地 OpenCV 窗口 |
+| `enable_undistort` | `true` | 是否进行鱼眼去畸变 |
+| `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
+| `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
+
+### `yolo_accuracy_test_node`
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
+| `enable_undistort` | `true` | 是否进行鱼眼去畸变 |
+| `output_dir` | `<share>/dogvision_vision/data/yolotest` | 标注测试视频输出目录 |
+| `video_fps` | `20.0` | AVI/MJPG 视频写入帧率 |
+| `visual_nms_thresh` | `0.7` | 测试可视化 NMS 阈值，避免相近目标被过度合并 |
 
 ### `ppocr_node`
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `~config_path` | `<pkg>/config/settings.json` | 配置文件路径 |
-| `~image_path` | `<pkg>/data/img/...` | 输入图像路径 |
-| `~output_dir` | `<pkg>/data/ocr_output` | OCR 结果输出目录 |
+| `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
+| `mode` | `production` | `production` 等待 `/ocr/trigger`，`test` 连续识别并写 YAML |
+| `show_visual` | `true` | 是否显示本地 OpenCV 窗口 |
+| `yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | test 模式输出文件 |
 
----
+### `math_generator_node`
 
-## 9. 串口协议说明
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `yaml_path` | `<share>/dogvision_vision/data/math_generator/math_results.yaml` | 输出 YAML 路径 |
+| `min_val` | `1` | 操作数最小值 |
+| `max_val` | `100` | 操作数最大值 |
+| `interval` | `10` | 生成间隔，单位秒 |
 
-设备通过 USB-CDC（`/dev/ttyACM*`，VID:PID = `0483:5740`）连接，波特率 115200。
+## 10. 串口协议说明
 
-**AA 01 反馈帧（53 字节，V2 格式）：**
+设备通过 USB-CDC 连接，默认 VID:PID 为 `0483:5740`，波特率 `115200`。
+
+反馈帧使用 `AA 01`：
 
 | 字节范围 | 内容 |
 |---|---|
-| `[0]` | `0xAA`（帧头） |
-| `[1]` | `0x01`（命令字） |
-| `[2~9]` | LF 末端坐标 x, y（各 4 字节 float，小端） |
-| `[10~17]` | RF 末端坐标 x, y |
-| `[18~25]` | LB 末端坐标 x, y |
-| `[26~33]` | RB 末端坐标 x, y |
-| `[34~37]` | YAW（4 字节 float） |
-| `[38~41]` | PITCH（4 字节 float） |
-| `[42~45]` | 电磁阀 / 微动开关状态位 |
-| `[46~49]` | 保留（4 字节，V2 扩展） |
-| `[50~51]` | `0xFF 0xEE`（帧尾） |
-| `[52]` | CRC-8/SMBUS（覆盖 `[0]~[51]`） |
+| `[0]` | `0xAA` 帧头 |
+| `[1]` | `0x01` 命令字 |
+| `[2..33]` | 四个机械臂末端坐标，float 小端 |
+| `[34..41]` | 云台 yaw、pitch，float 小端 |
+| `[42..45]` | 电磁阀与微动开关状态 |
+| `[46..47]` | `0xFF 0xEE` 帧尾 |
+| `[48]` | CRC-8/SMBUS |
 
+低层命令仍使用文本形式，例如：
+
+```text
+LF,X:100,Y:50
+G,30,10
+V,1,ON
+P,ON,2500
+A,0
+```
+
+## 11. 静态验证
+
+本次迁移以静态验证为主：
+
+检查源码和文档中是否仍有旧版 ROS1 API 或命令残留，并确认每个包都调用 `ament_package()`。
+
+由于 MVS SDK 为强制依赖，未安装 `/opt/MVS` 时不要求本机完整构建成功。

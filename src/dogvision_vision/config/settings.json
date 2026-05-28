@@ -49,8 +49,8 @@
 // OpenVINO模型路径和PPOCR模型路径
     "path":
     {
-      "openvino_bin_file_path": "models/yolo/m26325.bin",
-      "openvino_xml_file_path": "models/yolo/m26325.xml",
+      "openvino_bin_file_path": "models/yolo/yolo/m26325.bin",
+      "openvino_xml_file_path": "models/yolo/yolo/m26325.xml",
 
       "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
       "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
@@ -79,7 +79,7 @@
   
     "thresh":
     {
-        "nms_thresh": 0.2,
+        "nms_thresh": 0.6,
         "bbox_conf_thresh": 0.6,
         "merge_thresh": 0.8,
         "max_wellid_distance": 8

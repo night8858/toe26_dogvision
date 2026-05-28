@@ -1,20 +1,20 @@
 # ======================
-# ROS / Catkin 特定规则
+# ROS2 / colcon 特定规则
 # ======================
-# Catkin工作空间的构建和开发空间（必须忽略）
+# colcon 工作空间构建、安装和日志目录
 build/
-devel/
 install/
+log/
 
-# Catkin工具生成的特定文件
+# 旧 ROS1/catkin 工作空间遗留目录
+devel/
 .catkin_workspace
 .catkin_tools/
 
 # 编译命令数据库（通常由编辑器生成，无需版本控制）
 compile_commands.json
 
-# ROS日志（通常放在用户主目录~/.ros/log，但在工作区内也避免误提交）
-log/
+# 日志（通常放在用户主目录，但在工作区内也避免误提交）
 logs/
 *.log
 

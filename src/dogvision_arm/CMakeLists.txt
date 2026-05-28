@@ -1,77 +1,72 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.8)
 project(dogvision_arm)
 
-add_compile_options(-std=c++17)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  std_msgs
-  dogvision_msgs
-)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(Threads REQUIRED)
-
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
-
-catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES dogvision_arm_lib
-  CATKIN_DEPENDS roscpp std_msgs dogvision_msgs
-)
-
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-  ${LIBUSB_INCLUDE_DIRS}
-)
-
-# ---- 串口通信库 ----
 add_library(dogvision_arm_lib
   src/arm_internation.cpp
 )
 target_compile_features(dogvision_arm_lib PUBLIC cxx_std_17)
-add_dependencies(dogvision_arm_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_include_directories(dogvision_arm_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${LIBUSB_INCLUDE_DIRS}
+)
 target_link_libraries(dogvision_arm_lib
-  ${catkin_LIBRARIES}
-  Threads::Threads
-    ${LIBUSB_LIBRARIES}
-)
-
-# ---- Arm_internation_node ----
-add_executable(Arm_internation_node
-  src/Arm_internation_node.cpp
-)
-target_compile_features(Arm_internation_node PRIVATE cxx_std_17)
-add_dependencies(Arm_internation_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(Arm_internation_node
-  dogvision_arm_lib
-  ${catkin_LIBRARIES}
   Threads::Threads
   ${LIBUSB_LIBRARIES}
 )
 
-# ---- arm_cmd_terminal_node ----
+add_executable(arm_internation_node
+  src/arm_internation_node.cpp
+)
+target_link_libraries(arm_internation_node dogvision_arm_lib Threads::Threads ${LIBUSB_LIBRARIES})
+ament_target_dependencies(arm_internation_node rclcpp std_msgs)
+
 add_executable(arm_cmd_terminal_node
   src/arm_cmd_terminal_node.cpp
 )
-target_compile_features(arm_cmd_terminal_node PRIVATE cxx_std_17)
-add_dependencies(arm_cmd_terminal_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(arm_cmd_terminal_node
-  ${catkin_LIBRARIES}
-  Threads::Threads
-  ${LIBUSB_LIBRARIES}
-)
+target_link_libraries(arm_cmd_terminal_node Threads::Threads)
+ament_target_dependencies(arm_cmd_terminal_node rclcpp std_msgs)
 
-# ---- arm_mission_node ----
 add_executable(arm_mission_node
   src/arm_mission_node.cpp
 )
-target_compile_features(arm_mission_node PRIVATE cxx_std_17)
-add_dependencies(arm_mission_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(arm_mission_node
-  ${catkin_LIBRARIES}
-  Threads::Threads
+target_link_libraries(arm_mission_node Threads::Threads)
+ament_target_dependencies(arm_mission_node rclcpp std_msgs)
+
+install(TARGETS
+  dogvision_arm_lib
+  arm_internation_node
+  arm_cmd_terminal_node
+  arm_mission_node
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+install(DIRECTORY include/
+  DESTINATION include
+)
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+  FILES_MATCHING PATTERN "*.launch"
+)
+install(FILES pos_set.yaml
+  DESTINATION share/${PROJECT_NAME}/config
+)
+
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_include_directories(include)
+ament_export_libraries(dogvision_arm_lib)
+ament_export_dependencies(rclcpp std_msgs)
+ament_package()

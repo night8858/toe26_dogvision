@@ -69,7 +69,7 @@ struct PumpStatus {
 //  用法（典型）：
 //    arm_internation comm;
 //    comm.open("/dev/ttyUSB0", 115200);
-//    // 接收线程：while(ros::ok()) comm.receive_once();
+//    // 接收线程：while(running) comm.receive_once();
 //    comm.send_arm_cmd(0, 100, 200);
 //    ArmEndPos pos = comm.get_arm_pos(0);
 //
@@ -245,5 +245,4 @@ private:
     std::chrono::steady_clock::time_point last_usb_check_tp_{};
     int usb_check_interval_ms_ = 300;
 };
-
 

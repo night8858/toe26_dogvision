@@ -1,0 +1,12 @@
+<launch>
+  <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
+  <arg name="show_visual" default="true"/>
+  <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
+
+  <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
+    <param name="config_path" value="$(var config_path)" type="str"/>
+    <param name="mode" value="test" type="str"/>
+    <param name="show_visual" value="$(var show_visual)" type="bool"/>
+    <param name="yaml_path" value="$(var yaml_path)" type="str"/>
+  </node>
+</launch>

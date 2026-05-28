@@ -9,7 +9,7 @@
 
 #include <string>
 #include <opencv2/opencv.hpp>
-#include <dogvision_camera/hikvision.hpp>
+#include <dogvision_vision/camera/hikvision.hpp>
 typedef struct 
 {
     // file_path

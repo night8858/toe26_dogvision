@@ -1,0 +1,13 @@
+<launch>
+  <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/math_generator/math_results.yaml"/>
+  <arg name="min_val" default="1"/>
+  <arg name="max_val" default="100"/>
+  <arg name="interval" default="10"/>
+
+  <node pkg="dogvision_vision" exec="math_generator_node" name="math_generator_node" output="screen">
+    <param name="yaml_path" value="$(var yaml_path)" type="str"/>
+    <param name="min_val" value="$(var min_val)" type="int"/>
+    <param name="max_val" value="$(var max_val)" type="int"/>
+    <param name="interval" value="$(var interval)" type="int"/>
+  </node>
+</launch>

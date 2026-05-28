@@ -56,6 +56,6 @@
   "C_Cpp_Runner.showCompilationTime": false,
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
-  "cmake.sourceDirectory": "/home/toe/toe26_dogvision/src/dogvision26",
+  "cmake.sourceDirectory": "/home/waterking/my_ROS/toe26_dogvision",
   "cmake.ignoreCMakeListsMissing": true
 }

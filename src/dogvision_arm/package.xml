@@ -1,19 +1,15 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>dogvision_arm</name>
   <version>1.0.0</version>
-  <description>Arm serial communication nodes for dogvision26 project</description>
-
+  <description>ROS 2 arm serial communication and mission nodes</description>
   <maintainer email="toe@todo.todo">toe</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>catkin</buildtool_depend>
-
-  <build_depend>roscpp</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <build_depend>dogvision_msgs</build_depend>
-
-  <exec_depend>roscpp</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>dogvision_msgs</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
 </package>

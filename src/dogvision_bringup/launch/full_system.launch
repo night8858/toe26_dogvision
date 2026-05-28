@@ -1,10 +1,37 @@
-<!-- 全系统启动入口：机械臂通信 + 视觉检测 -->
 <launch>
+  <arg name="hw_id" default="0483:5740"/>
+  <arg name="baud_rate" default="115200"/>
+  <arg name="port" default=""/>
+  <arg name="pos_scale" default="0.01"/>
+  <arg name="angle_scale" default="0.01"/>
+  <arg name="mission_config" default="$(find-pkg-share dogvision_arm)/config/pos_set.yaml"/>
 
-  <!-- 机械臂串口通信子系统 -->
-  <include file="$(find dogvision_bringup)/launch/internation_test.launch"/>
+  <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
+  <arg name="show_window" default="false"/>
+  <arg name="enable_undistort" default="true"/>
+  <arg name="save_images" default="true"/>
+  <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <arg name="ppocr_mode" default="production"/>
+  <arg name="ppocr_show_visual" default="true"/>
+  <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
-  <!-- 视觉检测子系统 -->
-  <include file="$(find dogvision_bringup)/launch/vision.launch"/>
+  <include file="$(find-pkg-share dogvision_arm)/launch/arm_control.launch">
+    <arg name="hw_id" value="$(var hw_id)"/>
+    <arg name="baud_rate" value="$(var baud_rate)"/>
+    <arg name="port" value="$(var port)"/>
+    <arg name="pos_scale" value="$(var pos_scale)"/>
+    <arg name="angle_scale" value="$(var angle_scale)"/>
+    <arg name="mission_config" value="$(var mission_config)"/>
+  </include>
 
+  <include file="$(find-pkg-share dogvision_bringup)/launch/vision.launch">
+    <arg name="config_path" value="$(var config_path)"/>
+    <arg name="show_window" value="$(var show_window)"/>
+    <arg name="enable_undistort" value="$(var enable_undistort)"/>
+    <arg name="save_images" value="$(var save_images)"/>
+    <arg name="save_dir" value="$(var save_dir)"/>
+    <arg name="ppocr_mode" value="$(var ppocr_mode)"/>
+    <arg name="ppocr_show_visual" value="$(var ppocr_show_visual)"/>
+    <arg name="ocr_yaml_path" value="$(var ocr_yaml_path)"/>
+  </include>
 </launch>

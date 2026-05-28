@@ -1,0 +1,15 @@
+<launch>
+  <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
+  <arg name="enable_undistort" default="true"/>
+  <arg name="output_dir" default="$(find-pkg-share dogvision_vision)/data/yolotest"/>
+  <arg name="video_fps" default="30.0"/>
+  <arg name="visual_nms_thresh" default="0.7"/>
+
+  <node pkg="dogvision_vision" exec="yolo_accuracy_test_node" name="yolo_accuracy_test_node" output="screen">
+    <param name="config_path" value="$(var config_path)" type="str"/>
+    <param name="enable_undistort" value="$(var enable_undistort)" type="bool"/>
+    <param name="output_dir" value="$(var output_dir)" type="str"/>
+    <param name="video_fps" value="$(var video_fps)" type="float"/>
+    <param name="visual_nms_thresh" value="$(var visual_nms_thresh)" type="float"/>
+  </node>
+</launch>

@@ -2,20 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "ROS: Debug yolo_node (gdb)",
+      "name": "ROS2: Debug yolo_node (gdb)",
       "type": "cppdbg",
       "request": "launch",
       "args": [],
       "stopAtEntry": false,
       "externalConsole": false,
-      "cwd": "/home/toe/toe26_dogvision",
-      "program": "/home/toe/toe26_dogvision/devel/lib/dogvision26/yolo_node",
+      "cwd": "/home/waterking/my_ROS/toe26_dogvision",
+      "program": "/home/waterking/my_ROS/toe26_dogvision/install/dogvision_vision/lib/dogvision_vision/yolo_node",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "environment": [
         {
-          "name": "ROS_LOG_DIR",
-          "value": "/tmp/ros_logs"
+          "name": "RCUTILS_COLORIZED_OUTPUT",
+          "value": "1"
         }
       ],
       "setupCommands": [
