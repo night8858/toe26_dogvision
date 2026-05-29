@@ -46,14 +46,17 @@ sudo apt install -y \
 安装 OpenVINO Archive 后，在构建和运行前加载环境。本项目当前验证使用的路径为：
 
 ```bash
-source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_64/setupvars.sh
+curl -L https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.6/linux/l_openvino_toolkit_ubuntu24_2024.6.0.17404.4c0f47d2335_x86_64.tgz --output openvino_2024.6.0.tgz
+tar -xf openvino_2024.6.0.tgz
+sudo mv l_openvino_toolkit_ubuntu24_2024.6.0.17404.4c0f47d2335_x86_64 /opt/intel/openvino_2024.6.0
+source /opt/intel/openvino_2024.6.0/setupvars.sh
 ```
 
 Hikvision MVS SDK 是强制依赖。请安装到默认路径，使以下文件存在：
 
 ```text
 /opt/MVS/include/MvCameraControl.h
-/opt/MVS/lib/libMvCameraControl.so
+/opt/MVS/lib/64/libMVFGControl.so
 ```
 
 若缺少 MVS SDK，`dogvision_vision` 会在 CMake 配置阶段直接失败。
@@ -63,7 +66,7 @@ Hikvision MVS SDK 是强制依赖。请安装到默认路径，使以下文件�
 ```bash
 cd ~/toe26_dogvision
 source /opt/ros/jazzy/setup.bash
-source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_64/setupvars.sh
+source /opt/intel/openvino_2024.6.0/setupvars.sh
 
 colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
 source install/setup.bash
@@ -78,6 +81,13 @@ colcon build --packages-up-to dogvision_vision --symlink-install --cmake-args -D
 colcon build --packages-up-to dogvision_arm --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
 ```
 
+```
+sudo nano /etc/ld.so.conf.d/hikvision_mvs.conf
+将以下行粘贴到文件中并保存:
+/opt/MVS/lib/64
+更新系统的链接器缓存以应用更改:
+sudo ldconfig
+```
 ## 5. 配置
 
 视觉配置位于：
