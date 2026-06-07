@@ -11,17 +11,12 @@
 using namespace std::chrono_literals;
 
 /**
- * @brief 构建兼容旧接口的机械臂状态字符串。
+ * @brief 构建机械臂状态字符串。
  * @param my_arm 用于读取当前状态的机械臂通信对象。
  * @retval std::string 用于 /arm_internation/data 的状态数据。
  */
 static std::string build_status_payload(const arm_internation& my_arm)
 {
-    const ArmEndPosFloat lf = my_arm.get_arm_pos_float(0);
-    const ArmEndPosFloat rf = my_arm.get_arm_pos_float(1);
-    const ArmEndPosFloat lb = my_arm.get_arm_pos_float(2);
-    const ArmEndPosFloat rb = my_arm.get_arm_pos_float(3);
-    const GimbalAngleFloat gim = my_arm.get_gimbal_float();
     const SensorStatus sensor = my_arm.get_sensor();
 
     int valve_bits = 0;
@@ -39,8 +34,25 @@ static std::string build_status_payload(const arm_internation& my_arm)
     }
 
     std::ostringstream oss;
-    oss << std::fixed << std::setprecision(3)
-        << "LF:" << lf.x << "," << lf.y
+    oss << std::fixed << std::setprecision(3);
+    if (my_arm.protocol() == ArmProtocol::Dof4BB)
+    {
+        const Arm4DofPoseFloat left4 = my_arm.get_4dof_pose_float(0);
+        const Arm4DofPoseFloat right4 = my_arm.get_4dof_pose_float(1);
+        oss << "MODE:4DOF"
+            << ";L4:" << left4.x << "," << left4.y << "," << left4.z << "," << left4.pitch
+            << ";R4:" << right4.x << "," << right4.y << "," << right4.z << "," << right4.pitch
+            << ";VALVE_BITS:" << valve_bits
+            << ";MICRO_BITS:" << micro_bits;
+        return oss.str();
+    }
+
+    const ArmEndPosFloat lf = my_arm.get_arm_pos_float(0);
+    const ArmEndPosFloat rf = my_arm.get_arm_pos_float(1);
+    const ArmEndPosFloat lb = my_arm.get_arm_pos_float(2);
+    const ArmEndPosFloat rb = my_arm.get_arm_pos_float(3);
+    const GimbalAngleFloat gim = my_arm.get_gimbal_float();
+    oss << "LF:" << lf.x << "," << lf.y
         << ";RF:" << rf.x << "," << rf.y
         << ";LB:" << lb.x << "," << lb.y
         << ";RB:" << rb.x << "," << rb.y
@@ -63,13 +75,15 @@ int main(int argc, char** argv)
     auto node = std::make_shared<rclcpp::Node>("arm_internation_node");
     auto logger = node->get_logger();
 
-    node->declare_parameter<std::string>("hw_id", "0483:5740");
-    node->declare_parameter<int>("baud_rate", 115200);
-    node->declare_parameter<std::string>("port", "");
-    node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");
-    node->declare_parameter<std::string>("data_topic", "/arm_internation/data");
-    node->declare_parameter<double>("pos_scale", 0.01);
-    node->declare_parameter<double>("angle_scale", 0.01);
+    node->declare_parameter<std::string>("hw_id", "0483:5740");           // 设备HWID，默认STM32F407的USB VID:PID
+
+    node->declare_parameter<int>("baud_rate", 115200);                    // 串口波特率
+    node->declare_parameter<std::string>("port", "");                     // 串口设备路径，留空则自动根据hw_id查找
+    node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");         // 接收命令的ROS话题
+    node->declare_parameter<std::string>("data_topic", "/arm_internation/data");      // 发布状态的ROS话题
+    node->declare_parameter<double>("pos_scale", 0.01);                              // 位置解码缩放，默认0.01即1cm单位
+    node->declare_parameter<double>("angle_scale", 0.01);                            // 角度解码缩放，默认0.01即1度单位
+    node->declare_parameter<std::string>("protocol", "aa");
 
     const std::string hw_id = node->get_parameter("hw_id").as_string();
     const int baud_rate = static_cast<int>(node->get_parameter("baud_rate").as_int());
@@ -78,9 +92,17 @@ int main(int argc, char** argv)
     const std::string data_topic = node->get_parameter("data_topic").as_string();
     const double pos_scale = node->get_parameter("pos_scale").as_double();
     const double angle_scale = node->get_parameter("angle_scale").as_double();
+    const std::string protocol = node->get_parameter("protocol").as_string();
 
     arm_internation my_arm;
+    if (!my_arm.set_protocol_from_string(protocol))
+    {
+        RCLCPP_WARN(logger, "[arm_internation_node] unknown protocol '%s', fallback to aa",
+                    protocol.c_str());
+        my_arm.set_protocol_from_string("aa");
+    }
     my_arm.set_decode_scale(static_cast<float>(pos_scale), static_cast<float>(angle_scale));
+    RCLCPP_INFO(logger, "[arm_internation_node] protocol: %s", my_arm.protocol_name());
 
     auto cmd_sub = node->create_subscription<std_msgs::msg::String>(
         cmd_topic, rclcpp::QoS(20),
@@ -98,14 +120,14 @@ int main(int argc, char** argv)
                     serial_port.c_str(), baud_rate);
         if (!my_arm.open(serial_port, baud_rate))
         {
-            RCLCPP_WARN(logger, "[arm_internation_node] open port failed, will retry in loop");
+            RCLCPP_WARN(logger, "[arm_internation_node] open port failed, node will stay alive");
         }
     }
     else
     {
-        RCLCPP_INFO(logger, "[arm_internation_node] wait for device hw_id=%s, baud=%d",
+        RCLCPP_INFO(logger, "[arm_internation_node] auto reconnect configured for hw_id=%s, baud=%d",
                     hw_id.c_str(), baud_rate);
-        my_arm.open_by_HWid(hw_id, baud_rate, 1000);
+        my_arm.configure_auto_reconnect(hw_id, baud_rate, 1000);
     }
 
     rclcpp::WallRate loop_rate(200);

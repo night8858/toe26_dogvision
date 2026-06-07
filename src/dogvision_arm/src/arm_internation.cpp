@@ -22,7 +22,8 @@
 // ============================================================
 //  协议帧格式说明（见头文件注释）
 // ============================================================
-//  AA 01 反馈帧结构：
+//  AA 平面机械臂协议：
+//  AA 01 反馈帧结构，CRC8 覆盖 [0] 到帧尾第二字节：
 //    [0]  0xAA
 //    [1]  0x01
 //    [2-9]    LF x(4B), y(4B)
@@ -40,6 +41,33 @@
 //    [48]     CRC8（覆盖 [0]~[47]）
 //  兼容扩展版本：在 [45] 与 [46] 之间可能插入 4 字节保留位，
 //  则帧尾/CRC 变为 [50]=0xFF [51]=0xEE [52]=CRC8（覆盖 [0]~[51]）。
+//
+//  AA 下行帧：
+//    AA 02 arm_id x(float LE) y(float LE) FF EE CRC8
+//    AA 03 gimbal_id yaw(float LE) pitch(float LE) FF EE CRC8
+//    AA 04 valve_id state FF EE CRC8
+//    AA 05 answer 0 0 FF EE CRC8
+//    AA 06 on_off speed(float LE) FF EE CRC8
+//
+//  BB 4DOF 双臂协议：
+//  BB 01 反馈帧结构，固定 46 字节，CRC8 覆盖 [0]~[44]：
+//    [0]  0xBB
+//    [1]  0x01
+//    [2-17]   左臂 x/y/z/pitch（4 个 float32 LE）
+//    [18-33]  右臂 x/y/z/pitch（4 个 float32 LE）
+//    [34-37]  valve0..3（每字节低 1 位有效）
+//    [38-41]  microswitch0..3（当前 STM32 端预留为 0）
+//    [42]     reserved
+//    [43]     0xFF
+//    [44]     0xEE
+//    [45]     CRC8（覆盖 [0]~[44]）
+//
+//  BB 下行帧：
+//    BB 02 arm_id x y z pitch（4 个 float32 LE）FF EE CRC8
+//    BB 03 action_id FF EE CRC8
+//    BB 04 valve_id state FF EE CRC8
+//    BB 05 answer 0 0 FF EE CRC8
+//    BB 06 on_off speed(float LE) FF EE CRC8
 // ============================================================
 
 // ============================================================
@@ -47,7 +75,7 @@
 // ------------------------------------------------------------
 //  A. 连接部分
 //     open()            : 打开并配置指定串口
-//     open_by_hwid()    : 自动扫描 ttyACM* 并按硬件 ID 连接（失败重试）
+//     open_by_hwid()    : 自动扫描 ttyACM*/ttyUSB* 并按硬件 ID 连接（失败重试）
 //
 //  B. 接收部分
 //     receive_once()    : 从串口读入字节到缓存
@@ -73,6 +101,7 @@ namespace
     // - 53B: 49B 基础上额外 4 字节保留位（常见于下位机扩展版本）
     static constexpr size_t kFbFrameLenV1 = 49;
     static constexpr size_t kFbFrameLenV2 = 53;
+    static constexpr size_t k4DofFbFrameLen = 46;
 
 
     // 将常见整型波特率转换为 termios 的 speed_t 常量。
@@ -203,7 +232,7 @@ namespace
         return false;
     }
 
-    // 在 /dev 目录筛选 ttyACM*，并按 idVendor:idProduct 匹配目标设备。
+    // 在 /dev 目录筛选 ttyACM*/ttyUSB*，并按 idVendor:idProduct 匹配目标设备。
     bool parse_hw_id(const std::string &hw_id, std::string &vendor, std::string &product)
     {
         // 期望格式："0483:5740"
@@ -383,13 +412,15 @@ bool arm_internation::open(const std::string &port, int baud_rate)
     fd_ = ::open(port.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
     if (fd_ < 0)
     {
-        std::cerr << "[arm_internation] Failed to open " << port << std::endl;
+        std::cerr << "[arm_internation] Failed to open " << port
+                  << ": " << std::strerror(errno) << std::endl;
         return false;
     }
     struct termios tty{};
     if (tcgetattr(fd_, &tty) != 0)
     {
-        std::cerr << "[arm_internation] tcgetattr failed" << std::endl;
+        std::cerr << "[arm_internation] tcgetattr failed on " << port
+                  << ": " << std::strerror(errno) << std::endl;
         close();
         return false;
     }
@@ -408,7 +439,8 @@ bool arm_internation::open(const std::string &port, int baud_rate)
     tty.c_cflag &= ~CRTSCTS;
     if (tcsetattr(fd_, TCSANOW, &tty) != 0)
     {
-        std::cerr << "[arm_internation] tcsetattr failed" << std::endl;
+        std::cerr << "[arm_internation] tcsetattr failed on " << port
+                  << ": " << std::strerror(errno) << std::endl;
         close();
         return false;
     }
@@ -417,27 +449,31 @@ bool arm_internation::open(const std::string &port, int baud_rate)
 
 bool arm_internation::open_by_HWid(const std::string &hw_id, int baud_rate, int retry_ms)
 {
-    reconnect_hw_id_ = hw_id;
-    reconnect_baud_rate_ = baud_rate;
-    reconnect_retry_ms_ = retry_ms > 0 ? retry_ms : 1000;
-    auto_reconnect_enabled_.store(true);
+    configure_auto_reconnect(hw_id, baud_rate, retry_ms);
 
     // 常驻重试策略：该函数只有在成功连接后才返回。
     // 适用于“设备可能晚插入”或“启动时串口尚未就绪”的场景。
-    const int wait_ms = reconnect_retry_ms_;
+    const int wait_ms = retry_ms > 0 ? retry_ms : 1000;
     while (true)
     {
-        const std::string dev = find_ttyacm_by_HWid(hw_id);
-        if (!dev.empty() && open(dev, baud_rate))
+        if (open_matching_tty_once(hw_id, baud_rate, "open_by_HWid"))
         {
-            last_usb_check_tp_ = std::chrono::steady_clock::now();
-            std::cerr << "[arm_internation] Connected to " << dev << " for HW ID " << hw_id << std::endl;
             return true;
         }
-        std::cerr << "[arm_internation] Cannot find/open HW ID " << hw_id
-                  << ", retry in " << wait_ms << " ms" << std::endl;
+        std::cerr << "[arm_internation] open_by_HWid: retry HW ID " << hw_id
+                  << " in " << wait_ms << " ms" << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
     }
+}
+
+void arm_internation::configure_auto_reconnect(const std::string &hw_id, int baud_rate, int retry_ms)
+{
+    std::lock_guard<std::mutex> lock(reconnect_mutex_);
+    reconnect_hw_id_ = hw_id;
+    reconnect_baud_rate_ = baud_rate;
+    reconnect_retry_ms_ = retry_ms > 0 ? retry_ms : 1000;
+    auto_reconnect_enabled_.store(!reconnect_hw_id_.empty());
+    last_reconnect_attempt_tp_ = {};
 }
 
 void arm_internation::close()
@@ -450,6 +486,34 @@ void arm_internation::close()
 }
 
 bool arm_internation::is_open() const { return fd_ >= 0; }
+
+bool arm_internation::set_protocol_from_string(const std::string &protocol_name)
+{
+    const std::string p = to_lower_copy(trim_copy(protocol_name));
+    if (p == "aa" || p == "plane" || p == "plane_aa" || p == "平面")
+    {
+        protocol_ = ArmProtocol::PlaneAA;
+        clear_report_state();
+        return true;
+    }
+    if (p == "bb" || p == "4dof" || p == "dof4" || p == "dof4_bb" || p == "双臂")
+    {
+        protocol_ = ArmProtocol::Dof4BB;
+        clear_report_state();
+        return true;
+    }
+    return false;
+}
+
+ArmProtocol arm_internation::protocol() const
+{
+    return protocol_;
+}
+
+const char *arm_internation::protocol_name() const
+{
+    return protocol_ == ArmProtocol::Dof4BB ? "4dof" : "aa";
+}
 
 // ---- CRC8/SMBUS ----
 uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
@@ -466,6 +530,15 @@ uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
 
 // ---- 解析反馈帧 ----
 bool arm_internation::parse_feedback_frame()
+{
+    if (protocol_ == ArmProtocol::Dof4BB)
+    {
+        return parse_4dof_feedback_frame();
+    }
+    return parse_plane_feedback_frame();
+}
+
+bool arm_internation::parse_plane_feedback_frame()
 {
     // 注意：接收缓存是“流式字节”，不保证 read 一次就是一帧。
     // 这里在同一次调用内持续重同步，直到找到有效帧或缓存不足最短帧。
@@ -584,13 +657,82 @@ bool arm_internation::parse_feedback_frame()
     return false;
 }
 
+bool arm_internation::parse_4dof_feedback_frame()
+{
+    // BB 01 固定 46 字节：
+    // [0]BB [1]01 [2..33] 左/右臂 8 个 float [34..37]阀门
+    // [38..41]微动 [42]预留 [43]FF [44]EE [45]CRC8。
+    while (rx_len_ >= k4DofFbFrameLen)
+    {
+        size_t start = 0;
+        while (start + k4DofFbFrameLen <= rx_len_ &&
+               (rx_buf_[start] != kHeadB || rx_buf_[start + 1] != kCmdFb))
+        {
+            ++start;
+        }
+
+        if (start + k4DofFbFrameLen > rx_len_)
+        {
+            if (start > 0)
+            {
+                rx_len_ -= start;
+                std::memmove(rx_buf_, rx_buf_ + start, rx_len_);
+            }
+            return false;
+        }
+
+        const size_t tail_a_idx = start + 43;
+        const size_t tail_b_idx = start + 44;
+        const size_t crc_idx = start + 45;
+        const bool tail_ok = rx_buf_[tail_a_idx] == kTailA && rx_buf_[tail_b_idx] == kTailB;
+        const bool crc_ok = tail_ok && calc_crc8(rx_buf_ + start, 45) == rx_buf_[crc_idx];
+
+        if (crc_ok)
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            dof4_pose_float_[0].x = decode_float_le(rx_buf_ + start + 2);
+            dof4_pose_float_[0].y = decode_float_le(rx_buf_ + start + 6);
+            dof4_pose_float_[0].z = decode_float_le(rx_buf_ + start + 10);
+            dof4_pose_float_[0].pitch = decode_float_le(rx_buf_ + start + 14);
+            dof4_pose_float_[1].x = decode_float_le(rx_buf_ + start + 18);
+            dof4_pose_float_[1].y = decode_float_le(rx_buf_ + start + 22);
+            dof4_pose_float_[1].z = decode_float_le(rx_buf_ + start + 26);
+            dof4_pose_float_[1].pitch = decode_float_le(rx_buf_ + start + 30);
+
+            // 将 4DOF 左/右臂 x/y 投影到旧 LF/RF 字段，保证旧状态消费者仍能读到主位姿。
+            arm_pos_float_[0].x = dof4_pose_float_[0].x;
+            arm_pos_float_[0].y = dof4_pose_float_[0].y;
+            arm_pos_float_[1].x = dof4_pose_float_[1].x;
+            arm_pos_float_[1].y = dof4_pose_float_[1].y;
+            arm_pos_float_[2] = ArmEndPosFloat{};
+            arm_pos_float_[3] = ArmEndPosFloat{};
+            gimbal_float_ = GimbalAngleFloat{};
+
+            for (int i = 0; i < 4; ++i)
+            {
+                sensor_.valve[i] = (rx_buf_[start + 34 + i] & 0x01u) != 0;
+                sensor_.microswitch[i] = (rx_buf_[start + 38 + i] & 0x01u) != 0;
+            }
+
+            rx_len_ -= (start + k4DofFbFrameLen);
+            std::memmove(rx_buf_, rx_buf_ + start + k4DofFbFrameLen, rx_len_);
+            return true;
+        }
+
+        // 候选帧头存在但尾或 CRC 不对，丢弃当前帧头一个字节继续重同步。
+        rx_len_ -= (start + 1);
+        std::memmove(rx_buf_, rx_buf_ + start + 1, rx_len_);
+    }
+    return false;
+}
+
 // ---- 接收一次并尝试解析 ----
 bool arm_internation::receive_once()
 {
     if (fd_ < 0)
     {
         clear_report_state();
-        return reconnect_blocking();
+        return reconnect_once();
     }
 
     // 对绑定 HWID 的场景，使用 libusb 周期性确认 USB 设备是否仍在线。
@@ -608,7 +750,7 @@ bool arm_internation::receive_once()
                           << " not found by libusb, entering reconnect state" << std::endl;
                 close();
                 clear_report_state();
-                return reconnect_blocking();
+                return reconnect_once();
             }
         }
     }
@@ -629,7 +771,7 @@ bool arm_internation::receive_once()
                       << ", entering reconnect state" << std::endl;
             close();
             clear_report_state();
-            reconnect_blocking();
+            reconnect_once();
         }
         return false;
     }
@@ -682,6 +824,12 @@ GimbalAngleFloat arm_internation::get_gimbal_float() const
     return gimbal_float_;
 }
 
+Arm4DofPoseFloat arm_internation::get_4dof_pose_float(int arm_id) const
+{
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return (arm_id >= 0 && arm_id < 2) ? dof4_pose_float_[arm_id] : Arm4DofPoseFloat{};
+}
+
 void arm_internation::set_decode_scale(float pos_scale, float angle_scale)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
@@ -702,7 +850,7 @@ void arm_internation::set_decode_scale(float pos_scale, float angle_scale)
 // ---- 写串口 ----//
 bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 {
-    if (fd_ < 0 && !reconnect_blocking())
+    if (fd_ < 0 && !reconnect_once())
     {
         clear_report_state();
         return false;
@@ -722,7 +870,7 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
                           << ", entering reconnect state" << std::endl;
                 close();
                 clear_report_state();
-                reconnect_blocking();
+                reconnect_once();
             }
             return false;
         }
@@ -734,6 +882,12 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 ////////////////////////// ---- 发送命令 ---- ////////////////////////
 bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 {
+    if (protocol_ == ArmProtocol::Dof4BB)
+    {
+        // 4DOF 模式必须使用显式 4POSE 命令，避免旧 LF/RF 文本被误当成双臂控制。
+        return false;
+    }
+
     // AA 02 浮点控制帧：
     // [0]AA [1]02 [2]arm_id [3..6]x(float LE) [7..10]y(float LE)
     //  [11]FF [12]EE [13]CRC(覆盖[0]~[12])
@@ -751,6 +905,12 @@ bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 
 bool arm_internation::send_gimbal_cmd(int gimbal_id, float yaw, float pitch)
 {
+    if (protocol_ == ArmProtocol::Dof4BB)
+    {
+        // BB 4DOF 协议没有云台命令，保守拒绝。
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(send_mutex_);
     uint8_t buf[14] =  {0xAA, kCmdGim, (uint8_t)gimbal_id, 
                         0, 0, 0, 0, 
@@ -765,7 +925,8 @@ bool arm_internation::send_gimbal_cmd(int gimbal_id, float yaw, float pitch)
 bool arm_internation::send_valve_cmd(int valve_id, bool state)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[7] = {0xAA, kCmdValv, (uint8_t)valve_id, (uint8_t)state, 0xFF, 0xEE, 0};
+    const uint8_t head = protocol_ == ArmProtocol::Dof4BB ? kHeadB : kHeadA;
+    uint8_t buf[7] = {head, kCmdValv, (uint8_t)valve_id, (uint8_t)state, 0xFF, 0xEE, 0};
     buf[6] = calc_crc8(buf, 6);
     return write_bytes(buf, 7);
 }
@@ -773,9 +934,10 @@ bool arm_internation::send_valve_cmd(int valve_id, bool state)
 //发送任务赛的答案0-3
 bool arm_internation::send_answer_cmd(uint8_t answer)
 {
-    // answer 0-3 对应 4 个答案余数 
+    // AA: 任务赛答案；BB: CMD4_ANSWER_CONTROL 当前在 STM32 端预留，仍按协议发 3 字节 DATA。
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[8] = {0xAA, kCmdAns, answer,0, 0, 0xFF, 0xEE, 0};
+    const uint8_t head = protocol_ == ArmProtocol::Dof4BB ? kHeadB : kHeadA;
+    uint8_t buf[8] = {head, kCmdAns, answer,0, 0, 0xFF, 0xEE, 0};
     buf[7] = calc_crc8(buf, 7);
     return write_bytes(buf, 8);
 }
@@ -787,23 +949,63 @@ bool arm_internation::send_pump_cmd(bool on, int speed)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
     uint8_t on_off = on ? 1 : 0;
-    uint8_t buf[10] = {0xAA, kCmdPump, on_off, 0, 0,0,0, 0xFF, 0xEE, 0};
-    encode_float_le(speed, buf + 3);
+    const uint8_t head = protocol_ == ArmProtocol::Dof4BB ? kHeadB : kHeadA;
+    uint8_t buf[10] = {head, kCmdPump, on_off, 0, 0,0,0, 0xFF, 0xEE, 0};
+    encode_float_le(static_cast<float>(speed), buf + 3);
     buf[9] = calc_crc8(buf, 9);
     return write_bytes(buf, 10);
 }
 
-
-std::string arm_internation::find_ttyacm_by_HWid(const std::string &hw_id)
+bool arm_internation::send_4dof_pose_cmd(int arm_id, float x, float y, float z, float pitch)
 {
-    // 遍历 /dev 下 ttyACM*，逐个读取其 USB VID/PID 对比目标硬件 ID。
+    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1)
+    {
+        return false;
+    }
+
+    // BB 02 位姿帧：
+    // [0]BB [1]02 [2]arm_id [3..6]x [7..10]y [11..14]z [15..18]pitch [19]FF [20]EE [21]CRC
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[22] = {kHeadB, kCmdArm, static_cast<uint8_t>(arm_id),
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(x, buf + 3);
+    encode_float_le(y, buf + 7);
+    encode_float_le(z, buf + 11);
+    encode_float_le(pitch, buf + 15);
+    buf[21] = calc_crc8(buf, 21);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_action_cmd(uint8_t action_id)
+{
+    if (protocol_ != ArmProtocol::Dof4BB)
+    {
+        return false;
+    }
+
+    // BB 03 动作帧：[0]BB [1]03 [2]action_id [3]FF [4]EE [5]CRC。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[6] = {kHeadB, kCmdGim, action_id, kTailA, kTailB, 0};
+    buf[5] = calc_crc8(buf, 5);
+    return write_bytes(buf, sizeof(buf));
+}
+
+
+std::vector<std::string> arm_internation::find_ttys_by_HWid(const std::string &hw_id)
+{
+    // 遍历 /dev 下 ttyACM*/ttyUSB*，逐个读取其 USB VID/PID 对比目标硬件 ID。
+    std::vector<std::string> matches;
     std::string target_vendor;
     std::string target_product;
     if (!parse_hw_id(hw_id, target_vendor, target_product))
     {
         std::cerr << "[arm_internation] Invalid HW ID format: " << hw_id
                   << " (expected xxxx:xxxx)" << std::endl;
-        return "";
+        return matches;
     }
 
     const std::filesystem::path dev_path("/dev");
@@ -815,7 +1017,7 @@ std::string arm_internation::find_ttyacm_by_HWid(const std::string &hw_id)
             break;
         }
         const std::string tty_name = entry.path().filename().string();
-        if (tty_name.rfind("ttyACM", 0) != 0)
+        if (tty_name.rfind("ttyACM", 0) != 0 && tty_name.rfind("ttyUSB", 0) != 0)
         {
             continue;
         }
@@ -831,10 +1033,45 @@ std::string arm_internation::find_ttyacm_by_HWid(const std::string &hw_id)
         product = to_lower_copy(product);
         if (vendor == target_vendor && product == target_product)
         {
-            return (dev_path / tty_name).string();
+            matches.push_back((dev_path / tty_name).string());
         }
     }
-    return "";
+    std::sort(matches.begin(), matches.end());
+    return matches;
+}
+
+bool arm_internation::open_matching_tty_once(const std::string &hw_id, int baud_rate, const char *log_context)
+{
+    const std::vector<std::string> candidates = find_ttys_by_HWid(hw_id);
+    const char *context = log_context != nullptr ? log_context : "open";
+    if (candidates.empty())
+    {
+        std::cerr << "[arm_internation] " << context << ": no ttyACM/ttyUSB device matched HW ID "
+                  << hw_id << std::endl;
+        return false;
+    }
+
+    bool had_open_failure = false;
+    for (const std::string &dev : candidates)
+    {
+        std::cerr << "[arm_internation] " << context << ": trying " << dev
+                  << " for HW ID " << hw_id << std::endl;
+        if (open(dev, baud_rate))
+        {
+            last_usb_check_tp_ = std::chrono::steady_clock::now();
+            std::cerr << "[arm_internation] " << context << ": connected to " << dev
+                      << " for HW ID " << hw_id << std::endl;
+            return true;
+        }
+        had_open_failure = true;
+    }
+
+    if (had_open_failure)
+    {
+        std::cerr << "[arm_internation] " << context << ": all matched ttyACM/ttyUSB devices failed to open for HW ID "
+                  << hw_id << std::endl;
+    }
+    return false;
 }
 
 std::string arm_internation::normalize_cmd_text(std::string text)
@@ -943,7 +1180,23 @@ bool arm_internation::parse_arm_alias(const std::string &alias, int &arm_id) con
     return false;
 }
 
-bool arm_internation::reconnect_blocking()
+bool arm_internation::parse_4dof_arm_alias(const std::string &alias, int &arm_id)
+{
+    const std::string a = to_upper_copy(trim_copy(alias));
+    if (a == "0" || a == "L" || a == "LEFT" || a == "左" || a == "左臂")
+    {
+        arm_id = 0;
+        return true;
+    }
+    if (a == "1" || a == "R" || a == "RIGHT" || a == "右" || a == "右臂")
+    {
+        arm_id = 1;
+        return true;
+    }
+    return false;
+}
+
+bool arm_internation::reconnect_once()
 {
     if (!auto_reconnect_enabled_.load() || reconnect_hw_id_.empty())
     {
@@ -956,8 +1209,19 @@ bool arm_internation::reconnect_blocking()
         return true;
     }
 
-    std::cerr << "[arm_internation] start auto reconnect by HWid=" << reconnect_hw_id_ << std::endl;
-    return open_by_HWid(reconnect_hw_id_, reconnect_baud_rate_, reconnect_retry_ms_);
+    const auto now = std::chrono::steady_clock::now();
+    if (last_reconnect_attempt_tp_.time_since_epoch().count() != 0)
+    {
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_reconnect_attempt_tp_).count();
+        if (elapsed_ms < reconnect_retry_ms_)
+        {
+            return false;
+        }
+    }
+    last_reconnect_attempt_tp_ = now;
+
+    return open_matching_tty_once(reconnect_hw_id_, reconnect_baud_rate_, "auto_reconnect");
 }
 
 bool arm_internation::is_bound_hwid_online_libusb() const
@@ -987,6 +1251,10 @@ void arm_internation::clear_report_state()
             arm_pos.x = 0.0f;
             arm_pos.y = 0.0f;
         }
+        for (auto &pose : dof4_pose_float_)
+        {
+            pose = Arm4DofPoseFloat{};
+        }
 
         gimbal_float_.yaw = 0.0f;
         gimbal_float_.pitch = 0.0f;
@@ -996,7 +1264,7 @@ void arm_internation::clear_report_state()
     rx_len_ = 0;
 }
 
-// 供外部调用的非阻塞重连尝试，适用于 receive_once() 内检测到断线后的快速恢复尝试，避免每次都进入长时间的 open_by_HWid 循环。
+// 供外部调用的非阻塞重连尝试，适用于 ROS 主循环周期调用。
 bool arm_internation::try_reconnect_once()
 {
     if (reconnect_hw_id_.empty())
@@ -1004,7 +1272,7 @@ bool arm_internation::try_reconnect_once()
         return false;
     }
 
-    // 加锁：避免与 reconnect_blocking() / receive_once() 并发修改 fd_
+    // 加锁：避免与 receive_once() / write_bytes() 并发修改 fd_
     std::lock_guard<std::mutex> lock(reconnect_mutex_);
     // 已经连接时无需操作
     if (fd_ >= 0)
@@ -1012,24 +1280,19 @@ bool arm_internation::try_reconnect_once()
         return true;
     }
 
-    const std::string dev = find_ttyacm_by_HWid(reconnect_hw_id_);
-    if (dev.empty())
+    const auto now = std::chrono::steady_clock::now();
+    if (last_reconnect_attempt_tp_.time_since_epoch().count() != 0)
     {
-        std::cerr << "[arm_internation] try_reconnect_once: HW ID "
-                  << reconnect_hw_id_ << " not found" << std::endl;
-        return false;
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_reconnect_attempt_tp_).count();
+        if (elapsed_ms < reconnect_retry_ms_)
+        {
+            return false;
+        }
     }
+    last_reconnect_attempt_tp_ = now;
 
-    if (!open(dev, reconnect_baud_rate_))
-    {
-        std::cerr << "[arm_internation] try_reconnect_once: failed to open "
-                  << dev << std::endl;
-        return false;
-    }
-
-    std::cerr << "[arm_internation] try_reconnect_once: reconnected to "
-              << dev << std::endl;
-    return true;
+    return open_matching_tty_once(reconnect_hw_id_, reconnect_baud_rate_, "try_reconnect_once");
 }
 
 // 解析文本命令的主入口，支持机械臂、云台、电磁阀等多种命令格式，具有一定容错能力。
@@ -1049,6 +1312,109 @@ bool arm_internation::handle_text_command(const std::string &command_text)
     if (tokens.empty())
     {
         return false;
+    }
+
+    const std::string cmd = to_upper_copy(tokens[0]);
+
+    if (cmd == "4POSE" || cmd == "4P" || cmd == "DOF4POSE")
+    {
+        // 4DOF 位姿命令：
+        //   4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
+        //   4POSE,R,0.1,0.2,0.3,0.4
+        if (tokens.size() < 6)
+        {
+            return false;
+        }
+
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        float pitch = 0.0f;
+        bool has_x = false;
+        bool has_y = false;
+        bool has_z = false;
+        bool has_pitch = false;
+
+        for (size_t i = 2; i < tokens.size(); ++i)
+        {
+            float value = 0.0f;
+            if (parse_float_after_prefix(tokens[i], "X", value))
+            {
+                x = value;
+                has_x = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Y", value))
+            {
+                y = value;
+                has_y = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Z", value))
+            {
+                z = value;
+                has_z = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "PITCH", value) ||
+                parse_float_after_prefix(tokens[i], "P", value))
+            {
+                pitch = value;
+                has_pitch = true;
+                continue;
+            }
+            if (parse_float_token(tokens[i], value))
+            {
+                if (!has_x)
+                {
+                    x = value;
+                    has_x = true;
+                }
+                else if (!has_y)
+                {
+                    y = value;
+                    has_y = true;
+                }
+                else if (!has_z)
+                {
+                    z = value;
+                    has_z = true;
+                }
+                else if (!has_pitch)
+                {
+                    pitch = value;
+                    has_pitch = true;
+                }
+            }
+        }
+
+        if (!has_x || !has_y || !has_z || !has_pitch)
+        {
+            return false;
+        }
+        return send_4dof_pose_cmd(dof4_arm_id, x, y, z, pitch);
+    }
+
+    if (cmd == "4ACT" || cmd == "4ACTION" || cmd == "DOF4ACT")
+    {
+        // 4ACT,0 中止；4ACT,1..N 触发下位机 action_state_4dof_e 对应动作。
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        int action_id = -1;
+        if (!parse_int_token(tokens[1], action_id) || action_id < 0 || action_id > 255)
+        {
+            return false;
+        }
+        return send_4dof_action_cmd(static_cast<uint8_t>(action_id));
     }
 
     int arm_id = -1;
@@ -1099,7 +1465,6 @@ bool arm_internation::handle_text_command(const std::string &command_text)
         return send_arm_cmd(arm_id, x, y);
     }
 
-    const std::string cmd = to_upper_copy(tokens[0]);
     if (cmd == "G")
     {
         // 云台命令：G,yaw,pitch（示例：G,0,0）
@@ -1165,6 +1530,22 @@ bool arm_internation::handle_text_command(const std::string &command_text)
         // 成功发送后更新缓存态，保证下一次翻转有依据。
         valve_cmd_state_[valve_id] = state;
         return true;
+    }
+
+    if (cmd == "A")
+    {
+        // A,0..255：AA 模式作为任务赛答案，BB 模式作为 CMD4_ANSWER_CONTROL 预留字段发送。
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        int answer = -1;
+        if (!parse_int_token(tokens[1], answer) || answer < 0 || answer > 255)
+        {
+            return false;
+        }
+        return send_answer_cmd(static_cast<uint8_t>(answer));
     }
 
     if (cmd == "P")
