@@ -42,9 +42,14 @@ static int arm_alias_to_id(const std::string& alias)
 
 /**
  * @brief 从 ROS2 参数中声明并加载一组机械臂位置。
+ *
+ * 设计意图：每组位置（收起/吸取/放置/启动）按 `<prefix>.<alias>.<axis>` 三级嵌套声明，
+ * 如 `stow_pos.LF.x`、`stow_pos.LF.y`。使用 declare_parameter + get_parameter 模式，
+ * 允许 launch 文件或 YAML 覆盖默认值 10.0。
+ *
  * @param node 持有参数的节点对象。
- * @param prefix 位置参数组前缀。
- * @param pos 输出位置表，按机械臂编号和坐标轴索引。
+ * @param prefix 位置参数组前缀（如 "stow_pos"）。
+ * @param[out] pos 输出位置表 [4][2]，按 LF/RF/LB/RB 顺序。
  * @retval void
  */
 static void load_arm_positions(const rclcpp::Node::SharedPtr& node, const std::string& prefix, float pos[4][2])
@@ -136,6 +141,11 @@ static void send_feedback(const rclcpp::Publisher<std_msgs::msg::String>::Shared
 
 /**
  * @brief 归一化并拆分任务命令字符串。
+ *
+ * 设计意图：兼容多种输入格式（空格、逗号、分号、中文标点），
+ * 将所有 token 转为大写以实现大小写不敏感匹配。
+ * 同时正确处理 UTF-8 多字节中文字符（如"收起"、"放置"）。
+ *
  * @param data 原始任务命令。
  * @retval std::vector<std::string> 使用逗号或分号拆分后的大写 token 列表。
  */
@@ -182,6 +192,48 @@ static std::vector<std::string> tokenize_command(const std::string& data)
 
 /**
  * @brief 处理高层任务命令并发布低层命令序列。
+ *
+ * @section 任务命令状态机
+ * 本函数是 arm_mission_node 的核心，将高层语义命令拆解为低层串口指令序列。
+ * 每条高层命令执行完毕后发布 "FEEDBACK:DONE" 确认。
+ *
+ * 命令分派决策树（首 token 匹配，支持中英文别名）：
+ *
+ *   tokens[0]
+ *      │
+ *   ┌──┼──────────┬──────────┬──────────┬──────────┬──────────┐
+ *   ▼  ▼          ▼          ▼          ▼          ▼          ▼
+ * STOW PICK      START      PLACE     VALVE/V    PUMP/P   PLACE_END
+ * 收起 吸取       启动        放置      电磁阀     气泵     放置结束
+ *   │  │          │          │          │          │          │
+ *   └──┴──────────┴──────────┤          │          │          │
+ *                            │          │          │          │
+ *         tokens[1] 分派 ────┘          │          │          │
+ *         ├─ ALL → 4臂循环             │          │          │
+ *         ├─ LF/RF/LB/RB → 单臂        │          │          │
+ *         └─ 数字,X,Y → 指定臂+坐标     │          │          │
+ *                                       │          │          │
+ *                    tokens[1] 分派 ────┘          │          │
+ *                    ├─ ALL → 4阀循环              │          │
+ *                    └─ 数字 → 单阀                 │          │
+ *                                                   │          │
+ *                            tokens[1] 分派 ────────┘          │
+ *                            ├─ ON[,speed] → 开泵+设速         │
+ *                            └─ OFF → 关泵                     │
+ *                                                               │
+ *                                       4阀关+泵关+反馈 ───────┘
+ *
+ * @section 命令间隔设计
+ * kCmdInterval (0.2s) 保证下位机有足够时间执行上一指令，
+ * 避免连续发送导致指令队列溢出或机械臂运动冲突。
+ * 电磁阀命令间隔缩短为 0.3x (60ms)，因电磁阀响应远快于机械运动。
+ *
+ * @section 异常处理
+ * - 空命令：WARN 后直接返回
+ * - 未知命令：WARN 日志
+ * - 无效别名/编号越界：WARN 后返回，不崩溃
+ * - 数值解析失败（stoi/stof 异常）：catch 后 WARN，不崩溃
+ *
  * @param data 原始任务命令数据。
  * @param cmd_pub 低层机械臂命令发布器。
  * @param feedback_pub 完成反馈发布器。
@@ -372,6 +424,27 @@ static void mission_callback(const std::string& data,
 
 /**
  * @brief 运行 ROS2 机械臂任务编排节点。
+ *
+ * @section 设计意图
+ * 本节点位于"终端命令"与"串口协议"之间的中间层：
+ *
+ *   arm_cmd_terminal_node          arm_mission_node            arm_internation_node
+ *   (stdin → 话题路由)    ──────▶   (任务拆解 → 指令序列)  ──▶  (串口发送)
+ *   /arm/mission_cmd               /arm_internation/cmd         /dev/ttyUSB0
+ *
+ * 职责分离：
+ * - 终端节点只做字符串路由（$ 前缀分流），不理解机械臂语义
+ * - 任务节点理解"收起/吸取/放置"等高层语义，拆解为多步低层指令
+ * - 通信节点只做协议打包与串口收发
+ *
+ * @section 位置参数加载
+ * 通过 ROS2 参数系统从 YAML 文件加载四组预设位置：
+ * - stow_pos:  收起位置（机械臂待机）
+ * - pick_pos:  吸取位置（对准物块）
+ * - place_pos: 放置位置（目标区域）
+ * - start_pos: 启动位置（初始展开）
+ * 每组 4 臂 × 2 坐标 (x, y)，通过 declare_parameter 声明默认值 10.0。
+ *
  * @param argc 命令行参数数量。
  * @param argv 命令行参数数组。
  * @retval int 进程退出码。

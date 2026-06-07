@@ -74,21 +74,30 @@
 //  代码阅读导航（建议先看这段）
 // ------------------------------------------------------------
 //  A. 连接部分
-//     open()            : 打开并配置指定串口
+//     open()            : 打开并配置指定串口（8N1 原始模式）
 //     open_by_hwid()    : 自动扫描 ttyACM*/ttyUSB* 并按硬件 ID 连接（失败重试）
+//     configure_auto_reconnect() / reconnect_once() / try_reconnect_once()
+//                       : 自动重连有限状态机（FSM）
 //
 //  B. 接收部分
-//     receive_once()    : 从串口读入字节到缓存
+//     receive_once()    : 主接收循环入口（libusb 掉线预检 → read() → 帧解析）
 //     parse_feedback_frame()
-//                       : 在缓存里找完整帧、校验 CRC、刷新状态缓存
+//                       : 协议分派 → parse_plane_feedback_frame / parse_4dof_feedback_frame
+//                         帧同步策略：滑动窗口搜索帧头 → 双帧长 CRC 校验 → 数据不足保留/坏帧丢弃
 //
 //  C. 发送部分
 //     send_arm_cmd() / send_gimbal_cmd() / send_valve_cmd()
-//                       : 按协议打包并发送
+//                       : 按协议打包帧 → write_bytes()（循环写，断线级联重连）
 //
 //  D. 上层适配
 //     handle_text_command()
-//                       : 将字符串命令解析为具体发送函数调用
+//                       : 规范化 → 分词 → 命令分派（自动按协议适配 AA/BB）
+//
+//  E. 异常处理总览
+//     - 串口断开：read/write EIO/ENODEV/ENXIO → close() + clear_report_state() + reconnect
+//     - 帧同步失败：跳过坏字节重新搜索，永不阻塞
+//     - libusb 不可用：保守策略返回 true（不误触发掉线）
+//     - 参数越界：返回 false / 零值，不崩溃
 // ============================================================
 
 arm_internation::arm_internation() {}
@@ -96,17 +105,30 @@ arm_internation::~arm_internation() { close(); }
 
 namespace
 {
-    // 反馈帧兼容长度：
-    // - 49B: 2 + 40(float) + 4(status) + 2(tail) + 1(crc)
-    // - 53B: 49B 基础上额外 4 字节保留位（常见于下位机扩展版本）
+    /**
+     * @name 反馈帧兼容长度常量
+     * @details AA 协议存在两个兼容版本：
+     *          - V1 (49B): 标准版，2 头 + 40 浮点净荷 + 4 传感器 + 2 尾 + 1 CRC
+     *          - V2 (53B): 扩展版，V1 基础上在微动状态与帧尾之间插入 4 字节保留位
+     *          parse_plane_feedback_frame() 对候选帧头同时尝试两种帧长，
+     *          以 tail + CRC 双校验通过的为准，兼容不同固件版本。
+     *          BB 协议固定 46 字节，无版本兼容问题。
+     * @{
+     */
     static constexpr size_t kFbFrameLenV1 = 49;
     static constexpr size_t kFbFrameLenV2 = 53;
     static constexpr size_t k4DofFbFrameLen = 46;
+    /** @} */
 
-
-    // 将常见整型波特率转换为 termios 的 speed_t 常量。
-    // 说明：统一映射可以避免调用方直接传入平台相关宏值。
-
+    /**
+     * @brief 将常见整型波特率转换为 termios speed_t 常量。
+     * @param baud_rate 整型波特率（9600 ~ 921600）
+     * @param[out] speed 输出的 termios 速度常量
+     * @retval true 转换成功
+     * @retval false 不支持的波特率值
+     * @note 统一映射避免调用方直接传入平台相关宏值（如 B115200），
+     *       提高代码可移植性。
+     */
     bool baud_to_termios(int baud_rate, speed_t &speed)
     {
         switch (baud_rate)
@@ -140,6 +162,16 @@ namespace
         }
     }
 
+    /**
+     * @brief 字符串转小写（无符号安全版本）。
+     * @details 使用 unsigned char 转换避免高位字符（如 UTF-8 多字节）导致未定义行为。
+     *          仅用于 ASCII 协议标识符和命令 token，不处理完整 Unicode。
+     */
+    /**
+     * @brief 字符串转小写（无符号安全版本）。
+     * @details 使用 unsigned char 转换避免高位字符（如 UTF-8 多字节）导致未定义行为。
+     *          仅用于 ASCII 协议标识符和命令 token，不处理完整 Unicode。
+     */
     std::string to_lower_copy(std::string s)
     {
         // 使用无符号字符转换，避免高位字符导致未定义行为。
@@ -197,6 +229,17 @@ namespace
         return !value.empty();
     }
 
+    /**
+     * @brief 查找 sysfs 中 tty 设备对应的 USB VID/PID。
+     * @param tty_name tty 设备名（如 "ttyACM0"）
+     * @param[out] vendor 输出的 idVendor 字符串（小写十六进制）
+     * @param[out] product 输出的 idProduct 字符串（小写十六进制）
+     * @retval true 成功读取 VID/PID
+     * @retval false sysfs 路径不存在或无法读取
+     * @details 从 /sys/class/tty/<tty>/device 出发，逐级向父目录回溯，
+     *          最多 10 级，直到找到 idVendor/idProduct 文件。
+     *          设计目的：避免硬编码设备路径，适应不同内核版本 sysfs 布局。
+     */
     bool find_usb_vendor_product_for_tty(const std::string &tty_name, std::string &vendor, std::string &product)
     {
         // 思路：
@@ -232,6 +275,14 @@ namespace
         return false;
     }
 
+    /**
+     * @brief 解析 "VID:PID" 格式的硬件 ID 字符串。
+     * @param hw_id 输入字符串（如 "0483:5740"）
+     * @param[out] vendor 输出的 idVendor（小写）
+     * @param[out] product 输出的 idProduct（小写）
+     * @retval true 格式正确且非空
+     * @retval false 无冒号分隔符或字段为空
+     */
     // 在 /dev 目录筛选 ttyACM*/ttyUSB*，并按 idVendor:idProduct 匹配目标设备。
     bool parse_hw_id(const std::string &hw_id, std::string &vendor, std::string &product)
     {
@@ -246,6 +297,13 @@ namespace
         return !vendor.empty() && !product.empty();
     }
 
+    /**
+     * @brief 严格解析 4 位十六进制字符串为 uint16_t。
+     * @param text 十六进制字符串（如 "0483"，不区分大小写）
+     * @param[out] value 输出的无符号 16 位整数值
+     * @retval true 成功解析
+     * @retval false 空字符串/超长/非十六进制字符/溢出
+     */
     bool parse_hex_u16(const std::string &text, uint16_t &value)
     {
         if (text.empty() || text.size() > 4)
@@ -276,6 +334,17 @@ namespace
         return parse_hex_u16(vendor, vendor_id) && parse_hex_u16(product, product_id);
     }
 
+    /**
+     * @brief 通过 libusb 检查指定 VID/PID 的 USB 设备是否在线。
+     * @param vendor_id USB 供应商 ID
+     * @param product_id USB 产品 ID
+     * @retval true 设备在线或 libusb 初始化失败（保守策略：不误触发掉线）
+     * @retval false 设备不在 USB 总线上
+     * @details libusb 直接枚举 USB 总线设备列表，不依赖串口驱动状态。
+     *          当 libusb_init() 失败时（如权限不足），保守返回 true，
+     *          避免因库不可用而错误触发断线重连。
+     *          调用方应在每次检测后调用 libusb_exit() 清理上下文。
+     */
     bool has_usb_device_via_libusb(uint16_t vendor_id, uint16_t product_id)
     {
         libusb_context *ctx = nullptr;
@@ -529,6 +598,37 @@ uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
 }
 
 // ---- 解析反馈帧 ----
+/**
+ * @section parse_plane_feedback_frame 帧同步状态机
+ *
+ * 核心挑战：串口是流式设备，read() 不保证帧边界对齐。
+ * 策略："滑动窗口 + 双帧长试探 + 坏帧逐字节丢弃"
+ *
+ * 状态转换图：
+ *  ┌──────────┐   搜索到 0xAA 0x01    ┌──────────────┐
+ *  │ 搜索帧头  │─────────────────────▶│ 候选帧校验    │
+ *  │(滑动窗口) │◀────────────────────│              │
+ *  └──────────┘  坏帧：丢弃1字节      └──────┬───────┘
+ *        │          继续搜索                  │
+ *        │ 数据不足                           │ tail + CRC 通过
+ *        ▼                                    ▼
+ *  ┌──────────┐                        ┌──────────────┐
+ *  │ 等待拼接  │                        │ 解码 & 更新   │
+ *  │(保留帧头) │                        │ 状态缓存      │
+ *  └──────────┘                        └──────────────┘
+ *
+ * 关键设计决策：
+ * - "数据不足"与"校验失败"的区分：
+ *   若当前候选帧头 + 最长帧长（V2/53B）超出 rx_len_，判定为数据不足，
+ *   保留帧头在缓存前端，等待下次 read() 拼接。不丢弃任何字节。
+ *   若两种帧长都有足够字节但 tail/CRC 均不通过，则为真正坏帧头，
+ *   丢弃当前帧头的一个字节，从下一字节继续搜索。
+ *
+ * - 双帧长兼容：
+ *   优先尝试 V1(49B)，再尝试 V2(53B)。
+ *   两种帧长各自独立校验 tail(0xFF 0xEE) + CRC8。
+ *   这确保下位机固件升级（增加保留位）后无需修改代码。
+ */
 bool arm_internation::parse_feedback_frame()
 {
     if (protocol_ == ArmProtocol::Dof4BB)
@@ -540,7 +640,7 @@ bool arm_internation::parse_feedback_frame()
 
 bool arm_internation::parse_plane_feedback_frame()
 {
-    // 注意：接收缓存是“流式字节”，不保证 read 一次就是一帧。
+    // 注意：接收缓存是"流式字节"，不保证 read 一次就是一帧。
     // 这里在同一次调用内持续重同步，直到找到有效帧或缓存不足最短帧。
     while (rx_len_ >= kFbFrameLenV1)
     {
@@ -729,6 +829,31 @@ bool arm_internation::parse_4dof_feedback_frame()
 // ---- 接收一次并尝试解析 ----
 bool arm_internation::receive_once()
 {
+    /**
+     * @section receive_once 状态机（三层级联检测）
+     *
+     * 本函数是"接收-解析-容错"一体化入口，按优先级串联三层检测：
+     *
+     * [1] libusb 掉线预检（仅 auto_reconnect 模式）
+     *     条件：距上次检查 >= usb_check_interval_ms_（默认 500ms）
+     *     动作：调用 is_bound_hwid_online_libusb() 查询 USB 总线
+     *     掉线则：close() → clear_report_state() → reconnect_once()
+     *
+     * [2] 串口 read()
+     *     正常：追加字节到 rx_buf_，累计 rx_len_
+     *     缓冲区满（>= kBufSize=512）：直接清空，防止写越界
+     *     read() 返回错误：判断 errno 是否为断开类（EIO/ENODEV/ENXIO）
+     *       是 → 级联触发重连（同 [1] 的掉线路径）
+     *       否 → 静默返回 false
+     *
+     * [3] parse_feedback_frame()
+     *     按当前协议（AA/BB）搜索完整帧、校验 CRC
+     *     成功 → 更新状态缓存，返回 true
+     *     失败 → 返回 false（等待下次 receive_once 累积更多字节）
+     *
+     * 输出：true=本次调用解析出一帧；false=无新帧或错误
+     * 异常：所有异常均内部消化，不向上抛出
+     */
     if (fd_ < 0)
     {
         clear_report_state();
@@ -847,6 +972,48 @@ void arm_internation::set_decode_scale(float pos_scale, float angle_scale)
     // 内部只保留 float 状态；比例仅影响 get_arm_pos/get_gimbal 的视图换算。
 }
 
+// ---- 写串口 ----//
+bool arm_internation::write_bytes(const uint8_t *data, size_t len)
+{
+    if (fd_ < 0 && !reconnect_once())
+    {
+        clear_report_state();
+        return false;
+    }
+
+    // 串口 write 可能“部分写入”，这里循环直到全部写完或失败。
+    size_t written = 0;
+    while (written < len)
+    {
+        const ssize_t n = ::write(fd_, data + written, len - written);
+        if (n <= 0)
+        {
+            const int err = errno;
+            if (n < 0 && is_disconnect_errno(err))
+            {
+                std::cerr << "[arm_internation] serial disconnected on write, errno=" << err
+                          << ", entering reconnect state" << std::endl;
+                close();
+                clear_report_state();
+                reconnect_once();
+            }
+            return false;
+        }
+        written += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+/**
+ * @brief 完整写入指定字节到串口（循环写 + 断线级联恢复）。
+ * @details 设计要点：
+ *          - 循环 write()：POSIX write() 可能只写入部分字节，必须循环直到全部写完
+ *          - 断线检测：write() 返回错误时判断 errno 是否为断开类
+ *            （EIO/ENODEV/ENXIO/EBADF/EPIPE），若是则 close() + clear_report_state()
+ *            + reconnect_once() 级联触发自动重连
+ *          - 输入校验：若 fd_ < 0，先尝试 reconnect_once()，失败则清空上报状态
+ *          - 返回值：只有全部 len 字节成功写入才返回 true
+ */
 // ---- 写串口 ----//
 bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 {
@@ -1296,6 +1463,462 @@ bool arm_internation::try_reconnect_once()
 }
 
 // 解析文本命令的主入口，支持机械臂、云台、电磁阀等多种命令格式，具有一定容错能力。
+/**
+ * @section handle_text_command 命令分派状态机
+ *
+ * 设计目的：将人类可读的文本命令（支持中英文别名、多种分隔符）转换为协议帧发送。
+ * 这是上层 ROS 话题 /arm_internation/cmd 的唯一入口。
+ *
+ * 分派决策树（按首 token 优先级）：
+ *
+ *   normalized cmd
+ *        │
+ *   ┌────┼────┬────┬────┬────┬────┐
+ *   ▼    ▼    ▼    ▼    ▼    ▼    ▼
+ * 4POSE 4ACT LF/RF G    V    P    A
+ *  (BB)  (BB) /LB/RB (AA) (both)(both)(both)
+ *                  (AA)
+ *
+ * 输入容错设计：
+ * - 中英文标点（，：；→ ,:;）自动转换
+ * - 空格去除
+ * - 前缀分隔符兼容：X:10 / X=10 / X10 均等效
+ * - 电磁阀 V,id 无状态参数时翻转缓存态（一键切换）
+ *
+ * 异常处理：
+ * - 空命令：返回 false
+ * - token 数量不足：返回 false
+ * - 数值解析失败：返回 false（strtol/strtof 严格模式）
+ * - 协议不匹配：BB 协议下 AA 命令（arm/gimbal）返回 false
+ * - 越界参数：arm_id>3、valve_id>3 返回 false
+ */
+bool arm_internation::handle_text_command(const std::string &command_text)
+{
+    // 解析总入口：
+    // 1) 先做文本规范化
+    // 2) 再按首 token 判断命令类型（机械臂/云台/电磁阀）
+    // 3) 最终调用 send_*_cmd
+    const std::string normalized = normalize_cmd_text(command_text);
+    if (normalized.empty())
+    {
+        return false;
+    }
+
+    const std::vector<std::string> tokens = split_by_comma(normalized);
+    if (tokens.empty())
+    {
+        return false;
+    }
+
+    const std::string cmd = to_upper_copy(tokens[0]);
+
+    if (cmd == "4POSE" || cmd == "4P" || cmd == "DOF4POSE")
+    {
+        // 4DOF 位姿命令：
+        //   4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
+        //   4POSE,R,0.1,0.2,0.3,0.4
+        if (tokens.size() < 6)
+        {
+            return false;
+        }
+
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        float pitch = 0.0f;
+        bool has_x = false;
+        bool has_y = false;
+        bool has_z = false;
+        bool has_pitch = false;
+
+        for (size_t i = 2; i < tokens.size(); ++i)
+        {
+            float value = 0.0f;
+            if (parse_float_after_prefix(tokens[i], "X", value))
+            {
+                x = value;
+                has_x = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Y", value))
+            {
+                y = value;
+                has_y = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Z", value))
+            {
+                z = value;
+                has_z = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "PITCH", value) ||
+                parse_float_after_prefix(tokens[i], "P", value))
+            {
+                pitch = value;
+                has_pitch = true;
+                continue;
+            }
+            if (parse_float_token(tokens[i], value))
+            {
+                if (!has_x)
+                {
+                    x = value;
+                    has_x = true;
+                }
+                else if (!has_y)
+                {
+                    y = value;
+                    has_y = true;
+                }
+                else if (!has_z)
+                {
+                    z = value;
+                    has_z = true;
+                }
+                else if (!has_pitch)
+                {
+                    pitch = value;
+                    has_pitch = true;
+                }
+            }
+        }
+
+        if (!has_x || !has_y || !has_z || !has_pitch)
+        {
+            return false;
+        }
+        return send_4dof_pose_cmd(dof4_arm_id, x, y, z, pitch);
+    }
+
+    if (cmd == "4ACT" || cmd == "4ACTION" || cmd == "DOF4ACT")
+    {
+        // 4ACT,0 中止；4ACT,1..N 触发下位机 action_state_4dof_e 对应动作。
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        int action_id = -1;
+        if (!parse_int_token(tokens[1], action_id) || action_id < 0 || action_id > 255)
+        {
+            return false;
+        }
+        return send_4dof_action_cmd(static_cast<uint8_t>(action_id));
+    }
+
+    int arm_id = -1;
+    if (parse_arm_alias(tokens[0], arm_id))
+    {
+        // 机械臂命令格式示例：
+        // RL,X:10.5,Y:20.0
+        // RF,10,20
+        float x = 0.0f;
+        float y = 0.0f;
+        bool has_x = false;
+        bool has_y = false;
+
+        for (size_t i = 1; i < tokens.size(); ++i)
+        {
+            float value = 0.0f;
+            if (parse_float_after_prefix(tokens[i], "X", value))
+            {
+                x = value;
+                has_x = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Y", value))
+            {
+                y = value;
+                has_y = true;
+                continue;
+            }
+            if (parse_float_token(tokens[i], value))
+            {
+                if (!has_x)
+                {
+                    x = value;
+                    has_x = true;
+                }
+                else if (!has_y)
+                {
+                    y = value;
+                    has_y = true;
+                }
+            }
+        }
+
+        if (!has_x || !has_y)
+        {
+            return false;
+        }
+        return send_arm_cmd(arm_id, x, y);
+    }
+
+    if (cmd == "G")
+    {
+        // 云台命令：G,yaw,pitch（示例：G,0,0）
+        if (tokens.size() < 3)
+        {
+            return false;
+        }
+        int yaw = 0;
+        int pitch = 0;
+        if (!parse_int_token(tokens[1], yaw) || !parse_int_token(tokens[2], pitch))
+        {
+            return false;
+        }
+        return send_gimbal_cmd(0, static_cast<int16_t>(yaw), static_cast<int16_t>(pitch));
+    }
+
+    if (cmd == "V")
+    {
+        // 电磁阀命令：
+        // V,id           -> 翻转该阀当前“命令态”
+        // V,id,state     -> 显式设置
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        int valve_id = -1;
+        if (!parse_int_token(tokens[1], valve_id) || valve_id < 0 || valve_id > 3)
+        {
+            return false;
+        }
+
+        bool state = false;
+        bool has_state = false;
+        if (tokens.size() >= 3)
+        {
+            const std::string s = to_upper_copy(tokens[2]);
+            if (s == "1" || s == "ON" || s == "OPEN" || s == "TRUE")
+            {
+                state = true;
+                has_state = true;
+            }
+            else if (s == "0" || s == "OFF" || s == "CLOSE" || s == "FALSE")
+            {
+                state = false;
+                has_state = true;
+            }
+        }
+
+        if (!has_state)
+        {
+            // 若未给 state，则翻转缓存态，方便“一键切换”。
+            std::lock_guard<std::mutex> lock(valve_cmd_mutex_);
+            state = !valve_cmd_state_[valve_id];
+        }
+
+        if (!send_valve_cmd(valve_id, state))
+        {
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(valve_cmd_mutex_);
+        // 成功发送后更新缓存态，保证下一次翻转有依据。
+        valve_cmd_state_[valve_id] = state;
+        return true;
+    }
+
+    if (cmd == "A")
+    {
+        // A,0..255：AA 模式作为任务赛答案，BB 模式作为 CMD4_ANSWER_CONTROL 预留字段发送。
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        int answer = -1;
+        if (!parse_int_token(tokens[1], answer) || answer < 0 || answer > 255)
+        {
+            return false;
+        }
+        return send_answer_cmd(static_cast<uint8_t>(answer));
+    }
+
+    if (cmd == "P")
+    {
+        // 气泵命令：
+        // P,ON,2500    -> 打开气泵，设置速度 2500
+        // P,OFF        -> 关闭气泵
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+
+        const std::string action = to_upper_copy(tokens[1]);
+        if (action == "ON" || action == "1" || action == "OPEN" || action == "TRUE")
+        {
+            int speed = 0;
+            if (tokens.size() >= 3)
+            {
+                if (!parse_int_token(tokens[2], speed) || speed < 0)
+                {
+                    return false;
+                }
+            }
+            return send_pump_cmd(true, speed);
+        }
+        else if (action == "OFF" || action == "0" || action == "CLOSE" || action == "FALSE")
+        {
+            return send_pump_cmd(false, 0);
+        }
+
+        return false;
+    }
+
+    return false;
+}
+
+/**
+ * @brief 自动重连尝试（非阻塞，频率受控）。
+ * @details 由 receive_once() 和 write_bytes() 在检测到断线时级联调用。
+ *          - 前置条件：auto_reconnect_enabled_ 且 reconnect_hw_id_ 非空
+ *          - 频率控制：距上次尝试 < retry_ms_ 时直接返回 false
+ *          - 加锁：reconnect_mutex_ 防止并发重连竞态
+ *          - 成功：fd_ 变为有效值，last_usb_check_tp_ 重置
+ *
+ * 与 try_reconnect_once() 的区别：
+ *          - reconnect_once()：内部级联调用，无外部依赖
+ *          - try_reconnect_once()：供 ROS 主循环周期调用，额外检查 fd_ >= 0 快速路径
+ */
+bool arm_internation::reconnect_once()
+{
+    if (!auto_reconnect_enabled_.load() || reconnect_hw_id_.empty())
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(reconnect_mutex_);
+    if (fd_ >= 0)
+    {
+        return true;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (last_reconnect_attempt_tp_.time_since_epoch().count() != 0)
+    {
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_reconnect_attempt_tp_).count();
+        if (elapsed_ms < reconnect_retry_ms_)
+        {
+            return false;
+        }
+    }
+    last_reconnect_attempt_tp_ = now;
+
+    return open_matching_tty_once(reconnect_hw_id_, reconnect_baud_rate_, "auto_reconnect");
+}
+
+bool arm_internation::is_bound_hwid_online_libusb() const
+{
+    if (reconnect_hw_id_.empty())
+    {
+        return true;
+    }
+
+    uint16_t vendor_id = 0;
+    uint16_t product_id = 0;
+    if (!parse_hw_id_to_vid_pid(reconnect_hw_id_, vendor_id, product_id))
+    {
+        // HWID 配置异常时不触发掉线判定，交由串口读写错误路径处理。
+        return true;
+    }
+
+    return has_usb_device_via_libusb(vendor_id, product_id);
+}
+
+void arm_internation::clear_report_state()
+{
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        for (auto &arm_pos : arm_pos_float_)
+        {
+            arm_pos.x = 0.0f;
+            arm_pos.y = 0.0f;
+        }
+        for (auto &pose : dof4_pose_float_)
+        {
+            pose = Arm4DofPoseFloat{};
+        }
+
+        gimbal_float_.yaw = 0.0f;
+        gimbal_float_.pitch = 0.0f;
+        sensor_ = SensorStatus{};
+    }
+
+    rx_len_ = 0;
+}
+
+// 供外部调用的非阻塞重连尝试，适用于 ROS 主循环周期调用。
+bool arm_internation::try_reconnect_once()
+{
+    if (reconnect_hw_id_.empty())
+    {
+        return false;
+    }
+
+    // 加锁：避免与 receive_once() / write_bytes() 并发修改 fd_
+    std::lock_guard<std::mutex> lock(reconnect_mutex_);
+    // 已经连接时无需操作
+    if (fd_ >= 0)
+    {
+        return true;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (last_reconnect_attempt_tp_.time_since_epoch().count() != 0)
+    {
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_reconnect_attempt_tp_).count();
+        if (elapsed_ms < reconnect_retry_ms_)
+        {
+            return false;
+        }
+    }
+    last_reconnect_attempt_tp_ = now;
+
+    return open_matching_tty_once(reconnect_hw_id_, reconnect_baud_rate_, "try_reconnect_once");
+}
+
+// 解析文本命令的主入口，支持机械臂、云台、电磁阀等多种命令格式，具有一定容错能力。
+/**
+ * @section handle_text_command 命令分派状态机
+ *
+ * 设计目的：将人类可读的文本命令（支持中英文别名、多种分隔符）转换为协议帧发送。
+ * 这是上层 ROS 话题 /arm_internation/cmd 的唯一入口。
+ *
+ * 分派决策树（按首 token 优先级）：
+ *
+ *   normalized cmd
+ *        │
+ *   ┌────┼────┬────┬────┬────┬────┐
+ *   ▼    ▼    ▼    ▼    ▼    ▼    ▼
+ * 4POSE 4ACT LF/RF G    V    P    A
+ *  (BB)  (BB) /LB/RB (AA) (both)(both)(both)
+ *                  (AA)
+ *
+ * 输入容错设计：
+ * - 中英文标点（，：；→ ,:;）自动转换
+ * - 空格去除
+ * - 前缀分隔符兼容：X:10 / X=10 / X10 均等效
+ * - 电磁阀 V,id 无状态参数时翻转缓存态（一键切换）
+ *
+ * 异常处理：
+ * - 空命令：返回 false
+ * - token 数量不足：返回 false
+ * - 数值解析失败：返回 false（strtol/strtof 严格模式）
+ * - 协议不匹配：BB 协议下 AA 命令（arm/gimbal）返回 false
+ * - 越界参数：arm_id>3、valve_id>3 返回 false
+ */
 bool arm_internation::handle_text_command(const std::string &command_text)
 {
     // 解析总入口：

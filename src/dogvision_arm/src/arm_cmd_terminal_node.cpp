@@ -54,6 +54,31 @@ static std::string trim_line(const std::string& line)
 
 /**
  * @brief 运行 ROS2 终端命令发布节点。
+ *
+ * @section 架构设计
+ * 本节点提供人机交互界面（stdin 终端输入），将用户命令路由到两个不同层级的话题：
+ *
+ *   stdin 输入
+ *      │
+ *      ├── 以 '$' 开头 ──▶ /arm_internation/cmd      （低层协议指令）
+ *      │                   例：$LF,X:10,Y:20
+ *      │                       $4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
+ *      │                       $V,1,ON
+ *      │
+ *      └── 无前缀 ──────▶ /arm/mission_cmd          （高层任务指令）
+ *                          例：STOW,ALL
+ *                              PICK,RF
+ *                              PLACE,ALL
+ *
+ * $ 前缀的设计意图：
+ * - 区分"调试/手动控制"（低层）与"任务编排"（高层）两类使用场景
+ * - 低层命令直接透传 arm_internation 协议引擎，不做任务级语义解析
+ * - 高层命令由 arm_mission_node 拆解为一系列低层命令序列
+ *
+ * @section 输入线程模型
+ * std::getline() 在独立线程中阻塞等待用户输入，通过 atomic<bool> running
+ * 与主 ROS 线程同步退出。避免阻塞 spin_some() 导致节点无法响应 ROS 事件。
+ *
  * @param argc 命令行参数数量。
  * @param argv 命令行参数数组。
  * @retval int 进程退出码。

@@ -11,7 +11,15 @@
 using namespace std::chrono_literals;
 
 /**
- * @brief 构建机械臂状态字符串。
+ * @brief 构建机械臂状态字符串，用于 /arm_internation/data 话题发布。
+ *
+ * 设计意图：将 arm_internation 内部状态缓存序列化为单行文本，
+ * 便于 ROS 话题监控、日志记录和下游节点解析。
+ *
+ * 输出格式按协议区分：
+ * - AA 协议：LF:x,y;RF:x,y;LB:x,y;RB:x,y;YAW:yaw;PITCH:pitch;VALVE_BITS:n;MICRO_BITS:n
+ * - BB 协议：MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n
+ *
  * @param my_arm 用于读取当前状态的机械臂通信对象。
  * @retval std::string 用于 /arm_internation/data 的状态数据。
  */
@@ -65,6 +73,33 @@ static std::string build_status_payload(const arm_internation& my_arm)
 
 /**
  * @brief 运行 ROS2 机械臂串口通信节点。
+ *
+ * @section 节点架构
+ * 本节点是串口通信栈的最底层节点，负责：
+ * 1) 串口生命周期管理（连接/断线检测/自动重连）
+ * 2) 反馈帧接收与状态发布（200Hz 主循环 → 20Hz 话题发布）
+ * 3) 命令订阅与转发（/arm_internation/cmd → handle_text_command）
+ *
+ * @section 主循环时序
+ *   200Hz 周期内执行：
+ *   ┌─ 1s 间隔检查 ─────────────────────────────────────┐
+ *   │  if (!is_open()) → try_reconnect_once()           │
+ *   └──────────────────────────────────────────────────┘
+ *   ┌─ 每次循环 ────────────────────────────────────────┐
+ *   │  receive_once() → 读串口 + 帧解析                 │
+ *   └──────────────────────────────────────────────────┘
+ *   ┌─ 50ms 间隔 ───────────────────────────────────────┐
+ *   │  build_status_payload() → publish()               │
+ *   └──────────────────────────────────────────────────┘
+ *   ┌─ 每次循环 ────────────────────────────────────────┐
+ *   │  spin_some() → 处理订阅回调                       │
+ *   └──────────────────────────────────────────────────┘
+ *
+ * @section 异常处理
+ * - open() 失败：不退出节点，保持存活等待重连
+ * - 未知协议：回退到 "aa" 并 WARN
+ * - 无效命令：WARN 日志，不崩溃
+ *
  * @param argc 命令行参数数量。
  * @param argv 命令行参数数组。
  * @retval int 进程退出码。
