@@ -44,13 +44,15 @@ public:
 
     /**
      * @brief 将题目文字渲染为白底黑字图片
-     * @param text  要显示的文本（如 "12 + 8 * 3 - 4 / 2 + 5 = "）
+     * @param text          要显示的文本（如 "12 + 8 * 3 - 4 / 2 + 5 = "）
+     * @param canvas_width  画布宽度（像素）
+     * @param canvas_height 画布高度（像素）
      * @retval cv::Mat  渲染好的 BGR 图像
      *
-     * 使用 FONT_HERSHEY_DUPLEX 粗体渲染，文字居中对齐。
-     * 自动适配窗口分辨率。
+     * 使用 FONT_HERSHEY_DUPLEX 粗体渲染，文字在画布上居中对齐。
+     * 画布尺寸由调用方指定（通常匹配屏幕分辨率），全屏窗口自动缩放填充。
      */
-    cv::Mat renderImage(const std::string &text) const;
+    cv::Mat renderImage(const std::string &text, int canvas_width, int canvas_height) const;
 
     /**
      * @brief 将一道题的题目和答案（含 mod4）追加写入 YAML 文件

@@ -139,3 +139,127 @@ math_problems:
     question: "14 - 9 * 20 / 1 + 5 = "
     answer: -161
     mod4: 3
+math_problems:
+  - id: 1
+    question: "1 + 2 / 1 * 20 - 12 = "
+    answer: 29
+    mod4: 1
+  - id: 2
+    question: "19 / 1 + 12 - 9 * 3 = "
+    answer: 4
+    mod4: 0
+  - id: 3
+    question: "14 / 14 * 19 + 12 - 1 = "
+    answer: 30
+    mod4: 2
+math_problems:
+  - id: 1
+    question: "12 - 3 + 1 / 1 * 12 = "
+    answer: 21
+    mod4: 1
+math_problems:
+  - id: 1
+    question: "10 - 3 + 10 / 5 * 11 = "
+    answer: 29
+    mod4: 1
+  - id: 2
+    question: "11 + 20 / 5 - 6 * 13 = "
+    answer: -63
+    mod4: 1
+  - id: 3
+    question: "8 + 2 - 3 / 3 * 15 = "
+    answer: -5
+    mod4: 3
+  - id: 4
+    question: "3 - 12 + 7 * 13 / 1 = "
+    answer: 82
+    mod4: 2
+  - id: 5
+    question: "20 * 4 - 7 / 7 + 12 = "
+    answer: 91
+    mod4: 3
+  - id: 6
+    question: "19 - 13 * 1 + 1 / 1 = "
+    answer: 7
+    mod4: 3
+  - id: 7
+    question: "3 * 3 + 2 - 2 / 2 = "
+    answer: 10
+    mod4: 2
+  - id: 8
+    question: "13 * 15 + 7 - 8 / 1 = "
+    answer: 194
+    mod4: 2
+  - id: 9
+    question: "1 - 13 * 17 / 13 + 5 = "
+    answer: -11
+    mod4: 1
+  - id: 10
+    question: "4 + 17 / 17 - 2 * 4 = "
+    answer: -3
+    mod4: 1
+  - id: 11
+    question: "20 * 3 + 6 / 2 - 3 = "
+    answer: 60
+    mod4: 0
+  - id: 12
+    question: "14 * 5 + 20 / 1 - 6 = "
+    answer: 84
+    mod4: 0
+  - id: 13
+    question: "13 - 11 + 13 / 1 * 18 = "
+    answer: 236
+    mod4: 0
+  - id: 14
+    question: "16 * 10 + 15 - 12 / 6 = "
+    answer: 173
+    mod4: 1
+  - id: 15
+    question: "19 * 4 / 4 - 2 + 17 = "
+    answer: 34
+    mod4: 2
+  - id: 16
+    question: "7 - 8 * 5 + 5 / 1 = "
+    answer: -28
+    mod4: 0
+  - id: 17
+    question: "2 - 5 * 3 / 15 + 12 = "
+    answer: 13
+    mod4: 1
+  - id: 18
+    question: "19 * 16 - 10 / 5 + 7 = "
+    answer: 309
+    mod4: 1
+  - id: 19
+    question: "13 / 1 * 9 - 7 + 6 = "
+    answer: 116
+    mod4: 0
+  - id: 20
+    question: "9 * 17 + 12 - 16 / 4 = "
+    answer: 161
+    mod4: 1
+math_problems:
+  - id: 1
+    question: "1 / 1 + 20 - 12 * 11 = "
+    answer: -111
+    mod4: 1
+  - id: 2
+    question: "18 * 18 / 3 - 1 + 2 = "
+    answer: 109
+    mod4: 1
+  - id: 3
+    question: "15 / 5 + 8 * 20 - 19 = "
+    answer: 144
+    mod4: 0
+  - id: 4
+    question: "16 - 6 / 6 + 9 * 14 = "
+    answer: 141
+    mod4: 1
+  - id: 5
+    question: "1 - 16 + 12 / 12 * 19 = "
+    answer: 4
+    mod4: 0
+  - id: 6
+    question: "15 * 20 / 6 + 7 - 3 = "
+    answer: 54
+    mod4: 2

@@ -493,9 +493,4 @@ private:
     std::chrono::steady_clock::time_point last_usb_check_tp_ = {};      ///< 上次 libusb 检查时间点
     std::chrono::steady_clock::time_point last_reconnect_attempt_tp_ = {}; ///< 上次重连尝试时间点
     std::mutex reconnect_mutex_;
-    std::chrono::steady_clock::time_point last_reconnect_attempt_tp_{};
-
-    // ---- libusb 在线检测节流 -----------------------------------
-    std::chrono::steady_clock::time_point last_usb_check_tp_{};
-    int usb_check_interval_ms_ = 300;
 };

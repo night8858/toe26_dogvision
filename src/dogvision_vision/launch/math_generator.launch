@@ -3,11 +3,15 @@
   <arg name="min_val" default="1"/>
   <arg name="max_val" default="100"/>
   <arg name="interval" default="10"/>
+  <arg name="canvas_width" default="1920"/>
+  <arg name="canvas_height" default="1080"/>
 
   <node pkg="dogvision_vision" exec="math_generator_node" name="math_generator_node" output="screen">
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
     <param name="min_val" value="$(var min_val)" type="int"/>
     <param name="max_val" value="$(var max_val)" type="int"/>
     <param name="interval" value="$(var interval)" type="int"/>
+    <param name="canvas_width" value="$(var canvas_width)" type="int"/>
+    <param name="canvas_height" value="$(var canvas_height)" type="int"/>
   </node>
 </launch>

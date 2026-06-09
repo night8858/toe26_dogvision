@@ -161,41 +161,26 @@ std::tuple<std::string, int, int> MathGenerator::generateProblem()
 // ──────────────────────────────────────────────
 // 渲染白底黑字图片（粗体 + 精确居中）
 // ──────────────────────────────────────────────
-cv::Mat MathGenerator::renderImage(const std::string &text) const
+cv::Mat MathGenerator::renderImage(const std::string &text,
+                                   int canvas_width,
+                                   int canvas_height) const
 {
-    // 获取屏幕分辨率（尝试读取当前窗口尺寸，失败则用 1920×1080 兜底）
-    int screen_w = 1920;
-    int screen_h = 1080;
-
-    cv::namedWindow("_tmp_resolution", cv::WINDOW_NORMAL);
-    cv::setWindowProperty("_tmp_resolution",
-                          cv::WND_PROP_FULLSCREEN,
-                          cv::WINDOW_FULLSCREEN);
-    cv::Rect rect = cv::getWindowImageRect("_tmp_resolution");
-    if (rect.width > 0 && rect.height > 0)
-    {
-        screen_w = rect.width;
-        screen_h = rect.height;
-    }
-    cv::destroyWindow("_tmp_resolution");
-
-    // 创建白色背景
-    cv::Mat image(screen_h, screen_w, CV_8UC3, cv::Scalar(255, 255, 255));
+    // 创建白色背景画布
+    cv::Mat image(canvas_height, canvas_width, CV_8UC3, cv::Scalar(255, 255, 255));
 
     // ── 粗体渲染 ──
     // FONT_HERSHEY_DUPLEX 本身比 SIMPLEX 更粗
-    // thickness 再放大一级，达到醒目的黑体效果
-    int font_face   = cv::FONT_HERSHEY_DUPLEX;
-    double font_scale = getFontScale(screen_w);
-    int thickness   = std::max(4, screen_w / 240);
+    int font_face    = cv::FONT_HERSHEY_DUPLEX;
+    double font_scale = getFontScale(canvas_width);
+    int thickness    = std::max(4, canvas_width / 240);
 
-    // ── 精确居中：循环微调直到文字完全位于图像中心区域 ──
+    // ── 计算文字尺寸 ──
     int baseline = 0;
     cv::Size text_size = cv::getTextSize(text, font_face, font_scale, thickness, &baseline);
 
-    // 水平居中 + 垂直居中（考虑 baseline 偏移）
-    int text_x = (screen_w - text_size.width) / 2;
-    int text_y = (screen_h + text_size.height - baseline) / 2;
+    // ── 精确居中（考虑 baseline 偏移，确保文字视觉上自然居中） ──
+    int text_x = (canvas_width  - text_size.width) / 2;
+    int text_y = (canvas_height + text_size.height - baseline) / 2;
 
     // ── 白色背景上绘制黑色文字 ──
     cv::putText(image, text,
@@ -241,8 +226,8 @@ void MathGenerator::appendToYaml(const std::string &problem, int answer, int mod
 // ──────────────────────────────────────────────
 double MathGenerator::getFontScale(int image_width) const
 {
-    // 以 1920 宽度为基准，比例缩放
-    // 1920px → 4.0  1080px → 2.5  等
-    double scale = static_cast<double>(image_width) / 480.0;
+    // 以宽度为基准动态缩放，确保文字在画布上有足够留白
+    // 1920px → 3.0  2560px → 4.0  1024px → 1.6
+    double scale = static_cast<double>(image_width) / 640.0;
     return std::max(1.0, std::min(scale, 10.0));
 }
