@@ -42,9 +42,16 @@ void show_result_window(const std::string& expr_str, int mod_result);
 /**
  * @brief 在输入图像中定位白底算术题区域。
  * @param input 源 BGR 图像。
+ * @param mask_out 可选输出参数：白色区域精确二值掩码（CV_8UC1）。
+ *                 只在找到区域时写入，传入 nullptr 可忽略。
+ * @param white_s_max  HSV 中 S 通道上限（默认 110，值越大容忍越"近似的白色"）。
+ * @param white_v_min  HSV 中 V 通道下限（默认 50，值越小容忍越"暗的白色"）。
  * @retval cv::Rect2f 外接矩形；空矩形表示未找到区域。
  */
-cv::Rect2f find_math_proble(const cv::Mat& input);
+cv::Rect2f find_math_proble(const cv::Mat& input,
+                            cv::Mat* mask_out = nullptr,
+                            int white_s_max = 110,
+                            int white_v_min = 50);
 
 /**
  * @brief 按配置图像尺寸初始化鱼眼去畸变映射表。

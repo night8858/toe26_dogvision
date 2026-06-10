@@ -208,19 +208,24 @@ void show_result_window(const std::string& expr_str, int mod_result)
 //    3. 查找最外层轮廓，按面积 / 宽高比 / 白色覆盖率筛选候选
 //    4. 返回"面积 × 白色比例"得分最高的候选矩形
 // ============================================================
-cv::Rect2f find_math_proble(const cv::Mat& input)
+cv::Rect2f find_math_proble(const cv::Mat& input,
+                            cv::Mat* mask_out,
+                            int white_s_max,
+                            int white_v_min)
 {
     if (input.empty()) return {};
 
     // ── 1. HSV 白色掩码 ──────────────────────────────────────────────────────
-    // 放宽阈值以支持远距离（亮度偏低）和轻微色偏场景
+    // 阈值可通过参数调整：
+    //   white_s_max = S 上限，越大越容忍近似的白色（如米白、浅灰）
+    //   white_v_min = V 下限，越小越容忍暗处的白色（如阴影中的白纸）
     cv::Mat hsv;
     cv::cvtColor(input, hsv, cv::COLOR_BGR2HSV);
 
     cv::Mat white_mask;
     cv::inRange(hsv,
-            cv::Scalar(0,   0,  70),  // V≥70 允许更暗的远距离目标
-            cv::Scalar(180, 90, 255), // S≤90 容忍更多环境色干扰
+            cv::Scalar(0, 0, white_v_min),
+            cv::Scalar(180, white_s_max, 255),
                 white_mask);
 
     // ── 2. 多级形态学处理 ────────────────────────────────────────────────────
@@ -265,9 +270,11 @@ cv::Rect2f find_math_proble(const cv::Mat& input)
 
     cv::Rect2f best;
     float best_score = -1.f;
+    int best_contour_idx = -1;
 
-    for (const auto& c : contours)
+    for (int i = 0; i < static_cast<int>(contours.size()); ++i)
     {
+        const auto& c = contours[i];
         cv::Rect br = cv::boundingRect(c);
         float area = static_cast<float>(br.area());
 
@@ -297,7 +304,16 @@ cv::Rect2f find_math_proble(const cv::Mat& input)
                               static_cast<float>(br.y),
                               static_cast<float>(br.width),
                               static_cast<float>(br.height));
+            best_contour_idx = i;
         }
+    }
+
+    // ── 5. 生成精确白色区域掩码（仅最佳轮廓）───────────────────────────────
+    if (mask_out != nullptr && best_contour_idx >= 0)
+    {
+        *mask_out = cv::Mat::zeros(input.size(), CV_8UC1);
+        cv::drawContours(*mask_out, contours, best_contour_idx,
+                         cv::Scalar(255), cv::FILLED);
     }
 
     return best;

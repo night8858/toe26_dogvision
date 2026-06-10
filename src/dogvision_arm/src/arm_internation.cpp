@@ -19,8 +19,10 @@
 
 #include <libusb-1.0/libusb.h> //检查硬件设备用
 
-// ============================================================
-//  协议帧格式说明（见头文件注释）
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║                    协议帧格式说明                              ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  见头文件注释，以下为 C++ 源码内嵌入式文档便于快速查阅。
 // ============================================================
 //  AA 平面机械臂协议：
 //  AA 01 反馈帧结构，CRC8 覆盖 [0] 到帧尾第二字节：
@@ -62,17 +64,63 @@
 //    [44]     0xEE
 //    [45]     CRC8（覆盖 [0]~[44]）
 //
-//  BB 下行帧：
-//    BB 02 arm_id x y z pitch（4 个 float32 LE）FF EE CRC8
+//  BB 下行帧，固定 22 字节，CRC8 覆盖 [0]~[20]：
+//    BB 02 arm_id x(4B LE) y(4B LE) z(4B LE) pitch(4B LE) FF EE CRC8
+//      [0]    0xBB
+//      [1]    0x02
+//      [2]    arm_id（0=左臂, 1=右臂）
+//      [3-6]  x（float32 LE）
+//      [7-10] y（float32 LE）
+//      [11-14] z（float32 LE）
+//      [15-18] pitch（float32 LE）
+//      [19]   0xFF
+//      [20]   0xEE
+//      [21]   CRC8（覆盖 [0]~[20]）
+//
+//  BB 03 动作帧，固定 6 字节，CRC8 覆盖 [0]~[4]：
 //    BB 03 action_id FF EE CRC8
+//      [0]    0xBB
+//      [1]    0x03
+//      [2]    action_id（对应下位机 action_state_4dof_e 枚举）
+//      [3]    0xFF
+//      [4]    0xEE
+//      [5]    CRC8（覆盖 [0]~[4]）
+//
+//  BB 04 电磁阀帧，固定 7 字节，CRC8 覆盖 [0]~[5]：
 //    BB 04 valve_id state FF EE CRC8
+//      [0]    0xBB
+//      [1]    0x04
+//      [2]    valve_id（0..3）
+//      [3]    state（0=关, 1=开）
+//      [4]    0xFF
+//      [5]    0xEE
+//      [6]    CRC8（覆盖 [0]~[5]）
+//
+//  BB 05 答案帧，固定 8 字节，CRC8 覆盖 [0]~[6]：
 //    BB 05 answer 0 0 FF EE CRC8
-//    BB 06 on_off speed(float LE) FF EE CRC8
+//      [0]    0xBB
+//      [1]    0x05
+//      [2]    answer（0..255，任务赛答案编号，STM32 端预留）
+//      [3]    0x00（预留，填充 0）
+//      [4]    0x00（预留，填充 0）
+//      [5]    0xFF
+//      [6]    0xEE
+//      [7]    CRC8（覆盖 [0]~[6]）
+//
+//  BB 06 气泵帧，固定 10 字节，CRC8 覆盖 [0]~[8]：
+//    BB 06 on_off speed(4B float LE) FF EE CRC8
+//      [0]    0xBB
+//      [1]    0x06
+//      [2]    on_off（0=关泵, 1=开泵）
+//      [3-6]  speed（float32 LE，气泵转速）
+//      [7]    0xFF
+//      [8]    0xEE
+//      [9]    CRC8（覆盖 [0]~[8]）
 // ============================================================
 
-// ============================================================
-//  代码阅读导航（建议先看这段）
-// ------------------------------------------------------------
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║                    代码阅读导航（建议先看这段）                  ║
+// ╚═══════════════════════════════════════════════════════════════╝
 //  A. 连接部分
 //     open()            : 打开并配置指定串口（8N1 原始模式）
 //     open_by_hwid()    : 自动扫描 ttyACM*/ttyUSB* 并按硬件 ID 连接（失败重试）
@@ -100,9 +148,17 @@
 //     - 参数越界：返回 false / 零值，不崩溃
 // ============================================================
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║              构造函数 / 析构函数                               ║
+// ╚═══════════════════════════════════════════════════════════════╝
 arm_internation::arm_internation() {}
 arm_internation::~arm_internation() { close(); }
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║              匿名命名空间：内部辅助工具函数                      ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  包含：波特率转换、字符串处理（大小写/trim/分割）、sysfs USB 查询、
+//  数值解析（int/float/hex）、float 小端编解码、断线 errno 判断等。
 namespace
 {
     /**
@@ -465,6 +521,13 @@ namespace
 
 } // namespace
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           串口连接与配置                                       ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  包括：open() 打开指定串口并配置 termios 8N1 原始模式，
+//        open_by_HWid() 按硬件 ID 自动扫描并连接（含阻塞重试），
+//        configure_auto_reconnect() 设置自动重连参数，
+//        close() 关闭串口、is_open() 查询连接状态。
 bool arm_internation::open(const std::string &port, int baud_rate)
 {
     // 先关后开，避免重复打开同一对象的 fd 导致泄漏或状态不一致。
@@ -554,6 +617,10 @@ void arm_internation::close()
     }
 }
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           协议模式配置                                         ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  支持 AA（平面 4 臂）与 BB（4DOF 双臂）两种协议模式切换。
 bool arm_internation::is_open() const { return fd_ >= 0; }
 
 bool arm_internation::set_protocol_from_string(const std::string &protocol_name)
@@ -584,7 +651,9 @@ const char *arm_internation::protocol_name() const
     return protocol_ == ArmProtocol::Dof4BB ? "4dof" : "aa";
 }
 
-// ---- CRC8/SMBUS ----
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           CRC8（SMBus 多项式 0x07）校验                        ║
+// ╚═══════════════════════════════════════════════════════════════╝
 uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
 {
     uint8_t crc = 0x00;
@@ -597,7 +666,13 @@ uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
     return crc;
 }
 
-// ---- 解析反馈帧 ----
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           反馈帧解析（接收路径）                                ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  parse_feedback_frame()      : 按当前协议分派到 AA 或 BB 解析器
+//  parse_plane_feedback_frame(): AA 协议 "滑动窗口 + 双帧长" 帧同步
+//  parse_4dof_feedback_frame() : BB 协议固定 46 字节帧同步
+//
 /**
  * @section parse_plane_feedback_frame 帧同步状态机
  *
@@ -826,7 +901,10 @@ bool arm_internation::parse_4dof_feedback_frame()
     return false;
 }
 
-// ---- 接收一次并尝试解析 ----
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           串口接收（三层级联检测）                              ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  receive_once(): libusb 掉线预检 → read() → 帧解析 → 状态更新
 bool arm_internation::receive_once()
 {
     /**
@@ -909,7 +987,13 @@ bool arm_internation::receive_once()
     return parse_feedback_frame();
 }
 
-// ---- 状态读取 ----//
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           状态读取接口                                         ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  get_arm_pos/get_gimbal: 缩放为 int16_t 的旧版接口
+//  get_arm_pos_float/get_gimbal_float/get_4dof_pose_float: float 原值
+//  get_sensor: 电磁阀 + 微动开关状态
+//  set_decode_scale: 配置 int16_t 输出的缩放比例
 ArmEndPos arm_internation::get_arm_pos(int arm_id) const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
@@ -972,7 +1056,10 @@ void arm_internation::set_decode_scale(float pos_scale, float angle_scale)
     // 内部只保留 float 状态；比例仅影响 get_arm_pos/get_gimbal 的视图换算。
 }
 
-// ---- 写串口 ----//
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           串口写入（底层）                                      ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  write_bytes(): 循环写入直到全部完成或失败，断线时级联重连。
 bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 {
     if (fd_ < 0 && !reconnect_once())
@@ -1005,7 +1092,16 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 }
 
 
-////////////////////////// ---- 发送命令 ---- ////////////////////////
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           发送命令（协议帧打包 + 串口写入）                     ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  send_arm_cmd()        : AA 02 机械臂位姿（x, y）
+//  send_gimbal_cmd()     : AA 03 云台角度（yaw, pitch）
+//  send_valve_cmd()      : AA 04 / BB 04 电磁阀控制
+//  send_answer_cmd()     : AA 05 / BB 05 任务赛答案
+//  send_pump_cmd()       : AA 06 / BB 06 气泵开关+速度
+//  send_4dof_pose_cmd()  : BB 02 4DOF 臂位姿（x, y, z, pitch）
+//  send_4dof_action_cmd(): BB 03 4DOF 预设动作触发
 bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 {
     if (protocol_ == ArmProtocol::Dof4BB)
@@ -1121,6 +1217,11 @@ bool arm_internation::send_4dof_action_cmd(uint8_t action_id)
 }
 
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           HWID 设备扫描与匹配                                   ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  find_ttys_by_HWid()  : 遍历 /dev 按 USB VID:PID 匹配 tty 设备
+//  open_matching_tty_once(): 尝试打开第一个匹配设备
 std::vector<std::string> arm_internation::find_ttys_by_HWid(const std::string &hw_id)
 {
     // 遍历 /dev 下 ttyACM*/ttyUSB*，逐个读取其 USB VID/PID 对比目标硬件 ID。
@@ -1200,6 +1301,14 @@ bool arm_internation::open_matching_tty_once(const std::string &hw_id, int baud_
     return false;
 }
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           文本命令解析（分词 / 别名 / 数值提取）                 ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  normalize_cmd_text()     : 中英标点统一、去空格
+//  parse_int_after_prefix() / parse_float_after_prefix(): 前缀式数值提取
+//  parse_float_token()      : 纯浮点 token 解析
+//  parse_arm_alias()        : AA 协议臂别名（LF/RF/LB/RB）
+//  parse_4dof_arm_alias()   : BB 协议臂别名（L/R）
 std::string arm_internation::normalize_cmd_text(std::string text)
 {
     // 统一命令格式，降低上层输入差异：
@@ -1322,6 +1431,13 @@ bool arm_internation::parse_4dof_arm_alias(const std::string &alias, int &arm_id
     return false;
 }
 
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           自动重连（有限状态机）                                 ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  reconnect_once()        : 带频率限制的阻塞重连（被内部调用）
+//  try_reconnect_once()    : 非阻塞重连（供外部 ROS 循环调用）
+//  is_bound_hwid_online_libusb(): libusb 掉线检测
+//  clear_report_state()    : 断线后清空上报状态与接收缓存
 bool arm_internation::reconnect_once()
 {
     if (!auto_reconnect_enabled_.load() || reconnect_hw_id_.empty())
@@ -1451,6 +1567,12 @@ bool arm_internation::try_reconnect_once()
  * - 协议不匹配：BB 协议下 AA 命令（arm/gimbal）返回 false
  * - 越界参数：arm_id>3、valve_id>3 返回 false
  */
+
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║           文本命令分派（主入口）                                 ║
+// ╚═══════════════════════════════════════════════════════════════╝
+//  handle_text_command(): 将人类可读文本命令 → 协议帧 → 串口发送
+//  分派：4POSE/4ACT → BB; LF/RF/LB/RB → AA; G/V/P/A → 双协议
 bool arm_internation::handle_text_command(const std::string &command_text)
 {
     // 解析总入口：

@@ -88,14 +88,18 @@ static bool run_ocr_pipeline(cv::Mat& img,
                              cv::Rect2f* out_roi = nullptr)
 {
     cv::Mat det_input;
-    cv::Rect2f math_roi = find_math_proble(img);
+    cv::Mat white_mask;  // 白色区域精确掩码，用于过滤非白色区域内的文字
+    cv::Rect2f math_roi = find_math_proble(img, &white_mask);
+
+    // math_rect 在此处统一定义，后续 ROI 裁剪和掩码过滤共用
+    cv::Rect math_rect(
+        static_cast<int>(math_roi.x),
+        static_cast<int>(math_roi.y),
+        static_cast<int>(math_roi.width),
+        static_cast<int>(math_roi.height));
+
     if (math_roi.area() > 0.0f)
     {
-        cv::Rect math_rect(
-            static_cast<int>(math_roi.x),
-            static_cast<int>(math_roi.y),
-            static_cast<int>(math_roi.width),
-            static_cast<int>(math_roi.height));
         math_rect &= cv::Rect(0, 0, img.cols, img.rows);
         if (math_rect.area() > 0)
         {
@@ -124,8 +128,35 @@ static bool run_ocr_pipeline(cv::Mat& img,
     det.preprocess(det_input);
     det.inference();
     det.postprocess();
-    const std::vector<OCRBox>& boxes = det.ocr_det_out_;
-    RCLCPP_INFO(logger, "Detected   : %zu text region(s)", boxes.size());
+    const std::vector<OCRBox>& all_boxes = det.ocr_det_out_;
+    RCLCPP_INFO(logger, "Detected   : %zu text region(s)", all_boxes.size());
+
+    // ── 只保留中心点落在白色区域内的检测框 ──────────────────────────────────
+    // white_mask 为原图尺寸，det_input 是 math_roi 裁剪图，
+    // 因此将框中心从 det_input 坐标偏移 math_rect.tl() 即可得到原图坐标。
+    std::vector<OCRBox> boxes;
+    for (const auto& box : all_boxes)
+    {
+        // 计算四点中心（ROI 坐标系）
+        cv::Point2f center(0.f, 0.f);
+        for (int k = 0; k < 4; ++k)
+            center += box.pts[k];
+        center *= 0.25f;
+
+        // 转换到原图坐标系
+        const int cx = static_cast<int>(center.x + math_rect.x);
+        const int cy = static_cast<int>(center.y + math_rect.y);
+
+        // 检查是否在白色掩码内
+        if (cx >= 0 && cx < white_mask.cols &&
+            cy >= 0 && cy < white_mask.rows &&
+            white_mask.at<uchar>(cy, cx) > 0)
+        {
+            boxes.push_back(box);
+        }
+    }
+    RCLCPP_INFO(logger, "White-filter: %zu / %zu text region(s)",
+                boxes.size(), all_boxes.size());
 
     std::vector<OCRItem> ocr_items;
     for (size_t i = 0; i < boxes.size(); ++i)

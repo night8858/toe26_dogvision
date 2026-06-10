@@ -10,8 +10,12 @@
 // ---------------------------------------------------------------
 // 鱼眼去畸变配置区
 // ---------------------------------------------------------------
-// 是否启用鱼眼去畸变。关闭后 diatorion() 将直接返回原图拷贝。
-constexpr bool kEnableFisheyeUndistort = true;
+// 是否启用鱼眼去畸变。
+// 方式一：取消下面这行的注释
+// 方式二：在 CMakeLists.txt 的编译选项中添加 -DENABLE_FISHEYE_UNDISTORT
+//
+// 未定义此宏时，diatorion() 将直接返回原图拷贝。
+#define ENABLE_FISHEYE_UNDISTORT
 
 // balance 取值范围通常为 [0, 1]：
 // 1) 越接近 0：裁切更多，黑边更少，视场更窄。
@@ -116,13 +120,7 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
     // -----------------------------------------------------------
     // 这里使用 OpenCV 的 cv::fisheye 专用模型，而不是普通 pinhole 模型。
     // 原因：鱼眼镜头的畸变形式与普通镜头不同，使用 fisheye 模型更稳定。
-    if (!kEnableFisheyeUndistort)
-    {
-        g_fisheye_map_ready = false;
-        std::cout << "fisheye undistort disabled" << std::endl;
-        return;
-    }
-
+#ifdef ENABLE_FISHEYE_UNDISTORT
     const cv::Size image_size(config.hikcamera_config.width, config.hikcamera_config.height);
     if (image_size.width <= 0 || image_size.height <= 0)
     {
@@ -166,6 +164,10 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
     {
         std::cerr << "fisheye distortion init failed: map is empty" << std::endl;
     }
+#else
+    g_fisheye_map_ready = false;
+    std::cout << "fisheye undistort disabled" << std::endl;
+#endif
 
 }
 
@@ -278,7 +280,8 @@ cv::Mat detector::diatorion(cv::Mat &input_img)
     }
 
     // 未初始化成功时不做去畸变，返回原图拷贝，保证主流程可继续运行。
-    if (!kEnableFisheyeUndistort || !g_fisheye_map_ready)
+#ifdef ENABLE_FISHEYE_UNDISTORT
+    if (!g_fisheye_map_ready)
     {
         return input_img.clone();
     }
@@ -297,6 +300,9 @@ cv::Mat detector::diatorion(cv::Mat &input_img)
         cv::BORDER_CONSTANT // 输入：边界填充模式
     );
     return undistorted_image;
+#else
+    return input_img.clone();
+#endif
 }
 
 void detector::show_yolo_result(cv::Mat &show_img, const Detection &det)
