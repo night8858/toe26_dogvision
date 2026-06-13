@@ -10,14 +10,15 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
-#include <unordered_set>
 #include <vector>
 
 #include <dogvision_vision/camera/hikvision.hpp>
 #include <dogvision_vision/common_structs.h>
+#include <dogvision_vision/ocr_MultiFrameVoter.hpp>
 #include <dogvision_vision/ocr_detect.hpp>
 #include <dogvision_vision/ocr_utils.hpp>
 
@@ -242,7 +243,7 @@ static void draw_result_overlay(cv::Mat& frame,
 }
 
 /**
- * @brief 运行连续 OCR 测试模式，并将去重结果追加写入 YAML。
+ * @brief 运行连续 OCR 测试模式，并将稳定结果变化追加写入 YAML。
  * @param node ROS2 节点对象。
  * @param hik 相机封装对象。
  * @param det 文本检测模型封装对象。
@@ -261,7 +262,9 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
     auto logger = node->get_logger();
     int problem_id = 0;
     bool yaml_header_written = false;
-    std::unordered_set<std::string> seen_exprs;
+    OCRMultiFrameVoter voter;
+    cv::Rect2f stable_roi;
+    bool has_stable_roi = false;
 
     RCLCPP_INFO(logger, "MODE       : TEST (continuous OCR + YAML output)");
     RCLCPP_INFO(logger, "YAML output: %s", yaml_path.c_str());
@@ -296,43 +299,55 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         int int_result = 0;
         int mod_result = 0;
         cv::Rect2f math_roi;
-        if (run_ocr_pipeline(frame, det, rec, logger, expr_str, int_result, mod_result, &math_roi))
+        std::optional<OCRVoteResult> frame_result;
+        if (run_ocr_pipeline(
+                frame, det, rec, logger, expr_str, int_result, mod_result, &math_roi))
         {
             RCLCPP_INFO(logger, "Expr: %s  =>  %d  %%4 = %d",
                         expr_str.c_str(), int_result, mod_result);
-            if (show_visual)
-            {
-                draw_result_overlay(frame, math_roi, expr_str, int_result, mod_result);
-            }
+            frame_result = OCRVoteResult{expr_str, int_result, mod_result};
+            stable_roi = math_roi;
+            has_stable_roi = math_roi.area() > 0.0f;
+        }
 
-            if (seen_exprs.find(expr_str) == seen_exprs.end())
-            {
-                seen_exprs.insert(expr_str);
-                ++problem_id;
+        const OCRVoteEvent event = voter.update(frame_result);
+        if (event == OCRVoteEvent::StableChanged)
+        {
+            const OCRVoteResult& stable = voter.stable_result();
+            ++problem_id;
 
-                std::ofstream ofs(yaml_path, std::ios::app);
-                if (ofs.is_open())
+            std::ofstream ofs(yaml_path, std::ios::app);
+            if (ofs.is_open())
+            {
+                if (!yaml_header_written)
                 {
-                    if (!yaml_header_written)
-                    {
-                        ofs << "ocr_results:" << std::endl;
-                        yaml_header_written = true;
-                    }
-                    ofs << "  - id: " << problem_id << std::endl;
-                    ofs << "    question: \"" << expr_str << "\"" << std::endl;
-                    ofs << "    answer: " << int_result << std::endl;
-                    ofs << "    mod4: " << mod_result << std::endl;
-                    RCLCPP_INFO(logger, "YAML write : id=%d", problem_id);
+                    ofs << "ocr_results:" << std::endl;
+                    yaml_header_written = true;
                 }
-                else
-                {
-                    RCLCPP_WARN(logger, "Cannot open YAML: %s", yaml_path.c_str());
-                }
+                ofs << "  - id: " << problem_id << std::endl;
+                ofs << "    question: \"" << stable.expr << "\"" << std::endl;
+                ofs << "    answer: " << stable.result << std::endl;
+                ofs << "    mod4: " << stable.mod4 << std::endl;
+                RCLCPP_INFO(logger, "Stable OCR : %s => %d (mod4=%d)",
+                            stable.expr.c_str(), stable.result, stable.mod4);
+                RCLCPP_INFO(logger, "YAML write : id=%d", problem_id);
             }
             else
             {
-                RCLCPP_INFO(logger, "Duplicate, skipped.");
+                RCLCPP_WARN(logger, "Cannot open YAML: %s", yaml_path.c_str());
             }
+        }
+        else if (event == OCRVoteEvent::StableLost)
+        {
+            has_stable_roi = false;
+            RCLCPP_INFO(logger, "Stable OCR lost after 10 invalid frames.");
+        }
+
+        if (show_visual && voter.has_stable_result() && has_stable_roi)
+        {
+            const OCRVoteResult& stable = voter.stable_result();
+            draw_result_overlay(
+                frame, stable_roi, stable.expr, stable.result, stable.mod4);
         }
 
         if (show_visual)
@@ -348,7 +363,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         }
     }
 
-    RCLCPP_INFO(logger, "Test mode finished. Total unique problems: %d", problem_id);
+    RCLCPP_INFO(logger, "Test mode finished. Total stable changes: %d", problem_id);
     return 0;
 }
 
@@ -378,16 +393,28 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     RCLCPP_INFO(logger, "Publishing : /ocr/result (transient_local)");
     RCLCPP_INFO(logger, "Waiting for trigger...");
 
+    OCRMultiFrameVoter voter;
+    cv::Rect2f stable_roi;
+    bool has_stable_roi = false;
+    bool tracking_active = false;
     rclcpp::WallRate idle_rate(20);
     while (rclcpp::ok())
     {
         rclcpp::spin_some(node);
-        if (!g_ocr_triggered.load())
+        if (g_ocr_triggered.exchange(false))
+        {
+            voter.reset();
+            stable_roi = cv::Rect2f();
+            has_stable_roi = false;
+            tracking_active = true;
+            RCLCPP_INFO(logger, "Trigger received, OCR tracking reset and started.");
+        }
+
+        if (!tracking_active)
         {
             idle_rate.sleep();
             continue;
         }
-        g_ocr_triggered.store(false);
 
         cv::Mat frame;
         if (!hik.get_one_frame(frame, 0))
@@ -410,30 +437,53 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         std::string expr_str;
         int int_result = 0;
         int mod_result = 0;
-        std_msgs::msg::String msg;
-
-        if (run_ocr_pipeline(frame, det, rec, logger, expr_str, int_result, mod_result))
+        cv::Rect2f math_roi;
+        std::optional<OCRVoteResult> frame_result;
+        if (run_ocr_pipeline(
+                frame, det, rec, logger, expr_str, int_result, mod_result, &math_roi))
         {
+            frame_result = OCRVoteResult{expr_str, int_result, mod_result};
+            stable_roi = math_roi;
+            has_stable_roi = math_roi.area() > 0.0f;
+        }
+
+        const OCRVoteEvent event = voter.update(frame_result);
+        if (event == OCRVoteEvent::StableChanged)
+        {
+            const OCRVoteResult& stable = voter.stable_result();
             Json::Value result_json;
-            result_json["expr"] = expr_str;
-            result_json["result"] = int_result;
-            result_json["mod4"] = mod_result;
+            result_json["expr"] = stable.expr;
+            result_json["result"] = stable.result;
+            result_json["mod4"] = stable.mod4;
 
             Json::FastWriter writer;
+            std_msgs::msg::String msg;
             msg.data = writer.write(result_json);
             result_pub->publish(msg);
             RCLCPP_INFO(logger, "Published  : %s", msg.data.c_str());
-
-            if (show_visual)
-            {
-                show_result_window(expr_str, mod_result);
-            }
         }
-        else
+        else if (event == OCRVoteEvent::StableLost)
         {
-            msg.data = "{\"error\": \"no expression found\"}";
-            result_pub->publish(msg);
-            RCLCPP_WARN(logger, "Published error result.");
+            has_stable_roi = false;
+            RCLCPP_INFO(logger, "Stable OCR lost after 10 invalid frames.");
+        }
+
+        if (show_visual)
+        {
+            if (voter.has_stable_result() && has_stable_roi)
+            {
+                const OCRVoteResult& stable = voter.stable_result();
+                draw_result_overlay(
+                    frame, stable_roi, stable.expr, stable.result, stable.mod4);
+            }
+
+            cv::imshow("Math OCR", frame);
+            const int key = cv::waitKey(1);
+            if (key == 'q' || key == 'Q' || key == 27)
+            {
+                RCLCPP_INFO(logger, "Exit by user.");
+                break;
+            }
         }
     }
 

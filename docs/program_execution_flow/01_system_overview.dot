@@ -1,0 +1,230 @@
+digraph system_overview {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    fontname="Noto Sans CJK SC",
+    fontsize=22,
+    label="dogvision 全系统生产流程与外部接口",
+    labelloc=t,
+    pad=0.35,
+    nodesep=0.45,
+    ranksep=0.9,
+    splines=polyline,
+    dpi=180
+  ];
+  node [
+    fontname="Noto Sans CJK SC",
+    fontsize=12,
+    shape=box,
+    style="rounded,filled",
+    color="#334155",
+    fillcolor="#F8FAFC",
+    margin="0.14,0.09"
+  ];
+  edge [
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    color="#475569",
+    arrowsize=0.8
+  ];
+
+  launch [
+    label="full_system.launch\n启动与参数传递",
+    fillcolor="#DCFCE7",
+    color="#15803D",
+    penwidth=2
+  ];
+
+  external [
+    label="仓库外部控制器 / 人工 ROS2 命令\n负责触发视觉、消费结果、下发任务",
+    fillcolor="#FFEDD5",
+    color="#D97706",
+    penwidth=2
+  ];
+
+  no_bridge [
+    label="当前代码没有视觉结果 → 机械臂任务\n自动转换节点",
+    shape=note,
+    fillcolor="#FFF7ED",
+    color="#D97706"
+  ];
+
+  subgraph cluster_arm {
+    label="dogvision_arm";
+    fontname="Noto Sans CJK SC";
+    fontsize=16;
+    color="#86EFAC";
+    style="rounded,filled";
+    fillcolor="#F0FDF4";
+
+    mission [
+      label="arm_mission_node\nrclcpp::spin()\n任务解析与动作序列",
+      fillcolor="#DCFCE7",
+      color="#15803D"
+    ];
+    arm [
+      label="arm_internation_node\n200 Hz 通信循环\n20 Hz 状态发布",
+      fillcolor="#DCFCE7",
+      color="#15803D"
+    ];
+    mission_topic [
+      label="/arm/mission_cmd\n任务输入 + FEEDBACK:DONE",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    arm_cmd_topic [
+      label="/arm_internation/cmd\n低层文本命令",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    arm_data_topic [
+      label="/arm_internation/data\n状态 20 Hz",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+  }
+
+  subgraph cluster_vision {
+    label="dogvision_vision";
+    fontname="Noto Sans CJK SC";
+    fontsize=16;
+    color="#93C5FD";
+    style="rounded,filled";
+    fillcolor="#EFF6FF";
+
+    yolo [
+      label="yolo_node\n20 Hz 等待触发\n单帧推理",
+      fillcolor="#E0F2FE",
+      color="#0369A1"
+    ];
+    ocr [
+      label="ppocr_node\n触发后持续识别\n10 帧稳定投票",
+      fillcolor="#E0F2FE",
+      color="#0369A1"
+    ];
+    yolo_trigger [
+      label="/yolo/trigger\nstart_infer",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    yolo_result [
+      label="/yolo/result\n检测 JSON",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    yolo_grid [
+      label="/yolo/block_grid\n2x4 网格 JSON",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    ocr_trigger [
+      label="/ocr/trigger\n启动 / 重置跟踪",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    ocr_result [
+      label="/ocr/result\n稳定算式 JSON",
+      shape=ellipse,
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+  }
+
+  camera [
+    label="海康工业相机\nMVS SDK\n同一 device_id",
+    shape=cylinder,
+    fillcolor="#FEE2E2",
+    color="#DC2626",
+    penwidth=2
+  ];
+  camera_note [
+    label="YOLO 与 PPOCR 分别执行 Hik_init()\n当前没有进程间相机仲裁",
+    shape=note,
+    fillcolor="#FEF2F2",
+    color="#DC2626"
+  ];
+  stm32 [
+    label="STM32 / 机械臂硬件\nUSB CDC 串口\nBB/4DOF",
+    shape=cylinder,
+    fillcolor="#FEE2E2",
+    color="#DC2626",
+    penwidth=2
+  ];
+
+  vision_files [
+    label="settings.json\nYOLO / PPOCR OpenVINO 模型",
+    shape=folder,
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  arm_config [
+    label="pos_set.yaml\n任务预设位置",
+    shape=folder,
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  yolo_image [
+    label="YOLO 标注图片\nsave_images=true",
+    shape=folder,
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  windows [
+    label="OpenCV 窗口\n按参数可选",
+    shape=component,
+    fillcolor="#F3E8FF",
+    color="#7E22CE"
+  ];
+
+  launch -> mission [label="启动"];
+  launch -> arm [label="启动"];
+  launch -> yolo [label="启动"];
+  launch -> ocr [label="启动"];
+
+  external -> mission_topic [label="高层任务", color="#2563EB", penwidth=2];
+  mission_topic -> mission [label="订阅", color="#2563EB", penwidth=2];
+  mission -> mission_topic [label="发布 FEEDBACK:DONE", color="#2563EB", penwidth=2];
+  mission -> arm_cmd_topic [label="动作序列", color="#2563EB", penwidth=2];
+  arm_cmd_topic -> arm [label="订阅", color="#2563EB", penwidth=2];
+  arm -> arm_data_topic [label="发布", color="#2563EB", penwidth=2];
+  arm_data_topic -> external [label="状态消费", color="#2563EB", penwidth=2];
+
+  external -> yolo_trigger [label="触发", color="#2563EB", penwidth=2];
+  yolo_trigger -> yolo [label="订阅", color="#2563EB", penwidth=2];
+  yolo -> yolo_result [label="发布", color="#2563EB", penwidth=2];
+  yolo -> yolo_grid [label="发布", color="#2563EB", penwidth=2];
+  yolo_result -> external [label="消费", color="#2563EB", penwidth=2];
+  yolo_grid -> external [label="消费", color="#2563EB", penwidth=2];
+
+  external -> ocr_trigger [label="触发 / 重置", color="#2563EB", penwidth=2];
+  ocr_trigger -> ocr [label="订阅", color="#2563EB", penwidth=2];
+  ocr -> ocr_result [label="稳定变化时发布", color="#2563EB", penwidth=2];
+  ocr_result -> external [label="消费", color="#2563EB", penwidth=2];
+
+  arm -> stm32 [
+    label="命令帧 / 反馈帧",
+    dir=both,
+    color="#DC2626",
+    penwidth=3
+  ];
+  camera -> yolo [label="单帧抓取", dir=both, color="#DC2626", penwidth=3];
+  camera -> ocr [label="连续抓取", dir=both, color="#DC2626", penwidth=3];
+
+  vision_files -> yolo [label="配置 / 模型", style=dashed, color="#6B7280"];
+  vision_files -> ocr [label="配置 / 模型", style=dashed, color="#6B7280"];
+  arm_config -> mission [label="ROS2 参数", style=dashed, color="#6B7280"];
+  yolo -> yolo_image [label="可选写入", style=dashed, color="#6B7280"];
+  yolo -> windows [label="可选显示", style=dashed, color="#6B7280"];
+  ocr -> windows [label="可选显示", style=dashed, color="#6B7280"];
+
+  external -> no_bridge [style=dotted, color="#D97706", arrowhead=none];
+  no_bridge -> mission_topic [style=dotted, color="#D97706", arrowhead=none];
+  camera -> camera_note [style=dotted, color="#DC2626", arrowhead=none];
+}

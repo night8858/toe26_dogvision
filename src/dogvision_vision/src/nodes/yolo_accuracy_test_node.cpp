@@ -12,6 +12,7 @@
 #include <opencv2/opencv.hpp>
 
 #include <dogvision_vision/yolo_utils.hpp>
+#include <dogvision_vision/camera/hikvision.hpp>
 
 namespace fs = std::filesystem;
 

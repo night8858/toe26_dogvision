@@ -1,0 +1,178 @@
+digraph yolo_execution {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    fontname="Noto Sans CJK SC",
+    fontsize=22,
+    label="YOLO 节点：触发式单帧检测循环",
+    labelloc=t,
+    pad=0.35,
+    nodesep=0.38,
+    ranksep=0.5,
+    splines=polyline,
+    dpi=180
+  ];
+  node [
+    fontname="Noto Sans CJK SC",
+    fontsize=11,
+    shape=box,
+    style="rounded,filled",
+    color="#334155",
+    fillcolor="#F8FAFC",
+    margin="0.15,0.09"
+  ];
+  edge [
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    color="#475569",
+    arrowsize=0.75
+  ];
+
+  start [
+    label="yolo_node 启动",
+    shape=oval,
+    fillcolor="#DCFCE7",
+    color="#15803D",
+    penwidth=2
+  ];
+  config [
+    label="读取 settings.json\n加载类别与相机参数",
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  model [
+    label="初始化 OpenVINO YOLO 模型",
+    fillcolor="#E0F2FE",
+    color="#0369A1"
+  ];
+  camera_init [
+    label="构造 HikGrab 并 Hik_init()",
+    fillcolor="#FEE2E2",
+    color="#DC2626"
+  ];
+  interfaces [
+    label="创建 ROS2 接口\n订阅 /yolo/trigger\n发布 /yolo/result、/yolo/block_grid\n启动键盘输入线程"
+  ];
+  loop [
+    label="主循环：spin_some()",
+    fillcolor="#E0E7FF",
+    color="#7C3AED"
+  ];
+  triggered [
+    label="g_triggered == true？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  idle [
+    label="可选 cv::waitKey(1)\n20 Hz idle sleep",
+    fillcolor="#E0E7FF",
+    color="#7C3AED"
+  ];
+  clear [
+    label="清除触发标志\n开始一次推理"
+  ];
+  grab [
+    label="run_single_detection()\n从海康相机抓取有效帧\n按参数执行鱼眼去畸变",
+    fillcolor="#FEE2E2",
+    color="#DC2626"
+  ];
+  infer [
+    label="YOLO 预处理 → OpenVINO 推理\n后处理 / NMS / 合并"
+  ];
+  success [
+    label="抓帧与推理成功？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  empty [
+    label="记录 WARN\n继续使用空检测集合"
+    fillcolor="#FEF2F2",
+    color="#DC2626"
+  ];
+  arrange [
+    label="按栅格顺序排序检测框\nK-means 分配 2x4 网格"
+  ];
+  publish [
+    label="构建并发布 JSON\n/yolo/result\n/yolo/block_grid",
+    fillcolor="#DBEAFE",
+    color="#2563EB"
+  ];
+  save_check [
+    label="save_images？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  save [
+    label="写入带标注结果图片",
+    shape=folder,
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  show_check [
+    label="show_window？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  show [
+    label="OpenCV 显示检测结果",
+    shape=component,
+    fillcolor="#F3E8FF",
+    color="#7E22CE"
+  ];
+
+  external [
+    label="外部控制器\n发布 start_infer / 消费 JSON",
+    fillcolor="#FFEDD5",
+    color="#D97706",
+    penwidth=2
+  ];
+  keyboard [
+    label="标准输入 Enter\n后台线程",
+    fillcolor="#FFEDD5",
+    color="#D97706"
+  ];
+  camera [
+    label="海康工业相机\nMVS SDK",
+    shape=cylinder,
+    fillcolor="#FEE2E2",
+    color="#DC2626",
+    penwidth=2
+  ];
+  result_topics [
+    label="/yolo/result\n/yolo/block_grid",
+    shape=ellipse,
+    fillcolor="#DBEAFE",
+    color="#2563EB"
+  ];
+
+  start -> config;
+  config -> model [style=dashed, color="#6B7280"];
+  model -> camera_init;
+  camera_init -> camera [label="初始化设备", color="#DC2626", penwidth=3];
+  camera_init -> interfaces;
+  interfaces -> loop;
+
+  external -> loop [label="/yolo/trigger", color="#2563EB", penwidth=2];
+  keyboard -> loop [label="设置触发标志", color="#D97706"];
+  loop -> triggered;
+  triggered -> idle [label="否"];
+  idle -> loop [label="下一次检查", style=dashed, color="#7C3AED", penwidth=2];
+  triggered -> clear [label="是"];
+  clear -> grab;
+  camera -> grab [label="图像帧", color="#DC2626", penwidth=3];
+  grab -> success;
+  success -> infer [label="是"];
+  success -> empty [label="否"];
+  infer -> arrange;
+  empty -> arrange;
+  arrange -> publish;
+  publish -> result_topics [color="#2563EB", penwidth=2];
+  result_topics -> external [label="transient local", color="#2563EB", penwidth=2];
+  publish -> save_check;
+  save_check -> save [label="是", style=dashed, color="#6B7280"];
+  save_check -> show_check [label="否"];
+  save -> show_check;
+  show_check -> show [label="是", style=dashed, color="#6B7280"];
+  show_check -> loop [label="否 / 等待下次触发", style=dashed, color="#7C3AED", penwidth=2];
+  show -> loop [label="等待下次触发", style=dashed, color="#7C3AED", penwidth=2];
+}

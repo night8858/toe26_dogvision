@@ -1,4 +1,5 @@
 #include <dogvision_vision/yolo_utils.hpp>
+#include <dogvision_vision/camera/hikvision.hpp>
 
 #include <algorithm>
 #include <chrono>

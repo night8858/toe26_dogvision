@@ -269,8 +269,8 @@ ros2 run dogvision_vision math_generator_node
 | `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `start_infer` 触发一次单帧推理 |
 | `/yolo/result` | `std_msgs/msg/String` | 发布 | transient_local YOLO JSON 结果 |
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | transient_local 2x4 网格 JSON |
-| `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 触发生产模式 OCR |
-| `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local OCR JSON 结果 |
+| `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 启动或重置生产模式 OCR 持续跟踪 |
+| `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local 稳定 OCR JSON 结果 |
 
 `/arm_internation/data` 示例：
 
@@ -295,6 +295,12 @@ LF:2.547,2.547;RF:-276.225,-337.042;LB:276.225,337.042;RB:276.225,-337.042;YAW:0
 ```json
 {"expr":"12+3*4","result":24,"mod4":0}
 ```
+
+PPOCR 使用最近 10 个处理帧进行投票。某个归一化算式至少出现 6 次，
+并且占窗口内有效识别结果的 60% 以上时，才会成为稳定结果并发布。
+稳定结果会保持到另一个算式满足相同条件；连续 10 帧没有有效算式时
+只清除本地可视化，不发布错误消息。生产模式收到新的 `/ocr/trigger`
+后会清空历史并开始新一轮持续跟踪。
 
 ## 9. 节点参数
 
@@ -347,7 +353,7 @@ LF:2.547,2.547;RF:-276.225,-337.042;LB:276.225,337.042;RB:276.225,-337.042;YAW:0
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
-| `mode` | `production` | `production` 等待 `/ocr/trigger`，`test` 连续识别并写 YAML |
+| `mode` | `production` | `production` 触发后持续跟踪，`test` 连续投票并将稳定变化写入 YAML |
 | `show_visual` | `true` | 是否显示本地 OpenCV 窗口 |
 | `yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | test 模式输出文件 |
 

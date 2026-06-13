@@ -25,8 +25,8 @@ int main(int argc, char** argv)
     node->declare_parameter<int>("min_val", 1);
     node->declare_parameter<int>("max_val", 100);
     node->declare_parameter<int>("interval", 10);
-    node->declare_parameter<int>("canvas_width", 1920);
-    node->declare_parameter<int>("canvas_height", 1080);
+    node->declare_parameter<int>("canvas_width", 2560);
+    node->declare_parameter<int>("canvas_height", 1440);
 
     const std::string yaml_path = node->get_parameter("yaml_path").as_string();
     const int min_val = static_cast<int>(node->get_parameter("min_val").as_int());

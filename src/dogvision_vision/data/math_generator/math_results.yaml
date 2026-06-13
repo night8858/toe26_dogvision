@@ -263,3 +263,56 @@ math_problems:
     question: "15 * 20 / 6 + 7 - 3 = "
     answer: 54
     mod4: 2
+math_problems:
+  - id: 1
+    question: "8 + 16 * 16 / 8 - 13 = "
+    answer: 27
+    mod4: 3
+  - id: 2
+    question: "18 / 3 - 4 * 8 + 13 = "
+    answer: -13
+    mod4: 3
+  - id: 3
+    question: "13 + 19 / 19 - 2 * 18 = "
+    answer: -22
+    mod4: 2
+  - id: 4
+    question: "19 + 16 * 19 - 11 / 1 = "
+    answer: 312
+    mod4: 0
+  - id: 5
+    question: "8 * 16 / 16 + 16 - 5 = "
+    answer: 19
+    mod4: 3
+  - id: 6
+    question: "11 * 4 - 17 + 18 / 9 = "
+    answer: 29
+    mod4: 1
+  - id: 7
+    question: "12 * 5 - 14 / 2 + 12 = "
+    answer: 65
+    mod4: 1
+  - id: 8
+    question: "17 + 17 * 17 / 17 - 18 = "
+    answer: 16
+    mod4: 0
+  - id: 9
+    question: "11 - 16 / 2 + 9 * 19 = "
+    answer: 174
+    mod4: 2
+  - id: 10
+    question: "11 + 18 / 6 * 3 - 13 = "
+    answer: 7
+    mod4: 3
+  - id: 11
+    question: "4 + 16 * 1 - 12 / 4 = "
+    answer: 17
+    mod4: 1
+  - id: 12
+    question: "12 * 16 + 13 / 13 - 14 = "
+    answer: 179
+    mod4: 3
+  - id: 13
+    question: "3 * 10 / 6 + 19 - 15 = "
+    answer: 9
+    mod4: 1

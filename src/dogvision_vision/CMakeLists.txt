@@ -36,6 +36,7 @@ add_library(dogvision_vision_lib
   src/camera/usbcam.cpp
   src/core/detector.cpp
   src/math/math_generator.cpp
+  src/ocr/ocr_MultiFrameVoter.cpp
   src/ocr/ocr_detect.cpp
   src/ocr/ocr_utils.cpp
   src/yolo/nuc_detect.cpp
@@ -87,6 +88,15 @@ add_executable(math_generator_node
 )
 target_link_libraries(math_generator_node dogvision_vision_lib Threads::Threads)
 ament_target_dependencies(math_generator_node rclcpp ament_index_cpp)
+
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(ocr_multi_frame_voter_test
+    test/ocr_multi_frame_voter_test.cpp
+  )
+  target_link_libraries(ocr_multi_frame_voter_test dogvision_vision_lib)
+  add_test(NAME ocr_multi_frame_voter_test COMMAND ocr_multi_frame_voter_test)
+endif()
 
 install(TARGETS
   dogvision_vision_lib

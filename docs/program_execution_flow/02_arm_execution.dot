@@ -1,0 +1,209 @@
+digraph arm_execution {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    fontname="Noto Sans CJK SC",
+    fontsize=22,
+    label="机械臂任务编排与串口通信执行流程",
+    labelloc=t,
+    pad=0.35,
+    nodesep=0.4,
+    ranksep=0.55,
+    splines=polyline,
+    dpi=180
+  ];
+  node [
+    fontname="Noto Sans CJK SC",
+    fontsize=11,
+    shape=box,
+    style="rounded,filled",
+    color="#334155",
+    fillcolor="#F8FAFC",
+    margin="0.15,0.09"
+  ];
+  edge [
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    color="#475569",
+    arrowsize=0.75
+  ];
+
+  launch [
+    label="arm_control.launch\n启动两个节点\n默认 protocol=4dof",
+    fillcolor="#DCFCE7",
+    color="#15803D",
+    penwidth=2
+  ];
+  pos_config [
+    label="pos_set.yaml\nSTOW / PICK / PLACE / START",
+    shape=folder,
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  external [
+    label="外部任务控制器",
+    fillcolor="#FFEDD5",
+    color="#D97706",
+    penwidth=2
+  ];
+
+  subgraph cluster_mission {
+    label="arm_mission_node：事件驱动回调";
+    fontname="Noto Sans CJK SC";
+    fontsize=15;
+    color="#86EFAC";
+    style="rounded,filled";
+    fillcolor="#F0FDF4";
+
+    mission_init [label="加载预设位置\n创建发布者和订阅者"];
+    mission_spin [label="rclcpp::spin()\n等待 /arm/mission_cmd"];
+    mission_parse [label="归一化并拆分任务命令\nSTOW / PICK / START / PLACE\nVALVE / PUMP / PLACE_END"];
+    mission_valid [label="命令与参数有效？", shape=diamond, fillcolor="#FEF3C7"];
+    mission_sequence [
+      label="按任务生成低层命令序列\n机械臂间隔 200 ms\n阀门间隔约 60 ms"
+    ];
+    mission_publish [
+      label="发布 /arm_internation/cmd",
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    mission_feedback [
+      label="发布 FEEDBACK:DONE\n到 /arm/mission_cmd",
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    mission_warn [label="WARN 并结束本次回调", fillcolor="#FEF2F2", color="#DC2626"];
+  }
+
+  subgraph cluster_comm {
+    label="arm_internation_node：200 Hz 主循环";
+    fontname="Noto Sans CJK SC";
+    fontsize=15;
+    color="#93C5FD";
+    style="rounded,filled";
+    fillcolor="#EFF6FF";
+
+    comm_init [
+      label="设置 BB/4DOF 协议与缩放\n配置 HWID 自动重连\n创建 cmd 订阅与 data 发布"
+    ];
+    loop_start [label="进入 while (rclcpp::ok())\n记录当前时间", fillcolor="#E0E7FF", color="#7C3AED"];
+    conn_due [label="到 1 秒连接检查点？", shape=diamond, fillcolor="#FEF3C7"];
+    port_open [label="串口已连接？", shape=diamond, fillcolor="#FEF3C7"];
+    reconnect [
+      label="try_reconnect_once()\n按 HWID 扫描 ttyACM*/ttyUSB*",
+      fillcolor="#FEE2E2",
+      color="#DC2626"
+    ];
+    receive [
+      label="receive_once()\nUSB 在线预检 → read() → 累积缓存"
+    ];
+    frame_ready [label="找到完整 BB 反馈帧？", shape=diamond, fillcolor="#FEF3C7"];
+    crc [label="帧尾与 CRC8 正确？", shape=diamond, fillcolor="#FEF3C7"];
+    update_state [
+      label="解析左右臂 4DOF、阀门、微动\n更新线程安全状态缓存"
+    ];
+    publish_due [label="到 50 ms 发布点？", shape=diamond, fillcolor="#FEF3C7"];
+    publish_state [
+      label="构建 MODE:4DOF 状态字符串\n发布 /arm_internation/data",
+      fillcolor="#DBEAFE",
+      color="#2563EB"
+    ];
+    spin_some [
+      label="rclcpp::spin_some()\n处理 /arm_internation/cmd 回调"
+    ];
+    handle_cmd [
+      label="handle_text_command()\n解析文本 → 打包 BB 命令帧\n循环 write() 写入串口"
+    ];
+    sleep [label="sleep 保持 200 Hz", fillcolor="#E0E7FF", color="#7C3AED"];
+    disconnect [
+      label="read/write 或 libusb 判定掉线\nclose + 清状态 + 进入重连",
+      fillcolor="#FEE2E2",
+      color="#DC2626"
+    ];
+  }
+
+  stm32 [
+    label="STM32 / 双臂硬件\nUSB CDC 串口",
+    shape=cylinder,
+    fillcolor="#FEE2E2",
+    color="#DC2626",
+    penwidth=2
+  ];
+  status_consumer [
+    label="外部状态消费者",
+    fillcolor="#FFEDD5",
+    color="#D97706"
+  ];
+  self_feedback_note [
+    label="当前节点也订阅同一话题，\nFEEDBACK:DONE 会再次进入自身回调",
+    shape=note,
+    fillcolor="#FFF7ED",
+    color="#D97706"
+  ];
+
+  launch -> mission_init;
+  launch -> comm_init;
+  pos_config -> mission_init [style=dashed, color="#6B7280"];
+  mission_init -> mission_spin;
+  external -> mission_spin [label="/arm/mission_cmd", color="#2563EB", penwidth=2];
+  mission_spin -> mission_parse [label="收到消息", color="#2563EB", penwidth=2];
+  mission_parse -> mission_valid;
+  mission_valid -> mission_warn [label="否"];
+  mission_warn -> mission_spin [label="等待下一条", style=dashed, color="#7C3AED"];
+  mission_valid -> mission_sequence [label="是"];
+  mission_sequence -> mission_publish;
+  mission_publish -> mission_feedback [label="序列完成"];
+  mission_feedback -> external [label="FEEDBACK:DONE", color="#2563EB", penwidth=2];
+  mission_feedback -> mission_spin [
+    label="同话题回送",
+    color="#2563EB",
+    penwidth=2
+  ];
+  mission_feedback -> self_feedback_note [style=dotted, color="#D97706", arrowhead=none];
+
+  comm_init -> loop_start;
+  loop_start -> conn_due;
+  conn_due -> port_open [label="是"];
+  conn_due -> receive [label="否"];
+  port_open -> reconnect [label="否"];
+  port_open -> receive [label="是"];
+  reconnect -> receive;
+  receive -> frame_ready;
+  frame_ready -> crc [label="是"];
+  frame_ready -> publish_due [label="否 / 等待更多字节"];
+  crc -> update_state [label="是"];
+  crc -> publish_due [label="否 / 丢弃坏帧"];
+  update_state -> publish_due;
+  publish_due -> publish_state [label="是"];
+  publish_due -> spin_some [label="否"];
+  publish_state -> status_consumer [
+    label="/arm_internation/data\n20 Hz",
+    color="#2563EB",
+    penwidth=2
+  ];
+  publish_state -> spin_some;
+  mission_publish -> spin_some [
+    label="/arm_internation/cmd",
+    color="#2563EB",
+    penwidth=2
+  ];
+  spin_some -> handle_cmd [label="有命令回调"];
+  spin_some -> sleep [label="无命令"];
+  handle_cmd -> stm32 [label="BB 命令帧", color="#DC2626", penwidth=3];
+  handle_cmd -> sleep;
+  stm32 -> receive [label="BB 反馈帧", color="#DC2626", penwidth=3];
+  receive -> disconnect [
+    label="掉线错误",
+    color="#DC2626",
+    penwidth=2,
+    constraint=false
+  ];
+  handle_cmd -> disconnect [
+    label="写入掉线",
+    color="#DC2626",
+    penwidth=2,
+    constraint=false
+  ];
+  disconnect -> reconnect [color="#DC2626", penwidth=2];
+  sleep -> loop_start [label="下一周期", style=dashed, color="#7C3AED", penwidth=2];
+}

@@ -1,0 +1,212 @@
+digraph ocr_execution {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    fontname="Noto Sans CJK SC",
+    fontsize=22,
+    label="PPOCR 节点：持续识别、10 帧投票与稳定输出",
+    labelloc=t,
+    pad=0.35,
+    nodesep=0.38,
+    ranksep=0.48,
+    splines=polyline,
+    dpi=180
+  ];
+  node [
+    fontname="Noto Sans CJK SC",
+    fontsize=11,
+    shape=box,
+    style="rounded,filled",
+    color="#334155",
+    fillcolor="#F8FAFC",
+    margin="0.15,0.09"
+  ];
+  edge [
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    color="#475569",
+    arrowsize=0.75
+  ];
+
+  start [
+    label="ppocr_node 启动\nmode=production",
+    shape=oval,
+    fillcolor="#DCFCE7",
+    color="#15803D",
+    penwidth=2
+  ];
+  config [
+    label="读取 settings.json\n加载检测、识别模型与字符字典",
+    fillcolor="#F3F4F6",
+    color="#6B7280"
+  ];
+  camera_init [
+    label="构造 HikGrab 并 Hik_init()\n初始化鱼眼去畸变映射",
+    fillcolor="#FEE2E2",
+    color="#DC2626"
+  ];
+  interfaces [
+    label="订阅 /ocr/trigger\n创建 transient local /ocr/result 发布者\n初始化 OCRMultiFrameVoter"
+  ];
+  loop [
+    label="主循环：spin_some()",
+    fillcolor="#E0E7FF",
+    color="#7C3AED"
+  ];
+  new_trigger [
+    label="收到新的 /ocr/trigger？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  reset [
+    label="清空 10 帧历史与稳定结果\n清除显示 ROI\ntracking_active=true"
+  ];
+  active [
+    label="tracking_active？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  idle [
+    label="20 Hz idle sleep",
+    fillcolor="#E0E7FF",
+    color="#7C3AED"
+  ];
+  grab [
+    label="get_one_frame()",
+    fillcolor="#FEE2E2",
+    color="#DC2626"
+  ];
+  grab_ok [
+    label="抓帧成功？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  reconnect [
+    label="ensure_camera()\n最多 5 次：Hik_end → 等待\n→ Hik_init → 试取帧",
+    fillcolor="#FEE2E2",
+    color="#DC2626"
+  ];
+  recover [
+    label="恢复成功？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  exit [
+    label="记录错误并退出生产循环",
+    shape=oval,
+    fillcolor="#FEF2F2",
+    color="#DC2626"
+  ];
+  undistort [label="鱼眼去畸变"];
+  roi [
+    label="定位白底算术题 ROI\n没有 ROI 则本帧为无效结果"
+  ];
+  ocr [
+    label="PPOCR 文本检测\n白色掩码过滤\n文字裁剪与识别"
+  ];
+  parse [
+    label="拼接文字并 parse_simple_expr()\n归一化算式、计算整数与 mod4"
+  ];
+  valid [
+    label="得到有效算式？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  vote_valid [
+    label="voter.update(算式结果)\n保存最近有效 ROI"
+  ];
+  vote_invalid [
+    label="voter.update(nullopt)\n无效帧占窗口位置但不计入有效分母"
+  ];
+  event [
+    label="投票事件？",
+    shape=diamond,
+    fillcolor="#FEF3C7"
+  ];
+  stable [
+    label="StableChanged\n最近 10 帧中同一算式 ≥ 6 次\n且占有效结果 ≥ 60%",
+    fillcolor="#DCFCE7",
+    color="#15803D",
+    penwidth=2
+  ];
+  publish [
+    label="发布 /ocr/result\n{expr, result, mod4}",
+    fillcolor="#DBEAFE",
+    color="#2563EB"
+  ];
+  lost [
+    label="StableLost\n连续 10 帧无有效算式\n清除可视化状态，不发布错误",
+    fillcolor="#FFF7ED",
+    color="#D97706"
+  ];
+  keep [
+    label="None\n保持现有稳定结果"
+  ];
+  visualize [
+    label="show_visual=true 时\n在当前帧绘制稳定结果并 imshow()",
+    shape=component,
+    fillcolor="#F3E8FF",
+    color="#7E22CE"
+  ];
+
+  external [
+    label="外部控制器\n触发 / 重置并消费稳定结果",
+    fillcolor="#FFEDD5",
+    color="#D97706",
+    penwidth=2
+  ];
+  camera [
+    label="海康工业相机\nMVS SDK",
+    shape=cylinder,
+    fillcolor="#FEE2E2",
+    color="#DC2626",
+    penwidth=2
+  ];
+  result_topic [
+    label="/ocr/result\ntransient local",
+    shape=ellipse,
+    fillcolor="#DBEAFE",
+    color="#2563EB"
+  ];
+
+  start -> config;
+  config -> camera_init [style=dashed, color="#6B7280"];
+  camera_init -> camera [label="初始化设备", color="#DC2626", penwidth=3];
+  camera_init -> interfaces;
+  interfaces -> loop;
+
+  external -> loop [label="/ocr/trigger", color="#2563EB", penwidth=2];
+  loop -> new_trigger;
+  new_trigger -> reset [label="是"];
+  new_trigger -> active [label="否"];
+  reset -> active;
+  active -> idle [label="否"];
+  idle -> loop [label="下一次检查", style=dashed, color="#7C3AED", penwidth=2];
+  active -> grab [label="是"];
+  camera -> grab [label="图像帧", color="#DC2626", penwidth=3];
+  grab -> grab_ok;
+  grab_ok -> reconnect [label="否"];
+  reconnect -> recover;
+  recover -> loop [label="是，跳过本帧", style=dashed, color="#7C3AED"];
+  recover -> exit [label="否"];
+  grab_ok -> undistort [label="是"];
+  undistort -> roi;
+  roi -> ocr [label="找到 ROI"];
+  roi -> vote_invalid [label="无 ROI"];
+  ocr -> parse;
+  parse -> valid;
+  valid -> vote_valid [label="是"];
+  valid -> vote_invalid [label="否"];
+  vote_valid -> event;
+  vote_invalid -> event;
+  event -> stable [label="StableChanged"];
+  event -> lost [label="StableLost"];
+  event -> keep [label="None"];
+  stable -> publish;
+  publish -> result_topic [color="#2563EB", penwidth=2];
+  result_topic -> external [color="#2563EB", penwidth=2];
+  publish -> visualize [style=dashed, color="#6B7280"];
+  lost -> visualize [style=dashed, color="#6B7280"];
+  keep -> visualize [style=dashed, color="#6B7280"];
+  visualize -> loop [label="继续跟踪下一帧", style=dashed, color="#7C3AED", penwidth=2];
+}
