@@ -28,6 +28,7 @@ static void print_help()
               << "    BB 4DOF:  $4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4\n"
               << "    BB 4DOF:  $4POSE,R,0.1,0.2,0.3,0.4\n"
               << "    BB 4DOF:  $4ACT,0/1\n"
+              << "    BB 4DOF:  $START,0,0,0      带初始偏移启动(mm)\n"
               << "    $V,id,ON/OFF\n"
               << "    $P,ON,speed\n"
               << "  系统\n"

@@ -116,6 +116,25 @@
 //      [7]    0xFF
 //      [8]    0xEE
 //      [9]    CRC8（覆盖 [0]~[8]）
+//
+//  BB 99 带初始偏移启动帧，固定 17 字节，CRC8 覆盖 [0]~[15]：
+//    BB 99 offsetX(4B float LE) offsetY(4B float LE) offsetZ(4B float LE) FF EE CRC8
+//      [0]     0xBB
+//      [1]     0x99
+//      [2-5]   offsetX（float32 LE，单位 mm，可为 0）
+//      [6-9]   offsetY（float32 LE，单位 mm，可为 0）
+//      [10-13] offsetZ（float32 LE，单位 mm，可为 0）
+//      [14]    0xFF
+//      [15]    0xEE
+//      [16]    CRC8（覆盖 [0]~[15]）
+//
+//  BB CC 动作完成事件帧，固定 5 字节，CRC8 覆盖 [0]~[3]：
+//    BB CC FF EE CRC8
+//      [0] 0xBB
+//      [1] 0xCC
+//      [2] 0xFF
+//      [3] 0xEE
+//      [4] CRC8（覆盖 [0]~[3]）
 // ============================================================
 
 // ╔═══════════════════════════════════════════════════════════════╗
@@ -168,12 +187,13 @@ namespace
      *          - V2 (53B): 扩展版，V1 基础上在微动状态与帧尾之间插入 4 字节保留位
      *          parse_plane_feedback_frame() 对候选帧头同时尝试两种帧长，
      *          以 tail + CRC 双校验通过的为准，兼容不同固件版本。
-     *          BB 协议固定 46 字节，无版本兼容问题。
+     *          BB 协议的位姿反馈固定 46 字节；动作完成事件 BB CC 是 5 字节短帧。
      * @{
      */
     static constexpr size_t kFbFrameLenV1 = 49;
     static constexpr size_t kFbFrameLenV2 = 53;
     static constexpr size_t k4DofFbFrameLen = 46;
+    static constexpr size_t k4DofDoneFrameLen = 5;
     /** @} */
 
     /**
@@ -834,20 +854,23 @@ bool arm_internation::parse_plane_feedback_frame()
 
 bool arm_internation::parse_4dof_feedback_frame()
 {
-    // BB 01 固定 46 字节：
-    // [0]BB [1]01 [2..33] 左/右臂 8 个 float [34..37]阀门
-    // [38..41]微动 [42]预留 [43]FF [44]EE [45]CRC8。
-    while (rx_len_ >= k4DofFbFrameLen)
+    // BB 协议现在有两类上行帧：
+    // 1) BB 01：46 字节周期位姿反馈，更新 /arm_internation/data 的缓存。
+    // 2) BB CC：5 字节动作完成事件，不更新位姿，只累加一个待发布 DONE 事件。
+    //
+    // 串口是字节流，短帧和长帧可能贴在一起到达；这里按 BB 后的第二字节分派，
+    // 并在数据不足时保留候选帧头，等待下一次 receive_once() 拼接完整帧。
+    while (rx_len_ >= 2)
     {
         size_t start = 0;
-        while (start + k4DofFbFrameLen <= rx_len_ &&
-               (rx_buf_[start] != kHeadB || rx_buf_[start + 1] != kCmdFb))
+        while (start + 1 < rx_len_ && rx_buf_[start] != kHeadB)
         {
             ++start;
         }
 
-        if (start + k4DofFbFrameLen > rx_len_)
+        if (start + 1 >= rx_len_)
         {
+            // 末尾如果只剩单个 0xBB，需要保留它；下一次 read 可能补上命令字。
             if (start > 0)
             {
                 rx_len_ -= start;
@@ -856,45 +879,104 @@ bool arm_internation::parse_4dof_feedback_frame()
             return false;
         }
 
-        const size_t tail_a_idx = start + 43;
-        const size_t tail_b_idx = start + 44;
-        const size_t crc_idx = start + 45;
-        const bool tail_ok = rx_buf_[tail_a_idx] == kTailA && rx_buf_[tail_b_idx] == kTailB;
-        const bool crc_ok = tail_ok && calc_crc8(rx_buf_ + start, 45) == rx_buf_[crc_idx];
-
-        if (crc_ok)
+        const uint8_t frame_cmd = rx_buf_[start + 1];
+        if (frame_cmd == kCmdFb)
         {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            dof4_pose_float_[0].x = decode_float_le(rx_buf_ + start + 2);
-            dof4_pose_float_[0].y = decode_float_le(rx_buf_ + start + 6);
-            dof4_pose_float_[0].z = decode_float_le(rx_buf_ + start + 10);
-            dof4_pose_float_[0].pitch = decode_float_le(rx_buf_ + start + 14);
-            dof4_pose_float_[1].x = decode_float_le(rx_buf_ + start + 18);
-            dof4_pose_float_[1].y = decode_float_le(rx_buf_ + start + 22);
-            dof4_pose_float_[1].z = decode_float_le(rx_buf_ + start + 26);
-            dof4_pose_float_[1].pitch = decode_float_le(rx_buf_ + start + 30);
-
-            // 将 4DOF 左/右臂 x/y 投影到旧 LF/RF 字段，保证旧状态消费者仍能读到主位姿。
-            arm_pos_float_[0].x = dof4_pose_float_[0].x;
-            arm_pos_float_[0].y = dof4_pose_float_[0].y;
-            arm_pos_float_[1].x = dof4_pose_float_[1].x;
-            arm_pos_float_[1].y = dof4_pose_float_[1].y;
-            arm_pos_float_[2] = ArmEndPosFloat{};
-            arm_pos_float_[3] = ArmEndPosFloat{};
-            gimbal_float_ = GimbalAngleFloat{};
-
-            for (int i = 0; i < 4; ++i)
+            // BB 01 固定 46 字节：
+            // [0]BB [1]01 [2..33] 左/右臂 8 个 float [34..37]阀门
+            // [38..41]微动 [42]预留 [43]FF [44]EE [45]CRC8。
+            if (start + k4DofFbFrameLen > rx_len_)
             {
-                sensor_.valve[i] = (rx_buf_[start + 34 + i] & 0x01u) != 0;
-                sensor_.microswitch[i] = (rx_buf_[start + 38 + i] & 0x01u) != 0;
+                if (start > 0)
+                {
+                    rx_len_ -= start;
+                    std::memmove(rx_buf_, rx_buf_ + start, rx_len_);
+                }
+                return false;
             }
 
-            rx_len_ -= (start + k4DofFbFrameLen);
-            std::memmove(rx_buf_, rx_buf_ + start + k4DofFbFrameLen, rx_len_);
-            return true;
+            const size_t tail_a_idx = start + 43;
+            const size_t tail_b_idx = start + 44;
+            const size_t crc_idx = start + 45;
+            const bool tail_ok = rx_buf_[tail_a_idx] == kTailA && rx_buf_[tail_b_idx] == kTailB;
+            const bool crc_ok = tail_ok && calc_crc8(rx_buf_ + start, 45) == rx_buf_[crc_idx];
+
+            if (crc_ok)
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                dof4_pose_float_[0].x = decode_float_le(rx_buf_ + start + 2);
+                dof4_pose_float_[0].y = decode_float_le(rx_buf_ + start + 6);
+                dof4_pose_float_[0].z = decode_float_le(rx_buf_ + start + 10);
+                dof4_pose_float_[0].pitch = decode_float_le(rx_buf_ + start + 14);
+                dof4_pose_float_[1].x = decode_float_le(rx_buf_ + start + 18);
+                dof4_pose_float_[1].y = decode_float_le(rx_buf_ + start + 22);
+                dof4_pose_float_[1].z = decode_float_le(rx_buf_ + start + 26);
+                dof4_pose_float_[1].pitch = decode_float_le(rx_buf_ + start + 30);
+
+                // 将 4DOF 左/右臂 x/y 投影到旧 LF/RF 字段，保证旧状态消费者仍能读到主位姿。
+                arm_pos_float_[0].x = dof4_pose_float_[0].x;
+                arm_pos_float_[0].y = dof4_pose_float_[0].y;
+                arm_pos_float_[1].x = dof4_pose_float_[1].x;
+                arm_pos_float_[1].y = dof4_pose_float_[1].y;
+                arm_pos_float_[2] = ArmEndPosFloat{};
+                arm_pos_float_[3] = ArmEndPosFloat{};
+                gimbal_float_ = GimbalAngleFloat{};
+
+                for (int i = 0; i < 4; ++i)
+                {
+                    sensor_.valve[i] = (rx_buf_[start + 34 + i] & 0x01u) != 0;
+                    sensor_.microswitch[i] = (rx_buf_[start + 38 + i] & 0x01u) != 0;
+                }
+
+                rx_len_ -= (start + k4DofFbFrameLen);
+                std::memmove(rx_buf_, rx_buf_ + start + k4DofFbFrameLen, rx_len_);
+                return true;
+            }
+
+            // 候选 BB 01 存在但尾或 CRC 不对，丢弃当前 BB 一个字节继续重同步。
+            rx_len_ -= (start + 1);
+            std::memmove(rx_buf_, rx_buf_ + start + 1, rx_len_);
+            continue;
         }
 
-        // 候选帧头存在但尾或 CRC 不对，丢弃当前帧头一个字节继续重同步。
+        if (frame_cmd == kCmd4DofDone)
+        {
+            // BB CC 是“事件帧”，表示下位机上一次执行的动作已完成。
+            // 它没有位姿负载，因此只检查 FF EE + CRC，然后累加待发布计数。
+            if (start + k4DofDoneFrameLen > rx_len_)
+            {
+                if (start > 0)
+                {
+                    rx_len_ -= start;
+                    std::memmove(rx_buf_, rx_buf_ + start, rx_len_);
+                }
+                return false;
+            }
+
+            const size_t tail_a_idx = start + 2;
+            const size_t tail_b_idx = start + 3;
+            const size_t crc_idx = start + 4;
+            const bool tail_ok = rx_buf_[tail_a_idx] == kTailA && rx_buf_[tail_b_idx] == kTailB;
+            const bool crc_ok = tail_ok && calc_crc8(rx_buf_ + start, 4) == rx_buf_[crc_idx];
+
+            if (crc_ok)
+            {
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex_);
+                    ++pending_done_feedback_count_;
+                }
+                rx_len_ -= (start + k4DofDoneFrameLen);
+                std::memmove(rx_buf_, rx_buf_ + start + k4DofDoneFrameLen, rx_len_);
+                return true;
+            }
+
+            // 候选 BB CC 存在但校验失败，同样丢弃当前 BB，避免卡死在坏帧上。
+            rx_len_ -= (start + 1);
+            std::memmove(rx_buf_, rx_buf_ + start + 1, rx_len_);
+            continue;
+        }
+
+        // 遇到 BB 后跟未知命令字时，只丢弃这个 BB；后面的字节可能是下一帧帧头。
         rx_len_ -= (start + 1);
         std::memmove(rx_buf_, rx_buf_ + start + 1, rx_len_);
     }
@@ -993,6 +1075,7 @@ bool arm_internation::receive_once()
 //  get_arm_pos/get_gimbal: 缩放为 int16_t 的旧版接口
 //  get_arm_pos_float/get_gimbal_float/get_4dof_pose_float: float 原值
 //  get_sensor: 电磁阀 + 微动开关状态
+//  consume_done_feedback_count: 取出一次性 BB CC 完成事件
 //  set_decode_scale: 配置 int16_t 输出的缩放比例
 ArmEndPos arm_internation::get_arm_pos(int arm_id) const
 {
@@ -1037,6 +1120,14 @@ Arm4DofPoseFloat arm_internation::get_4dof_pose_float(int arm_id) const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return (arm_id >= 0 && arm_id < 2) ? dof4_pose_float_[arm_id] : Arm4DofPoseFloat{};
+}
+
+size_t arm_internation::consume_done_feedback_count()
+{
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    const size_t count = pending_done_feedback_count_;
+    pending_done_feedback_count_ = 0;
+    return count;
 }
 
 void arm_internation::set_decode_scale(float pos_scale, float angle_scale)
@@ -1102,6 +1193,7 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 //  send_pump_cmd()       : AA 06 / BB 06 气泵开关+速度
 //  send_4dof_pose_cmd()  : BB 02 4DOF 臂位姿（x, y, z, pitch）
 //  send_4dof_action_cmd(): BB 03 4DOF 预设动作触发
+//  send_4dof_start_cmd() : BB 99 带初始偏移启动（offsetX/Y/Z，单位 mm）
 bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 {
     if (protocol_ == ArmProtocol::Dof4BB)
@@ -1216,6 +1308,53 @@ bool arm_internation::send_4dof_action_cmd(uint8_t action_id)
     return write_bytes(buf, sizeof(buf));
 }
 
+bool arm_internation::send_4dof_start_cmd(float offset_x, float offset_y, float offset_z)
+{
+    if (protocol_ != ArmProtocol::Dof4BB)
+    {
+        // START,x,y,z 是 4DOF 固件专用命令；AA 平面臂没有对应 0x99 语义。
+        return false;
+    }
+
+    // BB 99 启动帧：
+    // [0]BB [1]99 [2..5]offsetX [6..9]offsetY [10..13]offsetZ [14]FF [15]EE [16]CRC。
+    // 三个偏移按 float32 小端直接写入，单位为 mm；不做 pos_scale_ 换算，避免改变固件协议含义。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[17] = {kHeadB, kCmd4DofStart,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(offset_x, buf + 2);
+    encode_float_le(offset_y, buf + 6);
+    encode_float_le(offset_z, buf + 10);
+    buf[16] = calc_crc8(buf, 16);
+    return write_bytes(buf, sizeof(buf));
+}
+
+//对应4DOF的机械臂取块动作
+bool arm_internation::send_4dof_PICK_BLOCK(uint8_t arm_id, float aim_x, float aim_y, float aim_z)
+{
+    if (protocol_ != ArmProtocol::Dof4BB)
+    {
+        return false;
+    }
+
+    // BB 99 启动帧：
+    // [0]BB [1]99 [2..5]offsetX [6..9]offsetY [10..13]offsetZ [14]FF [15]EE [16]CRC。
+    // 三个偏移按 float32 小端直接写入，单位为 mm；不做 pos_scale_ 换算，避免改变固件协议含义。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[17] = {kHeadB, kCmd4DofStart,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(aim_x, buf + 2);
+    encode_float_le(aim_y, buf + 6);
+    encode_float_le(aim_z, buf + 10);
+    buf[16] = calc_crc8(buf, 16);
+    return write_bytes(buf, sizeof(buf));
+}
 
 // ╔═══════════════════════════════════════════════════════════════╗
 // ║           HWID 设备扫描与匹配                                   ║
@@ -1501,6 +1640,7 @@ void arm_internation::clear_report_state()
         gimbal_float_.yaw = 0.0f;
         gimbal_float_.pitch = 0.0f;
         sensor_ = SensorStatus{};
+        pending_done_feedback_count_ = 0;
     }
 
     rx_len_ = 0;
@@ -1550,9 +1690,9 @@ bool arm_internation::try_reconnect_once()
  *        │
  *   ┌────┼────┬────┬────┬────┬────┐
  *   ▼    ▼    ▼    ▼    ▼    ▼    ▼
- * 4POSE 4ACT LF/RF G    V    P    A
- *  (BB)  (BB) /LB/RB (AA) (both)(both)(both)
- *                  (AA)
+ * START 4POSE 4ACT LF/RF G    V    P    A
+ *  (BB)  (BB)  (BB) /LB/RB (AA) (both)(both)(both)
+ *                       (AA)
  *
  * 输入容错设计：
  * - 中英文标点（，：；→ ,:;）自动转换
@@ -1572,7 +1712,7 @@ bool arm_internation::try_reconnect_once()
 // ║           文本命令分派（主入口）                                 ║
 // ╚═══════════════════════════════════════════════════════════════╝
 //  handle_text_command(): 将人类可读文本命令 → 协议帧 → 串口发送
-//  分派：4POSE/4ACT → BB; LF/RF/LB/RB → AA; G/V/P/A → 双协议
+//  分派：START/4POSE/4ACT → BB; LF/RF/LB/RB → AA; G/V/P/A → 双协议
 bool arm_internation::handle_text_command(const std::string &command_text)
 {
     // 解析总入口：
@@ -1592,6 +1732,71 @@ bool arm_internation::handle_text_command(const std::string &command_text)
     }
 
     const std::string cmd = to_upper_copy(tokens[0]);
+
+    if (cmd == "START" || cmd == "启动")
+    {
+        // 这里的 START 是低层 /arm_internation/cmd 命令，直接映射到 BB 99。
+        // 它不同于 arm_mission_node 里的高层 START：高层 START 会拆成旧 AA 平面臂位置序列，
+        // 而本分支只负责把雷达给出的 xyz 初始偏移透传给 4DOF 下位机固件。
+        if (tokens.size() < 4)
+        {
+            return false;
+        }
+
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        float offset_z = 0.0f;
+        bool has_x = false;
+        bool has_y = false;
+        bool has_z = false;
+
+        for (size_t i = 1; i < tokens.size(); ++i)
+        {
+            float value = 0.0f;
+            if (parse_float_after_prefix(tokens[i], "X", value))
+            {
+                offset_x = value;
+                has_x = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Y", value))
+            {
+                offset_y = value;
+                has_y = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Z", value))
+            {
+                offset_z = value;
+                has_z = true;
+                continue;
+            }
+            if (parse_float_token(tokens[i], value))
+            {
+                if (!has_x)
+                {
+                    offset_x = value;
+                    has_x = true;
+                }
+                else if (!has_y)
+                {
+                    offset_y = value;
+                    has_y = true;
+                }
+                else if (!has_z)
+                {
+                    offset_z = value;
+                    has_z = true;
+                }
+            }
+        }
+
+        if (!has_x || !has_y || !has_z)
+        {
+            return false;
+        }
+        return send_4dof_start_cmd(offset_x, offset_y, offset_z);
+    }
 
     if (cmd == "4POSE" || cmd == "4P" || cmd == "DOF4POSE")
     {

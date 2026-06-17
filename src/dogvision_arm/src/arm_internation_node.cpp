@@ -77,7 +77,7 @@ static std::string build_status_payload(const arm_internation &my_arm)
  * @section 节点架构
  * 本节点是串口通信栈的最底层节点，负责：
  * 1) 串口生命周期管理（连接/断线检测/自动重连）
- * 2) 反馈帧接收与状态发布（200Hz 主循环 → 20Hz 话题发布）
+ * 2) 反馈帧接收与状态发布（200Hz 主循环 → 20Hz 数据发布 + DONE 事件发布）
  * 3) 命令订阅与转发（/arm_internation/cmd → handle_text_command）
  *
  * @section 主循环时序
@@ -87,6 +87,7 @@ static std::string build_status_payload(const arm_internation &my_arm)
  *   └──────────────────────────────────────────────────┘
  *   ┌─ 每次循环 ────────────────────────────────────────┐
  *   │  receive_once() → 读串口 + 帧解析                 │
+ *   │  consume_done_feedback_count() → 发布 DONE 事件   │
  *   └──────────────────────────────────────────────────┘
  *   ┌─ 50ms 间隔 ───────────────────────────────────────┐
  *   │  build_status_payload() → publish()               │
@@ -115,7 +116,8 @@ int main(int argc, char **argv)
     node->declare_parameter<int>("baud_rate", 115200);                           // 串口波特率
     node->declare_parameter<std::string>("port", "");                            // 串口设备路径，留空则自动根据hw_id查找
     node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");   // 接收命令的ROS话题
-    node->declare_parameter<std::string>("data_topic", "/arm_internation/data"); // 发布状态的ROS话题
+    node->declare_parameter<std::string>("data_topic", "/arm_internation/data"); // 发布状态的ROS话题，主要是机械臂的位置数据的上报
+    node->declare_parameter<std::string>("state_topic", "/arm_internation/state"); // 发布一次性事件，如下位机 BB CC 完成反馈
     node->declare_parameter<double>("pos_scale", 0.01);                          // 位置解码缩放，默认0.01即1cm单位
     node->declare_parameter<double>("angle_scale", 0.01);                        // 角度解码缩放，默认0.01即1度单位
     node->declare_parameter<std::string>("protocol", "aa");
@@ -125,6 +127,7 @@ int main(int argc, char **argv)
     const std::string serial_port = node->get_parameter("port").as_string();
     const std::string cmd_topic = node->get_parameter("cmd_topic").as_string();
     const std::string data_topic = node->get_parameter("data_topic").as_string();
+    const std::string state_topic = node->get_parameter("state_topic").as_string();
     const double pos_scale = node->get_parameter("pos_scale").as_double();
     const double angle_scale = node->get_parameter("angle_scale").as_double();
     const std::string protocol = node->get_parameter("protocol").as_string();
@@ -150,6 +153,7 @@ int main(int argc, char **argv)
             }
         });
     auto data_pub = node->create_publisher<std_msgs::msg::String>(data_topic, rclcpp::QoS(20));
+    auto state_pub = node->create_publisher<std_msgs::msg::String>(state_topic, rclcpp::QoS(20));
 
     if (!serial_port.empty())
     {
@@ -186,7 +190,16 @@ int main(int argc, char **argv)
         }
 
         // 主循环核心：接收并解析串口反馈帧，更新内部状态缓存。
+        // 若收到 BB CC FF EE CRC8，arm_internation 不会把它塞进 /data，
+        // 而是记为一次性完成事件；这里消费事件并发布给雷达/任务侧监听者。
         my_arm.receive_once();
+        const size_t done_count = my_arm.consume_done_feedback_count();
+        for (size_t i = 0; i < done_count; ++i)
+        {
+            std_msgs::msg::String msg;
+            msg.data = "DONE";
+            state_pub->publish(msg);
+        }
 
         if (now >= next_publish_time)
         {
@@ -201,6 +214,7 @@ int main(int argc, char **argv)
     }
 
     (void)cmd_sub;
+    (void)state_pub;
     my_arm.close();
     rclcpp::shutdown();
     return 0;

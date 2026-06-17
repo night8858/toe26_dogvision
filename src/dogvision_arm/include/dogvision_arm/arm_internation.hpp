@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -117,6 +118,8 @@ enum class ArmProtocol {
 //    BB 04  → 4DOF 电磁阀控制
 //    BB 05  → 4DOF 语音应答/答案控制（下位机预留）
 //    BB 06  → 4DOF 气泵控制
+//    BB 99  → 4DOF 带初始偏移启动（offsetX/Y/Z，float32 小端，单位 mm）
+//    BB CC  ← 4DOF 当前动作完成事件；ROS 节点会转发为 /arm_internation/state = "DONE"
 
 //  用法（典型）：
 //    arm_internation comm;
@@ -125,12 +128,14 @@ enum class ArmProtocol {
 //    // 接收线程：while(running) comm.receive_once();
 //    comm.send_arm_cmd(0, 100, 200);
 //    comm.send_4dof_pose_cmd(0, 0.1f, 0.2f, 0.3f, 0.4f);
+//    comm.send_4dof_start_cmd(0.0f, 0.0f, 0.0f);  // 带初始偏移启动
 //    ArmEndPos pos = comm.get_arm_pos(0);
 //
 //  文本命令示例（通常由 ROS 字符串话题传入）：
 //    RL,X:10,Y:10      -> 控制机械臂（别名映射见 parse_arm_alias）
 //    4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4 -> 4DOF 左臂位姿
 //    4ACT,1            -> 4DOF 触发预设动作 1；4ACT,0 表示中止
+//    START,0,0,0        -> 4DOF 带 X/Y/Z 初始偏移启动（单位 mm）
 //    G,0,0             -> 控制云台 yaw/pitch
 //    V,1               -> 翻转电磁阀 1 的状态
 //    V,1,ON            -> 显式打开电磁阀 1
@@ -243,6 +248,11 @@ public:
     /// @retval Arm4DofPoseFloat 位姿（xyz + pitch），非 BB 协议或越界返回零值
     Arm4DofPoseFloat get_4dof_pose_float(int arm_id) const;
 
+    /// @brief 取出并清零 4DOF 动作完成事件数量。
+    /// @retval size_t 自上次调用以来收到的有效 BB CC 完成反馈帧数量
+    /// @note BB CC 是一次性事件，不属于连续位姿状态；ROS 节点用它逐条发布 DONE。
+    size_t consume_done_feedback_count();
+
     /// @brief 配置 int16 视图的换算比例。
     /// @param pos_scale 位置缩放因子（仅正值生效）
     /// @param angle_scale 角度缩放因子（仅正值生效）
@@ -301,6 +311,15 @@ public:
     /// @retval false 非 BB 协议
     bool send_4dof_action_cmd(uint8_t action_id);
 
+    /// @brief 发送 4DOF 带初始偏移启动命令（仅 BB 协议）。
+    /// @param offset_x X 方向初始偏移，单位 mm，按 float32 小端直接发送
+    /// @param offset_y Y 方向初始偏移，单位 mm，按 float32 小端直接发送
+    /// @param offset_z Z 方向初始偏移，单位 mm，按 float32 小端直接发送
+    /// @retval true 发送成功
+    /// @retval false 非 BB 协议或串口写入失败
+    /// @note 帧格式：BB 99 offsetX offsetY offsetZ FF EE CRC8，CRC 覆盖 CRC 前所有字节。
+    bool send_4dof_start_cmd(float offset_x, float offset_y, float offset_z);
+
     /// @brief 解析并执行文本命令（统一命令入口）。
     /// @param command_text 原始命令字符串，支持中英文标点容错
     /// @retval true 命令解析成功并已发送
@@ -309,6 +328,7 @@ public:
     ///   - AA 机械臂: "LF,X:10,Y:20" / "RF,10,20"
     ///   - BB 4DOF:   "4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4"
     ///   - BB 动作:   "4ACT,1" / "4ACT,0"（中止）
+    ///   - BB 启动:   "START,0,0,0" / "START,X:0,Y:0,Z:0"（偏移单位 mm）
     ///   - 云台:      "G,0,0"
     ///   - 电磁阀:    "V,1"（翻转）/ "V,1,ON"（显式）/ "V,ALL,ON"
     ///   - 气泵:      "P,ON,2500" / "P,OFF"
@@ -325,6 +345,18 @@ private:
     static constexpr uint8_t kCmdValv = 0x04u;  ///< 命令字：电磁阀控制
     static constexpr uint8_t kCmdAns  = 0x05u;  ///< 命令字：任务赛答案
     static constexpr uint8_t kCmdPump = 0x06u;  ///< 命令字：气泵控制（on/off + 速度）
+
+    static constexpr uint8_t kCmd4DofPICK = 0x11u;                ///< BB 命令字：4DOF 单臂取块位姿控制，可控制末端点
+    static constexpr uint8_t kCmd4DofPLACE_1F = 0x12u;            ///< BB 命令字：4DOF 单臂放块第一层位姿控制，可控制末端点
+    static constexpr uint8_t kCmd4DofPLACE_2F = 0x13u;            ///< BB 命令字：4DOF 单臂放块第二层位姿控制，可控制末端点
+    static constexpr uint8_t kCmd4DofPUT_BLOCK_BACK = 0x14u;      ///< BB 命令字：4DOF 单臂放块到背部，不可控末端点
+    static constexpr uint8_t kCmd4DofGET_BLOCK_BACK = 0x15u;      ///< BB 命令字：4DOF 单臂背部取块，不可控末端点
+
+    static constexpr uint8_t kCmd4DofPICK_ALL = 0x21u;            ///< BB 命令字：4DOF 双臂取块位姿控制，可控制左右臂末端点
+    static constexpr uint8_t kCmd4DofPUT_BLOCK_BACK_ALL = 0x22u;  ///< BB 命令字：4DOF 双臂放块到背部，不可控制左右臂末端点
+
+    static constexpr uint8_t kCmd4DofStart = 0x99u; ///< BB 命令字：带初始偏移启动
+    static constexpr uint8_t kCmd4DofDone  = 0xCCu; ///< BB 事件字：当前动作完成反馈
     static constexpr uint8_t kTailA   = 0xFFu;  ///< 帧尾第一字节
     static constexpr uint8_t kTailB   = 0xEEu;  ///< 帧尾第二字节
 
@@ -353,6 +385,8 @@ private:
     static constexpr int kFbPayloadLen = 44;
     /// BB 01 帧总字节数：2(头/命令) + 41(DATA) + 2(尾) + 1(CRC) = 46
     static constexpr int k4DofFbFrameLen = 46;
+    /// BB CC 完成事件帧总字节数：BB + CC + FF + EE + CRC = 5
+    static constexpr int k4DofDoneFrameLen = 5;
 
     // ---- CRC-8/SMBUS（多项式 0x07）------------------------------
     /// 对 data[0..len-1] 计算 CRC-8。
@@ -448,6 +482,7 @@ private:
     Arm4DofPoseFloat   dof4_pose_float_[2] = {}; ///< BB 协议：左/右臂 4DOF 位姿
     GimbalAngleFloat   gimbal_float_     = {};   ///< AA 协议：云台角度
     SensorStatus       sensor_     = {};         ///< 电磁阀 + 微动开关状态
+    size_t             pending_done_feedback_count_ = 0; ///< 待 ROS 节点发布的 BB CC 完成事件数量
     /// @}
 
     // ---- 协议模式 ------------------------------------------------

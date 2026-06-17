@@ -11,9 +11,9 @@ ROS2 Jazzy 机械臂控制包，支持 **AA（平面4臂）** 和 **BB（4DOF双
 │ arm_cmd_terminal_node        arm_mission_node        arm_internation_node │
 │ (用户终端 stdin)       ──▶   (任务拆解)        ──▶       (串口收发)      │
 │                              │                              │              │
-│ 发布: /arm/mission_cmd       │ 订阅: /arm/mission_cmd       │ 订阅: /arm/internation/cmd │
-│       /arm/internation/cmd   │ 发布: /arm/internation/cmd   │ 发布: /arm/internation/data │
-│                              │       /arm/mission_cmd(反馈)  │                              │
+│ 发布: /arm/mission_cmd       │ 订阅: /arm/mission_cmd       │ 订阅: /arm_internation/cmd │
+│       /arm_internation/cmd   │ 发布: /arm_internation/cmd   │ 发布: /arm_internation/data │
+│                              │       /arm/mission_cmd(反馈)  │       /arm_internation/state│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -76,6 +76,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | 话题 | 类型 | QoS | 频率 | 说明 |
 |------|------|-----|------|------|
 | `/arm_internation/data` | `std_msgs/String` | 20 | 20Hz (50ms) | 机械臂实时状态（协议相关格式见下方） |
+| `/arm_internation/state` | `std_msgs/String` | 20 | 事件触发 | 下位机动作完成事件，收到 `BB CC FF EE CRC8` 后发布 `DONE` |
 
 #### 参数
 
@@ -89,6 +90,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | `angle_scale` | `0.01` | double | 角度解码缩放因子（仅影响 `get_gimbal()` int16 视图） |
 | `cmd_topic` | `"/arm_internation/cmd"` | string | 命令订阅话题名 |
 | `data_topic` | `"/arm_internation/data"` | string | 状态发布话题名 |
+| `state_topic` | `"/arm_internation/state"` | string | 一次性事件发布话题名 |
 
 #### 自动重连机制
 
@@ -113,7 +115,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 
 | 话题 | 类型 | QoS | 说明 |
 |------|------|-----|------|
-| `/arm/internation/cmd` | `std_msgs/String` | 10 | 拆解后的低层指令序列 |
+| `/arm_internation/cmd` | `std_msgs/String` | 10 | 拆解后的低层指令序列 |
 | `/arm/mission_cmd` | `std_msgs/String` | 10 | 任务完成反馈 `FEEDBACK:DONE` |
 
 #### 参数
@@ -121,7 +123,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | 参数 | 默认值 | 类型 | 说明 |
 |------|--------|------|------|
 | `mission_topic` | `"/arm/mission_cmd"` | string | 任务命令订阅话题 |
-| `cmd_topic` | `"/arm/internation/cmd"` | string | 低层命令发布话题 |
+| `cmd_topic` | `"/arm_internation/cmd"` | string | 低层命令发布话题 |
 | `start_pos.*` | 见 YAML | double | 各臂启动位置 (x, y) |
 | `stow_pos.*` | 见 YAML | double | 各臂收起位置 (x, y) |
 | `pick_pos.*` | 见 YAML | double | 各臂吸取位置 (x, y) |
@@ -140,14 +142,14 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | 输入前缀 | 发布话题 | 示例 |
 |----------|----------|------|
 | 无前缀 | `/arm/mission_cmd` | `STOW,ALL` |
-| `$` 开头 | `/arm/internation/cmd` | `$LF,X:10,Y:20` |
+| `$` 开头 | `/arm_internation/cmd` | `$LF,X:10,Y:20` |
 
 #### 发布话题
 
 | 话题 | 类型 | QoS | 说明 |
 |------|------|-----|------|
 | `/arm/mission_cmd` | `std_msgs/String` | 10 | 高层任务命令（无 $ 前缀） |
-| `/arm/internation/cmd` | `std_msgs/String` | 10 | 低层协议命令（带 $ 前缀） |
+| `/arm_internation/cmd` | `std_msgs/String` | 10 | 低层协议命令（带 $ 前缀） |
 
 #### 参数
 
@@ -166,7 +168,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 
 ## 命令参考
 
-### 低层协议命令（发布到 `/arm/internation/cmd`）
+### 低层协议命令（发布到 `/arm_internation/cmd`）
 
 这些命令由 `arm_internation` 类中的 `handle_text_command()` 解析，直接打包为协议帧通过串口发送。
 
@@ -187,6 +189,8 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | `4POSE,<arm>,X:<x>,Y:<y>,Z:<z>,PITCH:<pitch>` | 控制 4DOF 臂位姿（带前缀） | `4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4` |
 | `4POSE,<arm>,<x>,<y>,<z>,<pitch>` | 简写格式 | `4POSE,R,0.1,0.2,0.3,0.4` |
 | `4ACT,<id>` | 触发预设动作（0=中止, 1-N=动作） | `4ACT,1` |
+| `START,<x>,<y>,<z>` | 发送 `BB 99` 带初始偏移启动，偏移单位 mm | `START,0,0,0` |
+| `START,X:<x>,Y:<y>,Z:<z>` | 带前缀写法，等价于上方简写 | `START,X:0,Y:0,Z:0` |
 
 **4DOF 臂别名**：`L`/`LEFT`/`左`/`0`(左臂), `R`/`RIGHT`/`右`/`1`(右臂)
 
@@ -328,26 +332,32 @@ ros2 node list
 
 ```bash
 ros2 topic list
-# 应看到: /arm/internation/cmd, /arm/mission_cmd, /arm_internation/data
+# 应看到: /arm_internation/cmd, /arm/mission_cmd, /arm_internation/data, /arm_internation/state
 ```
 
 ### 4. 监听状态数据
 
 ```bash
 ros2 topic echo /arm_internation/data
+
+# 动作完成事件会在这里看到 DONE
+ros2 topic echo /arm_internation/state
 ```
 
 ### 5. 手动发布低层命令（无需终端节点）
 
 ```bash
 # AA 协议：控制 LF 臂到 (10, 20)
-ros2 topic pub /arm/internation/cmd std_msgs/String "data: 'LF,X:10,Y:20'" --once
+ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'LF,X:10,Y:20'" --once
 
 # BB 4DOF 协议：左臂位姿
-ros2 topic pub /arm/internation/cmd std_msgs/String "data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'" --once
+ros2 topic pub /arm_internation/cmd std_msgs/String "data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'" --once
+
+# BB 4DOF 协议：带初始偏移启动，xyz 单位 mm
+ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'START,0,0,0'" --once
 
 # 电磁阀打开
-ros2 topic pub /arm/internation/cmd std_msgs/String "data: 'V,1,ON'" --once
+ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'V,1,ON'" --once
 ```
 
 ### 6. 手动发布高层任务命令
