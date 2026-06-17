@@ -15,3 +15,6 @@
     <param name="canvas_height" value="$(var canvas_height)" type="int"/>
   </node>
 </launch>
+
+
+<!-- 这里是算术题启动脚本  -->

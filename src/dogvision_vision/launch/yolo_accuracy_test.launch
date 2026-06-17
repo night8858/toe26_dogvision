@@ -13,3 +13,5 @@
     <param name="visual_nms_thresh" value="$(var visual_nms_thresh)" type="float"/>
   </node>
 </launch>
+
+<!-- 这里是YOLO连续测试启动脚本  -->

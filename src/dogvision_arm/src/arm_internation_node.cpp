@@ -23,7 +23,7 @@ using namespace std::chrono_literals;
  * @param my_arm 用于读取当前状态的机械臂通信对象。
  * @retval std::string 用于 /arm_internation/data 的状态数据。
  */
-static std::string build_status_payload(const arm_internation& my_arm)
+static std::string build_status_payload(const arm_internation &my_arm)
 {
     const SensorStatus sensor = my_arm.get_sensor();
 
@@ -104,20 +104,20 @@ static std::string build_status_payload(const arm_internation& my_arm)
  * @param argv 命令行参数数组。
  * @retval int 进程退出码。
  */
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<rclcpp::Node>("arm_internation_node");
     auto logger = node->get_logger();
 
-    node->declare_parameter<std::string>("hw_id", "0483:5740");           // 设备HWID，默认STM32F407的USB VID:PID
+    node->declare_parameter<std::string>("hw_id", "0483:5740"); // 设备HWID，默认STM32F407的USB VID:PID
 
-    node->declare_parameter<int>("baud_rate", 115200);                    // 串口波特率
-    node->declare_parameter<std::string>("port", "");                     // 串口设备路径，留空则自动根据hw_id查找
-    node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");         // 接收命令的ROS话题
-    node->declare_parameter<std::string>("data_topic", "/arm_internation/data");      // 发布状态的ROS话题
-    node->declare_parameter<double>("pos_scale", 0.01);                              // 位置解码缩放，默认0.01即1cm单位
-    node->declare_parameter<double>("angle_scale", 0.01);                            // 角度解码缩放，默认0.01即1度单位
+    node->declare_parameter<int>("baud_rate", 115200);                           // 串口波特率
+    node->declare_parameter<std::string>("port", "");                            // 串口设备路径，留空则自动根据hw_id查找
+    node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");   // 接收命令的ROS话题
+    node->declare_parameter<std::string>("data_topic", "/arm_internation/data"); // 发布状态的ROS话题
+    node->declare_parameter<double>("pos_scale", 0.01);                          // 位置解码缩放，默认0.01即1cm单位
+    node->declare_parameter<double>("angle_scale", 0.01);                        // 角度解码缩放，默认0.01即1度单位
     node->declare_parameter<std::string>("protocol", "aa");
 
     const std::string hw_id = node->get_parameter("hw_id").as_string();
@@ -129,6 +129,7 @@ int main(int argc, char** argv)
     const double angle_scale = node->get_parameter("angle_scale").as_double();
     const std::string protocol = node->get_parameter("protocol").as_string();
 
+        //
     arm_internation my_arm;
     if (!my_arm.set_protocol_from_string(protocol))
     {
@@ -141,7 +142,8 @@ int main(int argc, char** argv)
 
     auto cmd_sub = node->create_subscription<std_msgs::msg::String>(
         cmd_topic, rclcpp::QoS(20),
-        [&](const std_msgs::msg::String::SharedPtr msg) {
+        [&](const std_msgs::msg::String::SharedPtr msg)
+        {
             if (!my_arm.handle_text_command(msg->data))
             {
                 RCLCPP_WARN(logger, "[arm_internation_node] invalid cmd: %s", msg->data.c_str());
@@ -174,6 +176,7 @@ int main(int argc, char** argv)
         const auto now = std::chrono::steady_clock::now();
         if (now >= next_conn_check_time)
         {
+            // 定期检查串口连接状态，适用于非 auto_reconnect 场景的掉线检测。
             next_conn_check_time = now + 1s;
             if (!my_arm.is_open())
             {
@@ -182,6 +185,7 @@ int main(int argc, char** argv)
             }
         }
 
+        // 主循环核心：接收并解析串口反馈帧，更新内部状态缓存。
         my_arm.receive_once();
 
         if (now >= next_publish_time)

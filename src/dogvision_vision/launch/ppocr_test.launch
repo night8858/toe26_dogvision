@@ -10,3 +10,5 @@
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
   </node>
 </launch>
+
+<!-- 这里是PP-OCR测试启动脚本  -->
