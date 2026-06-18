@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 
 #include <chrono>
 #include <iomanip>
@@ -118,6 +119,7 @@ int main(int argc, char **argv)
     node->declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");   // 接收命令的ROS话题
     node->declare_parameter<std::string>("data_topic", "/arm_internation/data"); // 发布状态的ROS话题，主要是机械臂的位置数据的上报
     node->declare_parameter<std::string>("state_topic", "/arm_internation/state"); // 发布一次性事件，如下位机 BB CC 完成反馈
+    node->declare_parameter<std::string>("ocr_answer_topic", "/ocr/answer");     // OCR 稳定答案，UInt8 0..3
     node->declare_parameter<double>("pos_scale", 0.01);                          // 位置解码缩放，默认0.01即1cm单位
     node->declare_parameter<double>("angle_scale", 0.01);                        // 角度解码缩放，默认0.01即1度单位
     node->declare_parameter<std::string>("protocol", "aa");
@@ -128,6 +130,8 @@ int main(int argc, char **argv)
     const std::string cmd_topic = node->get_parameter("cmd_topic").as_string();
     const std::string data_topic = node->get_parameter("data_topic").as_string();
     const std::string state_topic = node->get_parameter("state_topic").as_string();
+    const std::string ocr_answer_topic =
+        node->get_parameter("ocr_answer_topic").as_string();
     const double pos_scale = node->get_parameter("pos_scale").as_double();
     const double angle_scale = node->get_parameter("angle_scale").as_double();
     const std::string protocol = node->get_parameter("protocol").as_string();
@@ -151,6 +155,45 @@ int main(int argc, char **argv)
             {
                 RCLCPP_WARN(logger, "[arm_internation_node] invalid cmd: %s", msg->data.c_str());
             }
+        });
+    auto answer_qos =
+        rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile();
+    auto ocr_answer_sub = node->create_subscription<std_msgs::msg::UInt8>(
+        ocr_answer_topic, answer_qos,
+        [&](const std_msgs::msg::UInt8::SharedPtr msg)
+        {
+            const uint8_t answer = msg->data;
+            if (answer > 3)
+            {
+                RCLCPP_ERROR(logger,
+                             "[arm_internation_node] OCR answer out of range [0,3]: %u",
+                             static_cast<unsigned>(answer));
+                return;
+            }
+            if (my_arm.protocol() != ArmProtocol::Dof4BB)
+            {
+                RCLCPP_ERROR(logger,
+                             "[arm_internation_node] OCR answer requires protocol=4dof; current=%s",
+                             my_arm.protocol_name());
+                return;
+            }
+            if (!my_arm.is_open())
+            {
+                RCLCPP_ERROR(logger,
+                             "[arm_internation_node] cannot send OCR answer %u: serial disconnected",
+                             static_cast<unsigned>(answer));
+                return;
+            }
+            if (!my_arm.send_answer_cmd(answer))
+            {
+                RCLCPP_ERROR(logger,
+                             "[arm_internation_node] failed to send BB 05 answer=%u",
+                             static_cast<unsigned>(answer));
+                return;
+            }
+            RCLCPP_INFO(logger,
+                        "[arm_internation_node] sent BB 05 answer=%u from %s",
+                        static_cast<unsigned>(answer), ocr_answer_topic.c_str());
         });
     auto data_pub = node->create_publisher<std_msgs::msg::String>(data_topic, rclcpp::QoS(20));
     auto state_pub = node->create_publisher<std_msgs::msg::String>(state_topic, rclcpp::QoS(20));
@@ -214,6 +257,7 @@ int main(int argc, char **argv)
     }
 
     (void)cmd_sub;
+    (void)ocr_answer_sub;
     (void)state_pub;
     my_arm.close();
     rclcpp::shutdown();

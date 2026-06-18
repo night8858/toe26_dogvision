@@ -11,6 +11,7 @@
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="test" type="str"/>
     <param name="show_visual" value="$(var show_visual)" type="bool"/>
+    <param name="enable_keyboard_trigger" value="false" type="bool"/>
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
   </node>
 </launch>

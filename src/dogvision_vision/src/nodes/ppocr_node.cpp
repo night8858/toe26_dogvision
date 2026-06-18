@@ -20,6 +20,7 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 
 #include <jsoncpp/json/json.h>
 #include <opencv2/opencv.hpp>
@@ -46,6 +47,7 @@ namespace fs = std::filesystem;
 namespace
 {
 std::atomic<bool> g_ocr_triggered{false};
+std::atomic<bool> g_ocr_running{true};
 } // namespace
 
 /**
@@ -404,18 +406,38 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                                detect_det_ppocr& det,
                                detect_rec_ppocr& rec,
                                const s_detector_params& ocr_config,
-                               bool show_visual)
+                               bool show_visual,
+                               bool enable_keyboard_trigger)
 {
     auto logger = node->get_logger();
     auto latched_qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
     auto trigger_sub = node->create_subscription<std_msgs::msg::String>(
         "/ocr/trigger", rclcpp::QoS(1), ocr_trigger_callback);
     auto result_pub = node->create_publisher<std_msgs::msg::String>("/ocr/result", latched_qos);
+    auto answer_qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile();
+    auto answer_pub = node->create_publisher<std_msgs::msg::UInt8>("/ocr/answer", answer_qos);
+
+    std::thread keyboard_thread;
+    if (enable_keyboard_trigger)
+    {
+        keyboard_thread = std::thread([]() {
+            std::string line;
+            while (g_ocr_running.load() && rclcpp::ok() &&
+                   std::getline(std::cin, line))
+            {
+                g_ocr_triggered.store(true);
+            }
+        });
+    }
 
     RCLCPP_INFO(logger, "MODE       : PRODUCTION (trigger-based)");
     RCLCPP_INFO(logger, "Subscribed : /ocr/trigger");
     RCLCPP_INFO(logger, "Publishing : /ocr/result (transient_local)");
-    RCLCPP_INFO(logger, "Waiting for trigger...");
+    RCLCPP_INFO(logger, "Publishing : /ocr/answer (UInt8, volatile)");
+    RCLCPP_INFO(logger, "Keyboard   : %s",
+                enable_keyboard_trigger ? "Enter enabled" : "disabled");
+    RCLCPP_INFO(logger, "Waiting for trigger%s...",
+                enable_keyboard_trigger ? " or Enter" : "");
 
     OCRMultiFrameVoter voter;
     cv::Rect2f stable_roi;
@@ -486,6 +508,15 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             msg.data = writer.write(result_json);
             result_pub->publish(msg);
             RCLCPP_INFO(logger, "Published  : %s", msg.data.c_str());
+
+            std_msgs::msg::UInt8 answer_msg;
+            answer_msg.data = static_cast<uint8_t>(stable.mod4);
+            answer_pub->publish(answer_msg);
+            RCLCPP_INFO(logger, "Answer     : mod4=%u published to /ocr/answer",
+                        static_cast<unsigned>(answer_msg.data));
+
+            tracking_active = false;
+            RCLCPP_INFO(logger, "OCR cycle complete. Waiting for next trigger.");
         }
         else if (event == OCRVoteEvent::StableLost)
         {
@@ -513,6 +544,11 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     }
 
     (void)trigger_sub;
+    g_ocr_running.store(false);
+    if (keyboard_thread.joinable())
+    {
+        keyboard_thread.detach();
+    }
     RCLCPP_INFO(logger, "Production mode finished.");
     return 0;
 }
@@ -533,11 +569,14 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("config_path", share_dir + "/config/settings.json");
     node->declare_parameter<std::string>("mode", "production");
     node->declare_parameter<bool>("show_visual", true);
+    node->declare_parameter<bool>("enable_keyboard_trigger", true);
     node->declare_parameter<std::string>("yaml_path", share_dir + "/data/ocr_output/ocr_results.yaml");
 
     const std::string config_path = node->get_parameter("config_path").as_string();
     const std::string mode = node->get_parameter("mode").as_string();
     const bool show_visual = node->get_parameter("show_visual").as_bool();
+    const bool enable_keyboard_trigger =
+        node->get_parameter("enable_keyboard_trigger").as_bool();
     const std::string yaml_path = node->get_parameter("yaml_path").as_string();
 
     Appconfig config;
@@ -592,7 +631,8 @@ int main(int argc, char** argv)
     else if (mode == "production")
     {
         ret = run_production_mode(
-            node, hik, det, rec, config.detect_config, show_visual);
+            node, hik, det, rec, config.detect_config,
+            show_visual, enable_keyboard_trigger);
     }
     else
     {

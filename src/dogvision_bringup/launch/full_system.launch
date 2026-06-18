@@ -4,6 +4,8 @@
   <arg name="port" default=""/>
   <arg name="pos_scale" default="0.01"/>
   <arg name="angle_scale" default="0.01"/>
+  <arg name="protocol" default="4dof"/>
+  <arg name="ocr_answer_topic" default="/ocr/answer"/>
   <arg name="mission_config" default="$(find-pkg-share dogvision_arm)/config/pos_set.yaml"/>
 
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
@@ -11,8 +13,10 @@
   <arg name="enable_undistort" default="true"/>
   <arg name="save_images" default="true"/>
   <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <arg name="yolo_enable_keyboard_trigger" default="false"/>
   <arg name="ppocr_mode" default="production"/>
   <arg name="ppocr_show_visual" default="true"/>
+  <arg name="ppocr_enable_keyboard_trigger" default="true"/>
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
   <include file="$(find-pkg-share dogvision_arm)/launch/arm_control.launch">
@@ -21,6 +25,8 @@
     <arg name="port" value="$(var port)"/>
     <arg name="pos_scale" value="$(var pos_scale)"/>
     <arg name="angle_scale" value="$(var angle_scale)"/>
+    <arg name="protocol" value="$(var protocol)"/>
+    <arg name="ocr_answer_topic" value="$(var ocr_answer_topic)"/>
     <arg name="mission_config" value="$(var mission_config)"/>
   </include>
 
@@ -30,8 +36,10 @@
     <arg name="enable_undistort" value="$(var enable_undistort)"/>
     <arg name="save_images" value="$(var save_images)"/>
     <arg name="save_dir" value="$(var save_dir)"/>
+    <arg name="yolo_enable_keyboard_trigger" value="$(var yolo_enable_keyboard_trigger)"/>
     <arg name="ppocr_mode" value="$(var ppocr_mode)"/>
     <arg name="ppocr_show_visual" value="$(var ppocr_show_visual)"/>
+    <arg name="ppocr_enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)"/>
     <arg name="ocr_yaml_path" value="$(var ocr_yaml_path)"/>
   </include>
 </launch>

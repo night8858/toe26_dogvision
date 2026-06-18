@@ -128,7 +128,7 @@ source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_
 source install/setup.bash
 ```
 
-启动全系统。默认是生产模式，包含机械臂控制、任务节点、YOLO 和 PPOCR，不启动终端输入节点：
+启动全系统。默认使用 4DOF 协议；Enter 触发一次 OCR，稳定后的 `mod4` 自动通过 BB 05 发送到 STM32：
 
 ```bash
 ros2 launch dogvision_bringup full_system.launch
@@ -213,14 +213,18 @@ ros2 run dogvision_vision math_generator_node
 | `port` | 空字符串 | 指定串口路径，非空时跳过 HWID 扫描 |
 | `pos_scale` | `0.01` | 机械臂坐标换算比例 |
 | `angle_scale` | `0.01` | 云台角度换算比例 |
+| `protocol` | `4dof` | 机械臂串口协议；OCR 自动答案要求 4DOF/BB |
+| `ocr_answer_topic` | `/ocr/answer` | OCR 答案到机械臂的 UInt8 话题 |
 | `mission_config` | `<share>/dogvision_arm/config/pos_set.yaml` | 机械臂任务位置配置 |
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
 | `show_window` | `false` | YOLO 是否显示 OpenCV 窗口 |
 | `enable_undistort` | `true` | YOLO 是否启用去畸变 |
 | `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
+| `yolo_enable_keyboard_trigger` | `false` | 组合启动时关闭 YOLO Enter，避免争抢 stdin |
 | `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
 | `ppocr_show_visual` | `true` | PPOCR 是否显示可视化窗口 |
+| `ppocr_enable_keyboard_trigger` | `true` | 组合启动时由 Enter 触发 OCR |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 
 ### `dogvision_vision yolo_accuracy_test.launch`

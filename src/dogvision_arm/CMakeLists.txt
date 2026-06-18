@@ -44,6 +44,15 @@ add_executable(arm_mission_node
 target_link_libraries(arm_mission_node Threads::Threads)
 ament_target_dependencies(arm_mission_node rclcpp std_msgs)
 
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(answer_frame_test
+    test/answer_frame_test.cpp
+  )
+  target_link_libraries(answer_frame_test dogvision_arm_lib Threads::Threads)
+  add_test(NAME answer_frame_test COMMAND answer_frame_test)
+endif()
+
 install(TARGETS
   dogvision_arm_lib
   arm_internation_node

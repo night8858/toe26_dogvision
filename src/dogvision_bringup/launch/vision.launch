@@ -4,8 +4,10 @@
   <arg name="enable_undistort" default="true"/>
   <arg name="save_images" default="true"/>
   <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <arg name="yolo_enable_keyboard_trigger" default="false"/>
   <arg name="ppocr_mode" default="production"/>
   <arg name="ppocr_show_visual" default="true"/>
+  <arg name="ppocr_enable_keyboard_trigger" default="true"/>
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
   <node pkg="dogvision_vision" exec="yolo_node" name="yolo_node" output="screen">
@@ -14,12 +16,14 @@
     <param name="enable_undistort" value="$(var enable_undistort)" type="bool"/>
     <param name="save_images" value="$(var save_images)" type="bool"/>
     <param name="save_dir" value="$(var save_dir)" type="str"/>
+    <param name="enable_keyboard_trigger" value="$(var yolo_enable_keyboard_trigger)" type="bool"/>
   </node>
 
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="$(var ppocr_mode)" type="str"/>
     <param name="show_visual" value="$(var ppocr_show_visual)" type="bool"/>
+    <param name="enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)" type="bool"/>
     <param name="yaml_path" value="$(var ocr_yaml_path)" type="str"/>
   </node>
 </launch>

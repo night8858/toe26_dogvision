@@ -271,6 +271,7 @@ OCR 预处理参数：
 | `show_window` | bool | false | 是否显示 OpenCV 可视化窗口 |
 | `enable_undistort` | bool | true | 是否启用鱼眼去畸变 |
 | `save_images` | bool | true | 是否保存结果图 |
+| `enable_keyboard_trigger` | bool | true | 是否允许 Enter 触发；组合 launch 默认关闭 |
 | `save_dir` | string | `<share>/data/yolorun` | 结果图保存目录 |
 
 **启动方式**：
@@ -343,10 +344,10 @@ ros2 run dogvision_vision yolo_accuracy_test_node
    - 稳定结果发生变化时追加写入 `ocr_results.yaml`
 
    **production 模式**（触发式生产）：
-   - 空闲等待 `/ocr/trigger` 话题触发
+   - 空闲等待 `/ocr/trigger` 话题或 Enter 触发
    - 触发后重置投票器，开始连续跟踪
-   - 稳定结果发生变化时通过 `/ocr/result` 发布 JSON
-   - 连续 10 帧无效结果后稳定结果丢失
+   - 首个稳定结果通过 `/ocr/result` 发布 JSON，并通过 `/ocr/answer` 发布 `UInt8 mod4`
+   - 发布一次后停止跟踪，等待下一次触发
 
 **ROI 图像增强流程**：
 
@@ -370,6 +371,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 |---|---|---|---|
 | `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 任意内容触发 production 模式开始跟踪 |
 | `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local, JSON 格式稳定识别结果 |
+| `/ocr/answer` | `std_msgs/msg/UInt8` | 发布 | reliable/volatile，稳定结果的 `mod4`（0-3） |
 
 **参数**：
 
@@ -378,6 +380,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
 | `mode` | string | `"production"` | 运行模式：`"test"` 或 `"production"` |
 | `show_visual` | bool | true | 是否显示 OpenCV 可视化窗口 |
+| `enable_keyboard_trigger` | bool | true | production 模式是否允许 Enter 触发 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | test 模式下 YAML 输出路径 |
 
 **启动方式**：
@@ -397,6 +400,7 @@ ros2 topic pub --once /ocr/trigger std_msgs/msg/String "{data: start}"
 
 # 查看结果
 ros2 topic echo /ocr/result
+ros2 topic echo /ocr/answer
 ```
 
 **输出示例**（`/ocr/result`）：
@@ -737,6 +741,7 @@ ros2 launch dogvision_bringup vision.launch
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | 2×4 类别网格 JSON（transient_local） | `yolo_node` |
 | `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 任意内容触发 PPOCR production 模式跟踪 | `ppocr_node` |
 | `/ocr/result` | `std_msgs/msg/String` | 发布 | 稳定 OCR 算术结果 JSON（transient_local） | `ppocr_node` |
+| `/ocr/answer` | `std_msgs/msg/UInt8` | 发布 | 单次稳定结果的 `mod4`（reliable/volatile） | `ppocr_node` |
 
 ```bash
 # 查看话题列表
@@ -746,6 +751,7 @@ ros2 topic list
 ros2 topic echo /yolo/result
 ros2 topic echo /yolo/block_grid
 ros2 topic echo /ocr/result
+ros2 topic echo /ocr/answer
 
 # 手动触发
 ros2 topic pub --once /yolo/trigger std_msgs/msg/String "{data: start_infer}"

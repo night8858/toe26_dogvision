@@ -99,6 +99,7 @@ int main(int argc, char** argv)
     node->declare_parameter<bool>       ("show_window", false);
     node->declare_parameter<bool>       ("enable_undistort", true);
     node->declare_parameter<bool>       ("save_images", true);
+    node->declare_parameter<bool>       ("enable_keyboard_trigger", true);
     node->declare_parameter<std::string>("save_dir", share_dir + "/data/yolorun");
 
     const std::string config_path  = node->get_parameter("config_path").as_string();
@@ -106,6 +107,8 @@ int main(int argc, char** argv)
     const bool show_window         = node->get_parameter("show_window").as_bool();
     const bool enable_undistort    = node->get_parameter("enable_undistort").as_bool();
     const bool save_images         = node->get_parameter("save_images").as_bool();
+    const bool enable_keyboard_trigger =
+        node->get_parameter("enable_keyboard_trigger").as_bool();
     const std::string save_dir     = node->get_parameter("save_dir").as_string();
 
     // ── 2. 加载配置文件 ──
@@ -148,13 +151,17 @@ int main(int argc, char** argv)
         "/yolo/trigger", rclcpp::QoS(1), trigger_callback);
 
     // ── 7. 启动键盘输入线程，监听标准输入的触发命令 ──
-    std::thread keyboard_thread([]() {
-        std::string line;
-        while (g_running.load() && std::getline(std::cin, line))
-        {
-            g_triggered.store(true);
-        }
-    });
+    std::thread keyboard_thread;
+    if (enable_keyboard_trigger)
+    {
+        keyboard_thread = std::thread([]() {
+            std::string line;
+            while (g_running.load() && std::getline(std::cin, line))
+            {
+                g_triggered.store(true);
+            }
+        });
+    }
 
     RCLCPP_INFO(node->get_logger(),
                 "yolo_node ready. show_window=%s, enable_undistort=%s, save_images=%s",
@@ -162,7 +169,11 @@ int main(int argc, char** argv)
                 enable_undistort ? "true" : "false",
                 save_images ? "true" : "false");
     RCLCPP_INFO(node->get_logger(), "YOLO image save dir: %s", save_dir.c_str());
-    RCLCPP_INFO(node->get_logger(), "Publish '%s' to /yolo/trigger, or press Enter.", kTriggerMessage);
+    RCLCPP_INFO(node->get_logger(), "Keyboard trigger: %s",
+                enable_keyboard_trigger ? "Enter enabled" : "disabled");
+    RCLCPP_INFO(node->get_logger(), "Publish '%s' to /yolo/trigger%s.",
+                kTriggerMessage,
+                enable_keyboard_trigger ? ", or press Enter" : "");
 
     rclcpp::WallRate idle_rate(kIdleLoopHz);
     GridBlock block;

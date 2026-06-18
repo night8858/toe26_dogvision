@@ -70,6 +70,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | 话题 | 类型 | QoS | 说明 |
 |------|------|-----|------|
 | `/arm_internation/cmd` | `std_msgs/String` | 20 | 低层协议命令（见下方命令参考） |
+| `/ocr/answer` | `std_msgs/UInt8` | reliable/volatile | OCR 稳定答案 `mod4`（0-3），4DOF 模式下转发为 BB 05 |
 
 #### 发布话题
 
@@ -91,6 +92,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | `cmd_topic` | `"/arm_internation/cmd"` | string | 命令订阅话题名 |
 | `data_topic` | `"/arm_internation/data"` | string | 状态发布话题名 |
 | `state_topic` | `"/arm_internation/state"` | string | 一次性事件发布话题名 |
+| `ocr_answer_topic` | `"/ocr/answer"` | string | OCR 稳定答案订阅话题名 |
 
 #### 自动重连机制
 
@@ -210,7 +212,7 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | `V,<id>` | 翻转电磁阀状态 | `V,1` |
 | `P,ON,<speed>` | 开泵并设速度 | `P,ON,2500` |
 | `P,OFF` | 关泵 | `P,OFF` |
-| `A,<answer>` | 任务赛答案 (0-255) | `A,0` |
+| `A,<answer>` | 手动发送任务赛答案 (0-255)；BB 模式封装为 BB 05 | `A,0` |
 
 **电磁阀 state**：`ON`/`1`/`OPEN`/`TRUE` 表示开，`OFF`/`0`/`CLOSE`/`FALSE` 表示关。
 
@@ -322,6 +324,14 @@ MODE:4DOF;L4:0.100,0.200,0.300,0.400;R4:0.150,0.250,0.350,0.450;VALVE_BITS:5;MIC
 
 ## 测试与调试
 
+OCR 自动答案链路：
+
+```text
+/ocr/answer (UInt8 mod4) → arm_internation_node → BB 05 answer 00 00 FF EE CRC8
+```
+
+仅当协议为 `4dof`、串口已连接且答案为 0-3 时发送。话题采用 volatile durability，不会在节点重启后重放旧答案。
+
 ### 1. 启动完整调试模式
 
 ```bash
@@ -340,8 +350,17 @@ ros2 node list
 
 ```bash
 ros2 topic list
-# 应看到: /arm_internation/cmd, /arm/mission_cmd, /arm_internation/data, /arm_internation/state
+# 应看到: /arm_internation/cmd, /arm/mission_cmd, /arm_internation/data,
+#         /arm_internation/state, /ocr/answer
 ```
+
+### BB 05 字节测试
+
+```bash
+ctest --test-dir build/dogvision_arm -R answer_frame_test --output-on-failure
+```
+
+测试使用伪终端校验答案 0-3 的 8 字节帧、帧尾及 CRC8-0x07。
 
 ### 4. 监听状态数据
 
