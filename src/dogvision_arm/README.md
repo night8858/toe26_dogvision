@@ -189,6 +189,14 @@ ros2 run dogvision_arm arm_cmd_terminal_node
 | `4POSE,<arm>,X:<x>,Y:<y>,Z:<z>,PITCH:<pitch>` | 控制 4DOF 臂位姿（带前缀） | `4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4` |
 | `4POSE,<arm>,<x>,<y>,<z>,<pitch>` | 简写格式 | `4POSE,R,0.1,0.2,0.3,0.4` |
 | `4ACT,<id>` | 触发预设动作（0=中止, 1-N=动作） | `4ACT,1` |
+| `4PICK,<arm>,<x>,<y>,<z>` | 发送 `BB 11`，单臂按 PC 目标点取块，xyz 单位 m | `4PICK,L,0.45,0.42,-0.21` |
+| `4PICK,<arm>,X:<x>,Y:<y>,Z:<z>` | `BB 11` 带前缀写法 | `4PICK,L,X:0.45,Y:0.42,Z:-0.21` |
+| `4PLACE1,<arm>,<x>,<y>,<z>` | 发送 `BB 12`，单臂放块第一层，xyz 单位 m | `4PLACE1,R,0.45,-0.40,-0.21` |
+| `4PLACE2,<arm>,<x>,<y>,<z>` | 发送 `BB 13`，单臂放块第二层，xyz 单位 m | `4PLACE2,L,0.45,0.40,0.04` |
+| `4PUTBACK,<arm>` | 发送 `BB 14`，单臂放块到背部固定动作 | `4PUTBACK,L` |
+| `4GETBACK,<arm>` | 发送 `BB 15`，单臂从背部取块固定动作 | `4GETBACK,R` |
+| `4PICKALL,<lx>,<ly>,<lz>,<rx>,<ry>,<rz>` | 发送 `BB 21`，双臂按 PC 目标点取块，xyz 单位 m | `4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21` |
+| `4PUTBACKALL` | 发送 `BB 22`，双臂放块到背部固定动作 | `4PUTBACKALL` |
 | `START,<x>,<y>,<z>` | 发送 `BB 99` 带初始偏移启动，偏移单位 mm | `START,0,0,0` |
 | `START,X:<x>,Y:<y>,Z:<z>` | 带前缀写法，等价于上方简写 | `START,X:0,Y:0,Z:0` |
 

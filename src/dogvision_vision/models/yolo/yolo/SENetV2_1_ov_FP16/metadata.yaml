@@ -1,0 +1,17 @@
+description: Ultralytics YOLOv8m_YOLOv8-C2f-SENetV2 model trained on my_data.yaml
+author: Ultralytics
+date: '2026-06-18T16:03:59.303539'
+version: 8.2.18
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: food
+  1: tool
+  2: medicine
+  3: instrument

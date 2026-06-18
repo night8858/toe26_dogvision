@@ -117,6 +117,23 @@
 //      [8]    0xEE
 //      [9]    CRC8（覆盖 [0]~[8]）
 //
+//  BB 11/12/13 单臂动态目标动作帧，固定 18 字节，CRC8 覆盖 [0]~[16]：
+//    BB cmd arm_id x(4B float LE) y(4B float LE) z(4B float LE) FF EE CRC8
+//      cmd=0x11 取块；cmd=0x12 放块第一层；cmd=0x13 放块第二层
+//      arm_id=0 左臂，arm_id=1 右臂；xyz 单位 m，原样发送，不做 mm/m 换算。
+//
+//  BB 14/15 单臂背部固定动作帧，固定 6 字节，CRC8 覆盖 [0]~[4]：
+//    BB cmd arm_id FF EE CRC8
+//      cmd=0x14 放块到背部；cmd=0x15 从背部取块。
+//
+//  BB 21 双臂动态取块帧，固定 29 字节，CRC8 覆盖 [0]~[27]：
+//    BB 21 Lx Ly Lz Rx Ry Rz FF EE CRC8
+//      六个坐标均为 float32 小端、单位 m，左臂目标在前，右臂目标在后。
+//
+//  BB 22 双臂放块到背部固定动作帧，固定 5 字节，CRC8 覆盖 [0]~[3]：
+//    BB 22 FF EE CRC8
+//      无 DATA 段，实际路径由下位机动作模板决定。
+//
 //  BB 99 带初始偏移启动帧，固定 17 字节，CRC8 覆盖 [0]~[15]：
 //    BB 99 offsetX(4B float LE) offsetY(4B float LE) offsetZ(4B float LE) FF EE CRC8
 //      [0]     0xBB
@@ -1194,6 +1211,8 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 //  send_4dof_pose_cmd()  : BB 02 4DOF 臂位姿（x, y, z, pitch）
 //  send_4dof_action_cmd(): BB 03 4DOF 预设动作触发
 //  send_4dof_start_cmd() : BB 99 带初始偏移启动（offsetX/Y/Z，单位 mm）
+//  send_4dof_pick/place*: BB 11/12/13 动态目标动作（xyz 单位 m）
+//  send_4dof_*back*()   : BB 14/15/22 背部固定动作
 bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 {
     if (protocol_ == ArmProtocol::Dof4BB)
@@ -1332,27 +1351,150 @@ bool arm_internation::send_4dof_start_cmd(float offset_x, float offset_y, float 
     return write_bytes(buf, sizeof(buf));
 }
 
-//对应4DOF的机械臂取块动作
-bool arm_internation::send_4dof_PICK_BLOCK(uint8_t arm_id, float aim_x, float aim_y, float aim_z)
+static bool is_finite_xyz(float x, float y, float z)
+{
+    return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+}
+
+bool arm_internation::send_4dof_pick_cmd(int arm_id, float x, float y, float z)
+{
+    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
+    {
+        return false;
+    }
+
+    // BB 11 单臂取块：
+    // [0]BB [1]11 [2]arm_id [3..6]x [7..10]y [11..14]z [15]FF [16]EE [17]CRC。
+    // xyz 是雷达/上层给出的世界坐标，单位 m；这里只负责小端打包，不修改坐标值。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[18] = {kHeadB, kCmd4DofPICK, static_cast<uint8_t>(arm_id),
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(x, buf + 3);
+    encode_float_le(y, buf + 7);
+    encode_float_le(z, buf + 11);
+    buf[17] = calc_crc8(buf, 17);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_place_1f_cmd(int arm_id, float x, float y, float z)
+{
+    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
+    {
+        return false;
+    }
+
+    // BB 12 单臂放块第一层，字节布局与 BB 11 相同，仅命令字不同。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[18] = {kHeadB, kCmd4DofPLACE_1F, static_cast<uint8_t>(arm_id),
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(x, buf + 3);
+    encode_float_le(y, buf + 7);
+    encode_float_le(z, buf + 11);
+    buf[17] = calc_crc8(buf, 17);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_place_2f_cmd(int arm_id, float x, float y, float z)
+{
+    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
+    {
+        return false;
+    }
+
+    // BB 13 单臂放块第二层，xyz 单位仍为 m；层高语义由下位机动作模板处理。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[18] = {kHeadB, kCmd4DofPLACE_2F, static_cast<uint8_t>(arm_id),
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(x, buf + 3);
+    encode_float_le(y, buf + 7);
+    encode_float_le(z, buf + 11);
+    buf[17] = calc_crc8(buf, 17);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_put_block_back_cmd(int arm_id)
+{
+    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1)
+    {
+        return false;
+    }
+
+    // BB 14 单臂放块到背部固定动作：
+    // [0]BB [1]14 [2]arm_id [3]FF [4]EE [5]CRC。无 xyz，目标完全由下位机模板决定。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[6] = {kHeadB, kCmd4DofPUT_BLOCK_BACK, static_cast<uint8_t>(arm_id),
+                      kTailA, kTailB, 0};
+    buf[5] = calc_crc8(buf, 5);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_get_block_back_cmd(int arm_id)
+{
+    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1)
+    {
+        return false;
+    }
+
+    // BB 15 单臂从背部取块固定动作，帧长同 BB 14，仅命令字不同。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[6] = {kHeadB, kCmd4DofGET_BLOCK_BACK, static_cast<uint8_t>(arm_id),
+                      kTailA, kTailB, 0};
+    buf[5] = calc_crc8(buf, 5);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_pick_all_cmd(float lx, float ly, float lz,
+                                             float rx, float ry, float rz)
+{
+    if (protocol_ != ArmProtocol::Dof4BB ||
+        !is_finite_xyz(lx, ly, lz) || !is_finite_xyz(rx, ry, rz))
+    {
+        return false;
+    }
+
+    // BB 21 双臂取块：
+    // [0]BB [1]21 [2..13]左臂 xyz [14..25]右臂 xyz [26]FF [27]EE [28]CRC。
+    // 两侧目标点都由 PC 给出，下位机只把模板路径整体平移到这些目标点。
+    std::lock_guard<std::mutex> lock(send_mutex_);
+    uint8_t buf[29] = {kHeadB, kCmd4DofPICK_ALL,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       kTailA, kTailB, 0};
+    encode_float_le(lx, buf + 2);
+    encode_float_le(ly, buf + 6);
+    encode_float_le(lz, buf + 10);
+    encode_float_le(rx, buf + 14);
+    encode_float_le(ry, buf + 18);
+    encode_float_le(rz, buf + 22);
+    buf[28] = calc_crc8(buf, 28);
+    return write_bytes(buf, sizeof(buf));
+}
+
+bool arm_internation::send_4dof_put_block_back_all_cmd()
 {
     if (protocol_ != ArmProtocol::Dof4BB)
     {
         return false;
     }
 
-    // BB 99 启动帧：
-    // [0]BB [1]99 [2..5]offsetX [6..9]offsetY [10..13]offsetZ [14]FF [15]EE [16]CRC。
-    // 三个偏移按 float32 小端直接写入，单位为 mm；不做 pos_scale_ 换算，避免改变固件协议含义。
+    // BB 22 双臂放块到背部固定动作：
+    // [0]BB [1]22 [2]FF [3]EE [4]CRC。无 DATA 段，适合“整车一键放回背部”。
     std::lock_guard<std::mutex> lock(send_mutex_);
-    uint8_t buf[17] = {kHeadB, kCmd4DofStart,
-                       0, 0, 0, 0,
-                       0, 0, 0, 0,
-                       0, 0, 0, 0,
-                       kTailA, kTailB, 0};
-    encode_float_le(aim_x, buf + 2);
-    encode_float_le(aim_y, buf + 6);
-    encode_float_le(aim_z, buf + 10);
-    buf[16] = calc_crc8(buf, 16);
+    uint8_t buf[5] = {kHeadB, kCmd4DofPUT_BLOCK_BACK_ALL, kTailA, kTailB, 0};
+    buf[4] = calc_crc8(buf, 4);
     return write_bytes(buf, sizeof(buf));
 }
 
@@ -1688,11 +1830,11 @@ bool arm_internation::try_reconnect_once()
  *
  *   normalized cmd
  *        │
- *   ┌────┼────┬────┬────┬────┬────┐
- *   ▼    ▼    ▼    ▼    ▼    ▼    ▼
- * START 4POSE 4ACT LF/RF G    V    P    A
- *  (BB)  (BB)  (BB) /LB/RB (AA) (both)(both)(both)
- *                       (AA)
+ *   ┌────┼────┬────┬────────────┬────┬────┬────┐
+ *   ▼    ▼    ▼    ▼            ▼    ▼    ▼    ▼
+ * START 4POSE 4ACT 4PICK/PLACE  LF/RF G    V    P/A
+ *  (BB)  (BB)  (BB)   (BB)      /LB/RB (AA)(both)(both)
+ *                               (AA)
  *
  * 输入容错设计：
  * - 中英文标点（，：；→ ,:;）自动转换
@@ -1732,6 +1874,146 @@ bool arm_internation::handle_text_command(const std::string &command_text)
     }
 
     const std::string cmd = to_upper_copy(tokens[0]);
+
+    auto parse_xyz_tokens = [&](size_t begin, float &x, float &y, float &z) -> bool
+    {
+        // 解析 3 个坐标参数，支持两类写法：
+        //   位置式：0.45,0.42,-0.21
+        //   前缀式：X:0.45,Y:0.42,Z:-0.21
+        // 这些新动作的 xyz 单位是 m，与 START 的 mm 偏移不同，发送时不做单位转换。
+        bool has_x = false;
+        bool has_y = false;
+        bool has_z = false;
+        for (size_t i = begin; i < tokens.size(); ++i)
+        {
+            float value = 0.0f;
+            if (parse_float_after_prefix(tokens[i], "X", value))
+            {
+                x = value;
+                has_x = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Y", value))
+            {
+                y = value;
+                has_y = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "Z", value))
+            {
+                z = value;
+                has_z = true;
+                continue;
+            }
+            if (parse_float_token(tokens[i], value))
+            {
+                if (!has_x)
+                {
+                    x = value;
+                    has_x = true;
+                }
+                else if (!has_y)
+                {
+                    y = value;
+                    has_y = true;
+                }
+                else if (!has_z)
+                {
+                    z = value;
+                    has_z = true;
+                }
+            }
+        }
+        return has_x && has_y && has_z;
+    };
+
+    auto parse_dual_xyz_tokens = [&](size_t begin,
+                                     float &lx, float &ly, float &lz,
+                                     float &rx, float &ry, float &rz) -> bool
+    {
+        // 解析双臂 6 个坐标参数。计划中要求位置式写法；这里额外兼容
+        // LX/LY/LZ/RX/RY/RZ 前缀，便于调试时不按顺序输入。
+        bool has_lx = false;
+        bool has_ly = false;
+        bool has_lz = false;
+        bool has_rx = false;
+        bool has_ry = false;
+        bool has_rz = false;
+        for (size_t i = begin; i < tokens.size(); ++i)
+        {
+            float value = 0.0f;
+            if (parse_float_after_prefix(tokens[i], "LX", value))
+            {
+                lx = value;
+                has_lx = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "LY", value))
+            {
+                ly = value;
+                has_ly = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "LZ", value))
+            {
+                lz = value;
+                has_lz = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "RX", value))
+            {
+                rx = value;
+                has_rx = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "RY", value))
+            {
+                ry = value;
+                has_ry = true;
+                continue;
+            }
+            if (parse_float_after_prefix(tokens[i], "RZ", value))
+            {
+                rz = value;
+                has_rz = true;
+                continue;
+            }
+            if (parse_float_token(tokens[i], value))
+            {
+                if (!has_lx)
+                {
+                    lx = value;
+                    has_lx = true;
+                }
+                else if (!has_ly)
+                {
+                    ly = value;
+                    has_ly = true;
+                }
+                else if (!has_lz)
+                {
+                    lz = value;
+                    has_lz = true;
+                }
+                else if (!has_rx)
+                {
+                    rx = value;
+                    has_rx = true;
+                }
+                else if (!has_ry)
+                {
+                    ry = value;
+                    has_ry = true;
+                }
+                else if (!has_rz)
+                {
+                    rz = value;
+                    has_rz = true;
+                }
+            }
+        }
+        return has_lx && has_ly && has_lz && has_rx && has_ry && has_rz;
+    };
 
     if (cmd == "START" || cmd == "启动")
     {
@@ -1796,6 +2078,129 @@ bool arm_internation::handle_text_command(const std::string &command_text)
             return false;
         }
         return send_4dof_start_cmd(offset_x, offset_y, offset_z);
+    }
+
+    if (cmd == "4PICK" || cmd == "4取块")
+    {
+        // 低层 /arm_internation/cmd 专用：4PICK,L,0.45,0.42,-0.21
+        // 这里直接打包 BB 11，不经过 arm_mission_node 的高层 PICK 任务队列。
+        if (tokens.size() < 5)
+        {
+            return false;
+        }
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        if (!parse_xyz_tokens(2, x, y, z))
+        {
+            return false;
+        }
+        return send_4dof_pick_cmd(dof4_arm_id, x, y, z);
+    }
+
+    if (cmd == "4PLACE1" || cmd == "4PLACE_1F" || cmd == "4放置1")
+    {
+        // BB 12：单臂放块第一层，坐标仍由 PC 指定，路径形状由下位机模板保留。
+        if (tokens.size() < 5)
+        {
+            return false;
+        }
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        if (!parse_xyz_tokens(2, x, y, z))
+        {
+            return false;
+        }
+        return send_4dof_place_1f_cmd(dof4_arm_id, x, y, z);
+    }
+
+    if (cmd == "4PLACE2" || cmd == "4PLACE_2F" || cmd == "4放置2")
+    {
+        // BB 13：单臂放块第二层。与第一层相比只改变命令字，便于下位机选择 F2 模板。
+        if (tokens.size() < 5)
+        {
+            return false;
+        }
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        if (!parse_xyz_tokens(2, x, y, z))
+        {
+            return false;
+        }
+        return send_4dof_place_2f_cmd(dof4_arm_id, x, y, z);
+    }
+
+    if (cmd == "4PUTBACK" || cmd == "4放回背部")
+    {
+        // BB 14：单臂放块到背部固定动作。它没有 xyz 参数，下位机使用已调好的背部关节轨迹。
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+        return send_4dof_put_block_back_cmd(dof4_arm_id);
+    }
+
+    if (cmd == "4GETBACK" || cmd == "4背部取块")
+    {
+        // BB 15：单臂从背部取块到手。固定轨迹动作，只需要 arm_id。
+        if (tokens.size() < 2)
+        {
+            return false;
+        }
+        int dof4_arm_id = -1;
+        if (!parse_4dof_arm_alias(tokens[1], dof4_arm_id))
+        {
+            return false;
+        }
+        return send_4dof_get_block_back_cmd(dof4_arm_id);
+    }
+
+    if (cmd == "4PICKALL" || cmd == "4双臂取块")
+    {
+        // BB 21：双臂动态取块。参数顺序固定为 Lx,Ly,Lz,Rx,Ry,Rz。
+        if (tokens.size() < 7)
+        {
+            return false;
+        }
+        float lx = 0.0f;
+        float ly = 0.0f;
+        float lz = 0.0f;
+        float rx = 0.0f;
+        float ry = 0.0f;
+        float rz = 0.0f;
+        if (!parse_dual_xyz_tokens(1, lx, ly, lz, rx, ry, rz))
+        {
+            return false;
+        }
+        return send_4dof_pick_all_cmd(lx, ly, lz, rx, ry, rz);
+    }
+
+    if (cmd == "4PUTBACKALL" || cmd == "4双臂放回背部")
+    {
+        // BB 22：双臂放块到背部，无 DATA 段。用于 PC 一键触发双臂背部放置模板。
+        return send_4dof_put_block_back_all_cmd();
     }
 
     if (cmd == "4POSE" || cmd == "4P" || cmd == "DOF4POSE")

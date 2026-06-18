@@ -118,6 +118,13 @@ enum class ArmProtocol {
 //    BB 04  → 4DOF 电磁阀控制
 //    BB 05  → 4DOF 语音应答/答案控制（下位机预留）
 //    BB 06  → 4DOF 气泵控制
+//    BB 11  → 4DOF 单臂取块动作（arm_id + x/y/z，单位 m）
+//    BB 12  → 4DOF 单臂放块第一层动作（arm_id + x/y/z，单位 m）
+//    BB 13  → 4DOF 单臂放块第二层动作（arm_id + x/y/z，单位 m）
+//    BB 14  → 4DOF 单臂放块到背部固定动作（arm_id）
+//    BB 15  → 4DOF 单臂从背部取块固定动作（arm_id）
+//    BB 21  → 4DOF 双臂取块动作（left xyz + right xyz，单位 m）
+//    BB 22  → 4DOF 双臂放块到背部固定动作
 //    BB 99  → 4DOF 带初始偏移启动（offsetX/Y/Z，float32 小端，单位 mm）
 //    BB CC  ← 4DOF 当前动作完成事件；ROS 节点会转发为 /arm_internation/state = "DONE"
 
@@ -135,6 +142,13 @@ enum class ArmProtocol {
 //    RL,X:10,Y:10      -> 控制机械臂（别名映射见 parse_arm_alias）
 //    4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4 -> 4DOF 左臂位姿
 //    4ACT,1            -> 4DOF 触发预设动作 1；4ACT,0 表示中止
+//    4PICK,L,0.45,0.42,-0.21       -> 4DOF 左臂按 PC 目标点取块
+//    4PLACE1,R,0.45,-0.40,-0.21    -> 4DOF 右臂放块第一层
+//    4PLACE2,L,X:0.45,Y:0.40,Z:0.04 -> 4DOF 左臂放块第二层
+//    4PUTBACK,L        -> 4DOF 左臂放块到背部
+//    4GETBACK,R        -> 4DOF 右臂从背部取块
+//    4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21 -> 4DOF 双臂取块
+//    4PUTBACKALL       -> 4DOF 双臂放块到背部
 //    START,0,0,0        -> 4DOF 带 X/Y/Z 初始偏移启动（单位 mm）
 //    G,0,0             -> 控制云台 yaw/pitch
 //    V,1               -> 翻转电磁阀 1 的状态
@@ -320,6 +334,48 @@ public:
     /// @note 帧格式：BB 99 offsetX offsetY offsetZ FF EE CRC8，CRC 覆盖 CRC 前所有字节。
     bool send_4dof_start_cmd(float offset_x, float offset_y, float offset_z);
 
+    /// @brief 发送 4DOF 单臂取块动作命令（仅 BB 协议）。
+    /// @param arm_id 0=左臂, 1=右臂
+    /// @param x 取块目标 X，单位 m，按 float32 小端直接发送
+    /// @param y 取块目标 Y，单位 m，按 float32 小端直接发送
+    /// @param z 取块目标 Z，单位 m，按 float32 小端直接发送
+    /// @retval true 发送成功
+    /// @retval false 非 BB 协议、arm_id 越界、坐标非法或串口写入失败
+    /// @note 帧格式：BB 11 arm_id x y z FF EE CRC8，CRC 覆盖 CRC 前所有字节。
+    bool send_4dof_pick_cmd(int arm_id, float x, float y, float z);
+
+    /// @brief 发送 4DOF 单臂放块第一层动作命令（仅 BB 协议）。
+    /// @note 帧格式：BB 12 arm_id x y z FF EE CRC8，xyz 单位 m，不做 mm/m 换算。
+    bool send_4dof_place_1f_cmd(int arm_id, float x, float y, float z);
+
+    /// @brief 发送 4DOF 单臂放块第二层动作命令（仅 BB 协议）。
+    /// @note 帧格式：BB 13 arm_id x y z FF EE CRC8，xyz 单位 m，不做 mm/m 换算。
+    bool send_4dof_place_2f_cmd(int arm_id, float x, float y, float z);
+
+    /// @brief 发送 4DOF 单臂放块到背部固定动作命令（仅 BB 协议）。
+    /// @param arm_id 0=左臂, 1=右臂
+    /// @note 帧格式：BB 14 arm_id FF EE CRC8。该动作不带 xyz，目标由下位机模板决定。
+    bool send_4dof_put_block_back_cmd(int arm_id);
+
+    /// @brief 发送 4DOF 单臂从背部取块固定动作命令（仅 BB 协议）。
+    /// @param arm_id 0=左臂, 1=右臂
+    /// @note 帧格式：BB 15 arm_id FF EE CRC8。该动作不带 xyz，目标由下位机模板决定。
+    bool send_4dof_get_block_back_cmd(int arm_id);
+
+    /// @brief 发送 4DOF 双臂取块动作命令（仅 BB 协议）。
+    /// @param lx 左臂目标 X，单位 m
+    /// @param ly 左臂目标 Y，单位 m
+    /// @param lz 左臂目标 Z，单位 m
+    /// @param rx 右臂目标 X，单位 m
+    /// @param ry 右臂目标 Y，单位 m
+    /// @param rz 右臂目标 Z，单位 m
+    /// @note 帧格式：BB 21 left_x left_y left_z right_x right_y right_z FF EE CRC8。
+    bool send_4dof_pick_all_cmd(float lx, float ly, float lz, float rx, float ry, float rz);
+
+    /// @brief 发送 4DOF 双臂放块到背部固定动作命令（仅 BB 协议）。
+    /// @note 帧格式：BB 22 FF EE CRC8。无 DATA 段，双臂目标由下位机动作模板决定。
+    bool send_4dof_put_block_back_all_cmd();
+
     /// @brief 解析并执行文本命令（统一命令入口）。
     /// @param command_text 原始命令字符串，支持中英文标点容错
     /// @retval true 命令解析成功并已发送
@@ -328,6 +384,7 @@ public:
     ///   - AA 机械臂: "LF,X:10,Y:20" / "RF,10,20"
     ///   - BB 4DOF:   "4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4"
     ///   - BB 动作:   "4ACT,1" / "4ACT,0"（中止）
+    ///   - BB 新动作: "4PICK,L,0.45,0.42,-0.21" / "4PUTBACKALL"
     ///   - BB 启动:   "START,0,0,0" / "START,X:0,Y:0,Z:0"（偏移单位 mm）
     ///   - 云台:      "G,0,0"
     ///   - 电磁阀:    "V,1"（翻转）/ "V,1,ON"（显式）/ "V,ALL,ON"
