@@ -1,3 +1,7 @@
+<!--
+  PP-OCR 算术题识别测试启动脚本
+  以 test 模式启动 ppocr_node，连续 OCR + 多帧投票，稳定结果存入 YAML。
+-->
 <launch>
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
   <arg name="show_visual" default="true"/>
@@ -10,5 +14,3 @@
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
   </node>
 </launch>
-
-<!-- 这里是PP-OCR测试启动脚本  -->

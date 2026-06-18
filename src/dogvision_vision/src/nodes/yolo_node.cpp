@@ -1,3 +1,17 @@
+/**
+ * @file yolo_node.cpp
+ * @brief ROS2 YOLO 检测节点
+ *
+ * 订阅 /yolo/trigger 话题或来自 stdin 的键盘输入触发单帧 YOLO 推理，
+ * 将检测结果和 2×4 网格分类结果分别发布到 /yolo/result 和 /yolo/block_grid。
+ *
+ * 支持：
+ *   - 海康相机实时取流
+ *   - 鱼眼去畸变（可选）
+ *   - 检测结果可视化窗口（可选）
+ *   - 结果图片自动保存（可选）
+ */
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -15,12 +29,12 @@
 
 namespace
 {
-constexpr int kIdleLoopHz = 20;
-constexpr char kTriggerMessage[] = "start_infer";
-constexpr char kGridTopic[] = "/yolo/block_grid";
+constexpr int kIdleLoopHz = 20;         ///< 空闲状态下的循环频率（Hz）
+constexpr char kTriggerMessage[] = "start_infer"; ///< 触发推理的消息内容
+constexpr char kGridTopic[] = "/yolo/block_grid"; ///< 网格结果话题名
 
-std::atomic<bool> g_triggered{false};
-std::atomic<bool> g_running{true};
+std::atomic<bool> g_triggered{false};  ///< 触发标志，由话题回调或键盘线程置位
+std::atomic<bool> g_running{true};     ///< 运行标志，用于控制键盘线程退出
 } // namespace
 
 /**
@@ -57,11 +71,28 @@ static void trigger_callback(const std_msgs::msg::String::SharedPtr msg)
  * @param argv 命令行参数数组。
  * @retval int 进程退出码。
  */
+/**
+ * @brief 运行 ROS2 YOLO 节点入口
+ *
+ * 启动流程：
+ *   1. 初始化 ROS2 节点并声明参数
+ *   2. 从 JSON 配置文件加载检测参数
+ *   3. 初始化 YOLO OpenVINO 检测器
+ *   4. 初始化海康相机
+ *   5. 创建 ROS2 发布者/订阅者
+ *   6. 启动键盘输入线程
+ *   7. 进入主循环：等待触发 → 单帧推理 → 发布结果
+ *
+ * @param argc 命令行参数数量
+ * @param argv 命令行参数数组
+ * @return int 进程退出码
+ */
 int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<rclcpp::Node>("yolo_node");
 
+    // ── 1. 声明并读取 ROS2 参数 ──
     const std::string share_dir = ament_index_cpp::get_package_share_directory("dogvision_vision");
     node->declare_parameter<std::string>("config_path", share_dir + "/config/settings.json");
     node->declare_parameter<std::string>("result_topic", "/yolo/result");
@@ -77,16 +108,17 @@ int main(int argc, char** argv)
     const bool save_images         = node->get_parameter("save_images").as_bool();
     const std::string save_dir     = node->get_parameter("save_dir").as_string();
 
-    // 加载配置文件并初始化 YOLO 检测器
+    // ── 2. 加载配置文件 ──
     Appconfig config;
     detect_oponvino config_loader(nullptr);
     config_loader.load_config(config, config_path);
 
+    // ── 3. 加载类别名称 ──
     const std::vector<std::string> class_names = load_class_names(config);
     RCLCPP_INFO(node->get_logger(), "Loaded %d classes: %s",
                 config.detect_config.classes, join_class_names(class_names).c_str());
 
-                // 初始化 YOLO 检测器
+    // ── 4. 初始化 YOLO OpenVINO 检测器 ──
     detect_oponvino detector(&config);
     if (!detector.inference_init())
     {
@@ -95,7 +127,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // 初始化海康相机
+    // ── 5. 初始化海康相机 ──
     s_camera_params cam_params{};
     cam_params.device_id = config.hikcamera_config.device_id;
     cam_params.width = config.hikcamera_config.width;
@@ -107,14 +139,15 @@ int main(int argc, char** argv)
     HikGrab hik(cam_params);
     hik.Hik_init();
 
-    // 创建 ROS2 发布者和订阅者
+    // ── 6. 创建 ROS2 发布者和订阅者 ──
+    // 使用 transient_local + reliable QoS 确保新订阅者能收到最后一条消息
     auto latched_qos  = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
     auto result_pub   = node->create_publisher<std_msgs::msg::String>(result_topic, latched_qos);
     auto grid_pub     = node->create_publisher<std_msgs::msg::String>(kGridTopic, latched_qos);
     auto trigger_sub  = node->create_subscription<std_msgs::msg::String>(
         "/yolo/trigger", rclcpp::QoS(1), trigger_callback);
 
-    // 启动键盘输入线程监听触发命令
+    // ── 7. 启动键盘输入线程，监听标准输入的触发命令 ──
     std::thread keyboard_thread([]() {
         std::string line;
         while (g_running.load() && std::getline(std::cin, line))
@@ -135,10 +168,12 @@ int main(int argc, char** argv)
     GridBlock block;
     reset_grid(block);
 
+    // ── 8. 主循环：等待触发 → 推理 → 发布 ──
     while (rclcpp::ok())
     {
         rclcpp::spin_some(node);
 
+        // 等待触发信号
         if (!g_triggered.load())
         {
             if (show_window)
@@ -150,6 +185,7 @@ int main(int argc, char** argv)
         }
         g_triggered.store(false);
 
+        // ── 执行单帧 YOLO 推理 ──
         RCLCPP_INFO(node->get_logger(), "Triggered: running one-frame inference...");
         cv::Mat last_frame;
         std::vector<Detection> final_dets;
@@ -159,6 +195,7 @@ int main(int argc, char** argv)
         }
         RCLCPP_INFO(node->get_logger(), "Raw detections: %zu", final_dets.size());
 
+        // ── 结果排序与网格分配 ──
         sort_raster(final_dets);
         RCLCPP_INFO(node->get_logger(), "Final detections: %zu", final_dets.size());
 
@@ -168,7 +205,7 @@ int main(int argc, char** argv)
             RCLCPP_INFO(node->get_logger(), "%s", line.c_str());
         }
 
-        // 发布结果 JSON 字符串到 ROS2 话题
+        // ── 发布 JSON 结果到 ROS2 话题 ──
         std_msgs::msg::String result_msg;
         result_msg.data = build_result_json(final_dets, class_names);
         result_pub->publish(result_msg);
@@ -177,6 +214,7 @@ int main(int argc, char** argv)
         grid_msg.data = build_grid_json(block);
         grid_pub->publish(grid_msg);
 
+        // ── 保存结果图片（可选） ──
         if (save_images)
         {
             std::string saved_path;
@@ -190,6 +228,7 @@ int main(int argc, char** argv)
             }
         }
 
+        // ── 可视化显示（可选） ──
         show_viz_image(final_dets, last_frame, class_names, show_window);
         RCLCPP_INFO(node->get_logger(), "Published to %s and %s. Waiting for next trigger.",
                     result_topic.c_str(), kGridTopic);

@@ -1,3 +1,8 @@
+<!--
+  YOLO 准确性测试启动脚本
+  启动 yolo_accuracy_test_node，连续采集相机帧执行 YOLO 检测，
+  将标注结果录制为视频文件供离线评估。
+-->
 <launch>
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
   <arg name="enable_undistort" default="true"/>
@@ -13,5 +18,3 @@
     <param name="visual_nms_thresh" value="$(var visual_nms_thresh)" type="float"/>
   </node>
 </launch>
-
-<!-- 这里是YOLO连续测试启动脚本  -->

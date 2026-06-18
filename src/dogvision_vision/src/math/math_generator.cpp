@@ -1,3 +1,12 @@
+/**
+ * @file math_generator.cpp
+ * @brief 四则运算数学题生成器实现
+ *
+ * 负责随机生成整数结果的复合四则运算题（含 +-* / 四种运算符）、
+ * 渲染为白底黑字图片，以及按序追加写入 YAML 文件。
+ * 算术遵循先乘除后加减的运算规则，除法保证整除。
+ */
+
 #include <dogvision_vision/math/math_generator.hpp>
 
 #include <algorithm>
@@ -170,9 +179,9 @@ cv::Mat MathGenerator::renderImage(const std::string &text,
 
     // ── 粗体渲染 ──
     // FONT_HERSHEY_DUPLEX 本身比 SIMPLEX 更粗
-    int font_face    = cv::FONT_HERSHEY_DUPLEX;
+    int font_face    = cv::FONT_HERSHEY_SIMPLEX;    // 粗体
     double font_scale = getFontScale(canvas_width);
-    int thickness    = std::max(4, canvas_width / 240);
+    int thickness    = std::max(2, canvas_width / 240);
 
     // ── 计算文字尺寸 ──
     int baseline = 0;

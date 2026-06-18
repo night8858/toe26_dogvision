@@ -1,3 +1,16 @@
+/**
+ * @file yolo_accuracy_test_node.cpp
+ * @brief YOLO 视觉准确性测试节点
+ *
+ * 从海康相机连续取流，对每帧执行 YOLO 检测，将标注了检测框的结果图
+ * 录制为视频文件，供离线评估检测准确性使用。
+ *
+ * 支持：
+ *   - 实时视频录制（MP4 格式）
+ *   - 鱼眼去畸变（可选）
+ *   - 自定义 NMS 阈值（通过参数 visual_nms_thresh 覆盖配置文件）
+ */
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -18,7 +31,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-constexpr char kWindowName[] = "yolo_accuracy_test";
+constexpr char kWindowName[] = "yolo_accuracy_test"; ///< 可视化窗口名称
 
 /**
  * @brief 将类别名称拼接成便于日志输出的字符串。

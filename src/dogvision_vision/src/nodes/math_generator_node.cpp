@@ -1,3 +1,12 @@
+/**
+ * @file math_generator_node.cpp
+ * @brief ROS2 数学题生成节点
+ *
+ * 定时生成复合四则运算题，渲染为全屏图像显示，
+ * 并将题目及答案追加写入 YAML 文件。
+ * 运行后可按键 Q 或 ESC 退出。
+ */
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -22,9 +31,9 @@ int main(int argc, char** argv)
 
     const std::string share_dir = ament_index_cpp::get_package_share_directory("dogvision_vision");
     node->declare_parameter<std::string>("yaml_path", share_dir + "/data/math_generator/math_results.yaml");
-    node->declare_parameter<int>("min_val", 1);
-    node->declare_parameter<int>("max_val", 100);
-    node->declare_parameter<int>("interval", 10);
+    node->declare_parameter<int>("min_val", 1);                // 操作数范围（含）
+    node->declare_parameter<int>("max_val", 100);              // 操作数范围（含）
+    node->declare_parameter<int>("interval", 10);          // 题目生成间隔（秒）
     node->declare_parameter<int>("canvas_width", 2560);
     node->declare_parameter<int>("canvas_height", 1440);
 

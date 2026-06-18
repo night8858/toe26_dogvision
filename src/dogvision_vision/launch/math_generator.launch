@@ -1,3 +1,8 @@
+<!--
+  算术题生成节点启动脚本
+  启动 math_generator_node，定时生成复合四则运算题并全屏显示。
+  可通过参数调整数值范围、生成间隔和画布尺寸。
+-->
 <launch>
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/math_generator/math_results.yaml"/>
   <arg name="min_val" default="1"/>
@@ -15,6 +20,3 @@
     <param name="canvas_height" value="$(var canvas_height)" type="int"/>
   </node>
 </launch>
-
-
-<!-- 这里是算术题启动脚本  -->

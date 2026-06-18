@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <fstream>
 #include <cstring>
+#include <stdexcept>
+#include <unordered_set>
 
 #include <dogvision_vision/common_structs.h>
 #include <dogvision_vision/detector.hpp>
@@ -371,10 +373,19 @@ void detect_rec_ppocr::load_model(const std::string& model_path, const std::stri
 {
     // 读取 PaddlePaddle 模型（OpenVINO 可直接解析 .pdmodel + .pdiparams）
     std::shared_ptr<ov::Model> model = core_.read_model(model_path);
+    const ov::PartialShape output_shape = model->output(0).get_partial_shape();
+    if (output_shape.rank().is_static() &&
+        output_shape.rank().get_length() == 3 &&
+        output_shape[2].is_static())
+    {
+        expected_class_count_ =
+            static_cast<size_t>(output_shape[2].get_length());
+    }
     // 编译到目标设备
     model_ = core_.compile_model(model, device);
     // 创建推理请求对象
     infer_request_ = model_.create_infer_request();
+    validate_model_dictionary();
 }
 
 // 加载字符字典文件，构建索引 → 字符的映射表（dict_）
@@ -387,9 +398,14 @@ void detect_rec_ppocr::load_model(const std::string& model_path, const std::stri
 void detect_rec_ppocr::loda_dict(const std::string& dict_path)
 {
     dict_.clear();
+    allowed_class_indices_.clear();
+    allowed_chars_loaded_ = false;
     dict_.push_back("blank"); // 索引 0：CTC blank 标签
 
     std::ifstream ifs(dict_path);
+    if (!ifs.is_open())
+        throw std::runtime_error("Failed to open PP-OCR dictionary: " + dict_path);
+
     std::string line;
     while (std::getline(ifs, line))
     {
@@ -399,7 +415,65 @@ void detect_rec_ppocr::loda_dict(const std::string& dict_path)
         }
         dict_.push_back(line);
     }
+    if (dict_.size() == 1)
+        throw std::runtime_error("PP-OCR dictionary is empty: " + dict_path);
+
     dict_.push_back(" "); // 最后一个索引为空格
+    validate_model_dictionary();
+}
+
+void detect_rec_ppocr::load_allowed_chars(const std::string& allowed_chars_path)
+{
+    if (dict_.empty())
+        throw std::logic_error("Load the full PP-OCR dictionary before the character whitelist");
+
+    std::ifstream ifs(allowed_chars_path);
+    if (!ifs.is_open())
+        throw std::runtime_error(
+            "Failed to open PP-OCR character whitelist: " + allowed_chars_path);
+
+    std::vector<size_t> indices;
+    std::unordered_set<std::string> seen;
+    std::string line;
+    while (std::getline(ifs, line))
+    {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty())
+            throw std::runtime_error(
+                "PP-OCR character whitelist contains an empty line: " +
+                allowed_chars_path);
+        if (!seen.insert(line).second)
+            throw std::runtime_error(
+                "Duplicate character in PP-OCR whitelist: " + line);
+
+        const auto it = std::find(dict_.begin() + 1, dict_.end(), line);
+        if (it == dict_.end())
+            throw std::runtime_error(
+                "Character is missing from the full PP-OCR dictionary: " + line);
+        indices.push_back(static_cast<size_t>(std::distance(dict_.begin(), it)));
+    }
+
+    if (indices.empty())
+        throw std::runtime_error(
+            "PP-OCR character whitelist is empty: " + allowed_chars_path);
+
+    allowed_class_indices_ = std::move(indices);
+    allowed_chars_loaded_ = true;
+}
+
+void detect_rec_ppocr::validate_model_dictionary() const
+{
+    if (expected_class_count_ != 0 &&
+        !dict_.empty() &&
+        expected_class_count_ != dict_.size())
+    {
+        throw std::runtime_error(
+            "PP-OCR model output class count (" +
+            std::to_string(expected_class_count_) +
+            ") does not match dictionary class count (" +
+            std::to_string(dict_.size()) + ")");
+    }
 }
 
 // rec 阶段预处理：裁剪单行文字图 2→ 缩放到固定高度 → 归一化 → 转 NCHW 张量
@@ -479,18 +553,31 @@ void detect_rec_ppocr::postprocess()
 // CTC 贪心解码：将每个时间步的 logits 转换为字符序列
 //
 // CTC（Connectionist Temporal Classification）解码规则：
-//   1. 尚规：在每个时序步 t 选取 logits 最大索引 best。
+//   1. 约束：在 blank 与数学字符白名单中选取 logits 最大索引 best。
 //   2. 去重：连续相同索引的时序步合并为一个（best == prev_idx 则跳过）。
 //   3. 去 blank：删除索引为 0（CTC blank）的帧。
 // 置信度计算：每个有效字符位置的最大概率均值（排除 blank 帧）。
 std::vector<OCRRecResult> detect_rec_ppocr::Decode(const ov::Tensor& logits)
 {
-    // 使用成员 output_tensor_（logits 形参仅保持接口一致性，未单独使用）
-    const auto s = output_tensor_.get_shape(); // [batch, time_step, vocab_size]
+    if (!allowed_chars_loaded_)
+        throw std::logic_error("PP-OCR character whitelist has not been loaded");
+    if (logits.get_element_type() != ov::element::f32)
+        throw std::invalid_argument("PP-OCR logits must use float32 elements");
+
+    const auto s = logits.get_shape(); // [batch, time_step, vocab_size]
+    if (s.size() != 3)
+        throw std::invalid_argument("PP-OCR logits must have shape [batch, time, classes]");
+
     const size_t batch     = s[0];
     const size_t time_step = s[1]; // 时序步数（水平时序）
     const size_t cls_num   = s[2]; // 字典大小（包含 blank）
-    const float* p = output_tensor_.data<const float>();
+    if (cls_num != dict_.size())
+        throw std::runtime_error(
+            "PP-OCR logits class count (" + std::to_string(cls_num) +
+            ") does not match dictionary class count (" +
+            std::to_string(dict_.size()) + ")");
+    ov::Tensor readable_logits = logits;
+    const float* p = readable_logits.data<float>();
 
     std::vector<OCRRecResult> out(batch);
     for (size_t b = 0; b < batch; ++b) {
@@ -500,10 +587,10 @@ std::vector<OCRRecResult> detect_rec_ppocr::Decode(const ov::Tensor& logits)
         int prev_idx = -1; // 上一个时序步的索引，用于去重按照
 
         for (size_t t = 0; t < time_step; ++t) {
-            // 在第 b*time_step*cls_num + t*cls_num 起始的 cls_num 个 logit 中找最大分
+            // 只在 CTC blank 与数学字符白名单中选择最大分。
             size_t best      = 0;
             float best_score = p[b * time_step * cls_num + t * cls_num];
-            for (size_t c = 1; c < cls_num; ++c) {
+            for (const size_t c : allowed_class_indices_) {
                 const float v = p[b * time_step * cls_num + t * cls_num + c];
                 if (v > best_score) {
                     best_score = v;
@@ -522,10 +609,7 @@ std::vector<OCRRecResult> detect_rec_ppocr::Decode(const ov::Tensor& logits)
                 continue;
             }
 
-            // 索引在字典范围内则追加对应字符
-            if (best < dict_.size()) {
-                text += dict_[best];
-            }
+            text += dict_[best];
             score_sum += best_score;
             ++count;
         }
@@ -587,4 +671,3 @@ std::vector<OCRRecResult> detect_rec_ppocr::Decode(const ov::Tensor& logits)
 
 //     return out;
 // }
-

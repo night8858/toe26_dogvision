@@ -6,10 +6,66 @@
 #include <iostream>
 #include <regex>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
 #include <opencv2/calib3d.hpp>
+
+// ============================================================
+//  preprocess_math_roi
+// ============================================================
+cv::Mat preprocess_math_roi(const cv::Mat& input,
+                            const s_detector_params& config)
+{
+    if (input.empty())
+        return {};
+
+    if (!config.ocr_preprocess_enabled)
+        return input.clone();
+
+    if (config.ocr_clahe_clip_limit <= 0.0)
+        throw std::invalid_argument("OCR CLAHE clip limit must be positive");
+    if (config.ocr_clahe_tile_size <= 0)
+        throw std::invalid_argument("OCR CLAHE tile size must be positive");
+    if (config.ocr_gaussian_kernel_size <= 0 ||
+        config.ocr_gaussian_kernel_size % 2 == 0)
+        throw std::invalid_argument("OCR Gaussian kernel size must be a positive odd number");
+
+    cv::Mat gray;
+    if (input.channels() == 1)
+        gray = input.clone();
+    else if (input.channels() == 3)
+        cv::cvtColor(input, gray, cv::COLOR_BGR2GRAY);
+    else if (input.channels() == 4)
+        cv::cvtColor(input, gray, cv::COLOR_BGRA2GRAY);
+    else
+        throw std::invalid_argument("OCR ROI must have 1, 3, or 4 channels");
+
+    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(
+        config.ocr_clahe_clip_limit,
+        cv::Size(config.ocr_clahe_tile_size, config.ocr_clahe_tile_size));
+    cv::Mat enhanced;
+    clahe->apply(gray, enhanced);
+
+    cv::Mat denoised;
+    cv::GaussianBlur(
+        enhanced,
+        denoised,
+        cv::Size(config.ocr_gaussian_kernel_size,
+                 config.ocr_gaussian_kernel_size),
+        0.0);
+
+    const int threshold_type =
+        (config.ocr_preprocess_invert ? cv::THRESH_BINARY_INV : cv::THRESH_BINARY) |
+        cv::THRESH_OTSU;
+    cv::Mat binary;
+    cv::threshold(denoised, binary, 0, 255, threshold_type);
+
+    cv::Mat bgr;
+    cv::cvtColor(binary, bgr, cv::COLOR_GRAY2BGR);
+    return bgr;
+}
 
 // ============================================================
 //  crop_text_region

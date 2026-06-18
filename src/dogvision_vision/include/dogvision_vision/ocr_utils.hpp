@@ -6,6 +6,16 @@
 #include <dogvision_vision/common_structs.h>
 
 /**
+ * @brief 对算术题 ROI 做灰度化、CLAHE、去噪和 Otsu 二值化。
+ * @param input 输入 ROI，支持 1/3/4 通道图像。
+ * @param config OCR 预处理配置。
+ * @retval cv::Mat 与输入同尺寸的三通道 BGR 图；关闭预处理时返回输入克隆。
+ * @throws std::invalid_argument 配置无效或输入通道数不受支持。
+ */
+cv::Mat preprocess_math_roi(const cv::Mat& input,
+                            const s_detector_params& config);
+
+/**
  * @brief 使用透视变换裁剪四点 OCR 文本区域。
  * @param src 源 BGR 图像。
  * @param box 四点文本区域框。

@@ -56,29 +56,32 @@ public:
      */
     const std::vector<OCRBox>& get_det_boxes() const { return ocr_det_out_; }
     
-    std::vector<OCRBox> ocr_det_out_;
+    std::vector<OCRBox> ocr_det_out_;  ///< 检测到的 OCR 文本框结果
 private:
     /**
-     * @brief 将四个点排序为左上、右上、右下、左下。
-     * @param pts 未排序的四点多边形。
-     * @retval std::array<cv::Point2f, 4> 排序后的多边形点。
+     * @brief 将四个无序顶点按顺时针顺序排列为 左上→右上→右下→左下
+     * @param pts 未排序的四点多边形
+     * @return 排序后的四点数组
      */
     std::array<cv::Point2f, 4> OrderPointsClockwise(const std::vector<cv::Point2f>& pts) const;
 
-    ov::Core core_;
-    ov::CompiledModel model_;
-    ov::InferRequest infer_request_;
-    ov::Tensor input_tensor_;
-    ov::Tensor output_tensor_;
+    ov::Core core_;               ///< OpenVINO 核心对象
+    ov::CompiledModel model_;     ///< 已编译的模型
+    ov::InferRequest infer_request_; ///< 推理请求对象
+    ov::Tensor input_tensor_;     ///< 输入张量
+    ov::Tensor output_tensor_;    ///< 输出张量
 
-    
-    DetResizeMeta Mate;
+    DetResizeMeta Mate;           ///< 预处理缩放元信息（用于坐标还原）
 
-    
 };
 
 
-//负责对 det 模块传递过来的文本区域进行识别，输出文本内容
+/**
+ * @brief PPOCR 文本识别器
+ *
+ * 对 det 模块检测出的文本区域进行 CTC 解码识别，
+ * 支持数学字符白名单过滤，只输出允许的字符。
+ */
 class detect_rec_ppocr : public detector
 {
 public:
@@ -96,6 +99,13 @@ public:
      * @retval void
      */
     void loda_dict(const std::string& dict_path);
+
+    /**
+     * @brief 加载允许输出的字符白名单，并映射到完整模型字典索引。
+     * @param allowed_chars_path 白名单文件路径，每行一个字符。
+     * @retval void
+     */
+    void load_allowed_chars(const std::string& allowed_chars_path);
 
     /**
      * @brief 使用 CTC 风格折叠解码识别 logits。
@@ -143,23 +153,34 @@ public:
     void set_max_wh_ratio(float r) { max_wh_ratio = r; }
 
 private:
-    // 文本行最大宽高比（rec 输入图像 W/H），超过则压缩至最大宽度而非截断
-    // 默认值与 s_detector_params 中 rec_img_w/rec_img_h 一致（320/48）
-    float max_wh_ratio = 320.0f / 48.0f;
-    ov::Core core_;
-    ov::CompiledModel model_;
-    ov::InferRequest infer_request_;
-    ov::Tensor input_tensor_;
-    ov::Tensor output_tensor_;
+    void validate_model_dictionary() const;
 
-    
-    std::vector<std::string> dict_;// OCR识别字典
-    cv::Mat chw_img; // 预处理后CHW格式的输入图像
+    // ── 识别参数 ──
+    float max_wh_ratio = 320.0f / 48.0f; ///< 文本行最大宽高比，超过则压缩至最大宽度
+
+    // ── OpenVINO 对象 ──
+    ov::Core core_;               ///< OpenVINO 核心对象
+    ov::CompiledModel model_;     ///< 已编译的模型
+    ov::InferRequest infer_request_; ///< 推理请求对象
+    ov::Tensor input_tensor_;     ///< 输入张量
+    ov::Tensor output_tensor_;    ///< 输出张量
+
+    // ── 字典与白名单 ──
+    std::vector<std::string> dict_;  ///< 完整 OCR 识别字典（索引 0=blank）
+    std::vector<size_t> allowed_class_indices_; ///< 白名单字符在 dict_ 中的索引列表
+    size_t expected_class_count_ = 0;  ///< 模型输出类别数（用于字典校验）
+    bool allowed_chars_loaded_ = false; ///< 白名单是否已加载
+
+    cv::Mat chw_img; ///< 预处理后的 CHW 格式输入图像（float32）
 
 };
 
-//目前没写
-//负责对文本区域进行方向分类，输出文本方向（可以不用，就是用来检查文本是否被倒置的）
+/**
+ * @brief PPOCR 文本方向分类器（目前未启用）
+ *
+ * 负责判断文本区域是否倒置，可用于旋转 rec 输入以提升识别率。
+ * 当前实现为占位状态，尚未集成到主流水线中。
+ */
 class detect_cls_ppocr : public detector
 {
 public:
@@ -201,9 +222,9 @@ public:
     void postprocess() override;
 
 private:
-    ov::Core core_;
-    ov::CompiledModel model_;
-    ov::InferRequest infer_request_;
-    ov::Tensor input_tensor_;
-    ov::Tensor output_tensor_;
+    ov::Core core_;               ///< OpenVINO 核心对象
+    ov::CompiledModel model_;     ///< 已编译的模型
+    ov::InferRequest infer_request_; ///< 推理请求对象
+    ov::Tensor input_tensor_;     ///< 输入张量
+    ov::Tensor output_tensor_;    ///< 输出张量
 };

@@ -12,7 +12,7 @@ ROS 2 相机采集、YOLO 目标检测、PP-OCR 文字识别与算术题识别�
 |---|---|---|
 | `yolo_node` | `yolo_node` | 触发式单帧抓帧 → YOLO 推理 → 2×4 网格分配 → JSON 发布 |
 | `yolo_accuracy_test_node` | `yolo_accuracy_test_node` | 连续实时 YOLO 推理 → 标注可视化 → 带标注视频录制 |
-| `ppocr_node` | `ppocr_node` | 海康相机取帧 → 白底算术题 ROI 定位 → PP-OCR 检测/识别 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
+| `ppocr_node` | `ppocr_node` | 海康相机取帧 → 白底算术题 ROI 定位 → 灰度/增强/二值化 → PP-OCR 数学字符识别 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
 | `math_generator_node` | `math_generator_node` | 随机生成复合四则运算题 → 全屏渲染显示 → 追加写入 YAML |
 
 ---
@@ -53,8 +53,11 @@ dogvision_vision/
 │   ├── ppocr_test.launch
 │   └── yolo_accuracy_test.launch
 ├── models/
-│   ├── ppocr/                     # PP-OCRv4 模型文件（.pdmodel / .pdiparams）
+│   ├── ppocr/                     # PP-OCRv4 模型、完整字典与数学字符白名单
 │   └── yolo/                      # YOLO OpenVINO 模型文件（.xml / .bin）
+├── test/
+│   ├── ocr_multi_frame_voter_test.cpp
+│   └── ocr_preprocess_decode_test.cpp
 └── src/
     ├── camera/
     │   ├── hikvision.cpp
@@ -72,11 +75,9 @@ dogvision_vision/
     │   ├── ocr_detect.cpp
     │   ├── ocr_MultiFrameVoter.cpp
     │   └── ocr_utils.cpp
-    ├── yolo/
-    │   ├── nuc_detect.cpp
-    │   └── yolo_utils.cpp
-    └── test/
-        └── ocr_multi_frame_voter_test.cpp
+    └── yolo/
+        ├── nuc_detect.cpp
+        └── yolo_utils.cpp
 ```
 
 ---
@@ -181,7 +182,17 @@ source install/setup.bash
     "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
     "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
     "ppocr_cls_model_path": "",                          // 文字方向分类（暂未使用）
-    "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt"
+    "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt",
+    "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
+  },
+
+  // OCR ROI 图像增强
+  "ocr_preprocess": {
+    "enabled": true,
+    "clahe_clip_limit": 2.0,
+    "clahe_tile_size": 8,
+    "gaussian_kernel_size": 3,
+    "invert": false
   },
 
   // YOLO 输入张量形状 NCHW
@@ -208,6 +219,24 @@ source install/setup.bash
   }
 }
 ```
+
+OCR 预处理参数：
+
+| 参数 | 默认值 | 说明 |
+|---|---:|---|
+| `enabled` | `true` | 是否启用 ROI 增强；关闭时直接使用原彩色 ROI |
+| `clahe_clip_limit` | `2.0` | CLAHE 对比度限制，必须大于 0 |
+| `clahe_tile_size` | `8` | CLAHE 网格边长，必须为正整数 |
+| `gaussian_kernel_size` | `3` | 高斯去噪核边长，必须为正奇数 |
+| `invert` | `false` | `false` 为黑字白底，`true` 用于白字黑底 |
+
+`ppocr_keys_v1.txt` 必须保留为官方完整字典，不能直接裁剪或重排，否则会破坏识别模型的类别索引。`math_chars.txt` 是解码白名单，当前允许：
+
+```text
+0-9  +  -  *  /  ×  ÷  =  .  (  )
+```
+
+启动时会校验预处理参数、完整字典、白名单字符以及模型输出类别数；配置不合法时会直接报错，避免静默产生错误识别结果。
 
 鱼眼去畸变内参矩阵 K 在 `src/core/detector.cpp` 中以硬编码常量定义（从 `fisheye_params.yaml` 标定结果提取）。如需修改，需同步更新该文件。
 
@@ -306,11 +335,11 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 ### 5.3 `ppocr_node` — PP-OCR 算术题识别节点
 
 **工作流程**：
-1. 加载配置，初始化 PP-OCR 文本检测模型和文本识别模型、海康相机。
+1. 加载配置，初始化 PP-OCR 文本检测模型、文本识别模型、完整字典、数学字符白名单和海康相机。
 2. 两种运行模式：
 
    **test 模式**（连续测试 + YAML 输出）：
-   - 循环取帧 → 去畸变 → `find_math_proble()` 定位白底算术题区域 → 文本检测 → 文本识别 → 表达式解析计算 → 多帧投票（10 帧滑动窗口）
+   - 循环取帧 → 去畸变 → `find_math_proble()` 定位白底算术题区域 → ROI 图像增强 → 文本检测 → 数学字符约束识别 → 表达式解析计算 → 多帧投票（10 帧滑动窗口）
    - 稳定结果发生变化时追加写入 `ocr_results.yaml`
 
    **production 模式**（触发式生产）：
@@ -318,6 +347,22 @@ ros2 run dogvision_vision yolo_accuracy_test_node
    - 触发后重置投票器，开始连续跟踪
    - 稳定结果发生变化时通过 `/ocr/result` 发布 JSON
    - 连续 10 帧无效结果后稳定结果丢失
+
+**ROI 图像增强流程**：
+
+1. 将 ROI 转为灰度图。
+2. 使用 CLAHE 提升局部对比度。
+3. 使用高斯模糊抑制纸面纹理和细小噪声。
+4. 使用 Otsu 自动阈值完成二值化。
+5. 转回三通道 BGR，同时作为 PP-OCR 检测输入和识别裁剪来源。
+
+该流程不改变 ROI 尺寸，也不执行腐蚀或膨胀，以免破坏小数点、除号等细小结构。最终检测框与文字仍绘制在原始彩色画面上。
+
+**数学字符约束**：
+
+- 识别模型仍使用完整官方字典维护类别索引。
+- 解码时只在 CTC blank 和 `math_chars.txt` 对应类别中选择最大概率。
+- 即使中文或其他无关字符的原始分数更高，也不会出现在最终 OCR 文本中。
 
 **ROS 2 接口**：
 
@@ -496,9 +541,12 @@ const std::vector<OCRBox>& get_det_boxes() const;
 // 文本识别
 void detect_rec_ppocr::load_model(const std::string& model_path, const std::string& device);
 void detect_rec_ppocr::loda_dict(const std::string& dict_path);
+void detect_rec_ppocr::load_allowed_chars(const std::string& allowed_chars_path);
 std::vector<OCRRecResult> Decode(const ov::Tensor& logits);
 void set_max_wh_ratio(float r);
 ```
+
+识别器加载顺序必须为：模型 → 完整字典 → 数学字符白名单。`Decode()` 会校验输入张量必须为 FP32 `[batch, time, classes]`，且类别数必须与完整字典一致。
 
 ### 6.5 `OCRMultiFrameVoter` — 多帧投票器 (`ocr_MultiFrameVoter.hpp`)
 
@@ -549,6 +597,7 @@ public:
 
 | 函数 | 说明 |
 |---|---|
+| `preprocess_math_roi(input, config)` | ROI 灰度化、CLAHE 增强、高斯去噪、Otsu 二值化并转回 BGR |
 | `crop_text_region(src, box)` | 透视变换裁剪四点文本框 |
 | `draw_ocr_result(vis, box, rec)` | 在图像上绘制 OCR 框和识别标签 |
 | `parse_simple_expr(text, result, expr_str)` | 从 OCR 文本中解析并计算四则运算表达式 |
@@ -710,14 +759,19 @@ ros2 topic pub --once /ocr/trigger std_msgs/msg/String "{data: start}"
 ### 9.1 单元测试
 
 ```bash
-# 运行 OCR 多帧投票器测试
-colcon test --packages-select dogvision_vision --ctest-args -R ocr_multi_frame_voter_test
+# 构建并启用测试
+colcon build --packages-select dogvision_vision --cmake-args -DBUILD_TESTING=ON
 
-# 或直接运行
+# 运行全部 dogvision_vision 单元测试
+ctest --test-dir build/dogvision_vision --output-on-failure
+
+# 或分别直接运行
 ./build/dogvision_vision/ocr_multi_frame_voter_test
+./build/dogvision_vision/ocr_preprocess_decode_test
 ```
 
-测试覆盖以下场景（`test/ocr_multi_frame_voter_test.cpp`）：
+`test/ocr_multi_frame_voter_test.cpp` 覆盖：
+
 - 6/10 帧达标时触发 `StableChanged`
 - 无效帧不计入占比分母
 - 5 次出现不达标
@@ -725,6 +779,16 @@ colcon test --packages-select dogvision_vision --ctest-args -R ocr_multi_frame_v
 - 新稳定结果替换旧结果
 - A-B-A 切换模式
 - `reset()` 清空状态
+
+`test/ocr_preprocess_decode_test.cpp` 覆盖：
+
+- 使用仓库样例验证增强结果尺寸不变、输出为三通道纯二值图
+- 预处理关闭和黑白反色模式
+- 非法 CLAHE 参数及偶数高斯核校验
+- 数学字符白名单加载及缺失字符检查
+- 构造 CTC logits，验证无关字符分数更高时仍只输出数学字符
+- CTC 重复折叠、blank 删除和字典类别数校验
+- `(12+36)×5÷(18-9)=` 表达式归一化与计算回归
 
 ### 9.2 YOLO 准确性测试
 

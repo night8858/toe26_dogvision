@@ -1,3 +1,22 @@
+/**
+ * @file ppocr_node.cpp
+ * @brief ROS2 PP-OCR 算术题识别节点
+ *
+ * 支持两种运行模式：
+ *   - test（测试模式）：连续 OCR + 多帧投票，稳定结果追加写入 YAML
+ *   - production（生产模式）：通过 /ocr/trigger 话题触发，发布 /ocr/result
+ *
+ * 完整流水线：
+ *   1. 从海康相机获取帧
+ *   2. 鱼眼去畸变（可选）
+ *   3. 定位白底算术题区域（find_math_proble）
+ *   4. ROI 预处理（CLAHE + 高斯模糊 + Otsu 二值化）
+ *   5. PPOCR 文本检测（detect_det_ppocr）
+ *   6. PPOCR 文本识别（detect_rec_ppocr，含数学字符白名单）
+ *   7. 算术表达式解析（parse_simple_expr）
+ *   8. 多帧滑动窗口投票（OCRMultiFrameVoter）提高稳定性
+ */
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -82,6 +101,7 @@ static void ocr_trigger_callback(const std_msgs::msg::String::SharedPtr msg)
 static bool run_ocr_pipeline(cv::Mat& img,
                              detect_det_ppocr& det,
                              detect_rec_ppocr& rec,
+                             const s_detector_params& ocr_config,
                              const rclcpp::Logger& logger,
                              std::string& expr_str,
                              int& int_result,
@@ -104,7 +124,8 @@ static bool run_ocr_pipeline(cv::Mat& img,
         math_rect &= cv::Rect(0, 0, img.cols, img.rows);
         if (math_rect.area() > 0)
         {
-            det_input = img(math_rect).clone();
+            const cv::Mat raw_roi = img(math_rect);
+            det_input = preprocess_math_roi(raw_roi, ocr_config);
             RCLCPP_INFO(logger, "Math ROI  : [%d, %d, %d x %d]",
                         math_rect.x, math_rect.y, math_rect.width, math_rect.height);
         }
@@ -256,6 +277,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
                          HikGrab& hik,
                          detect_det_ppocr& det,
                          detect_rec_ppocr& rec,
+                         const s_detector_params& ocr_config,
                          const std::string& yaml_path,
                          bool show_visual)
 {
@@ -301,7 +323,8 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         cv::Rect2f math_roi;
         std::optional<OCRVoteResult> frame_result;
         if (run_ocr_pipeline(
-                frame, det, rec, logger, expr_str, int_result, mod_result, &math_roi))
+                frame, det, rec, ocr_config, logger,
+                expr_str, int_result, mod_result, &math_roi))
         {
             RCLCPP_INFO(logger, "Expr: %s  =>  %d  %%4 = %d",
                         expr_str.c_str(), int_result, mod_result);
@@ -380,6 +403,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                                HikGrab& hik,
                                detect_det_ppocr& det,
                                detect_rec_ppocr& rec,
+                               const s_detector_params& ocr_config,
                                bool show_visual)
 {
     auto logger = node->get_logger();
@@ -440,7 +464,8 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         cv::Rect2f math_roi;
         std::optional<OCRVoteResult> frame_result;
         if (run_ocr_pipeline(
-                frame, det, rec, logger, expr_str, int_result, mod_result, &math_roi))
+                frame, det, rec, ocr_config, logger,
+                expr_str, int_result, mod_result, &math_roi))
         {
             frame_result = OCRVoteResult{expr_str, int_result, mod_result};
             stable_roi = math_roi;
@@ -528,6 +553,7 @@ int main(int argc, char** argv)
     detect_rec_ppocr rec(&config);
     rec.load_model(config.detect_config.ppocr_rec_model_path, config.detect_config.rec_device);
     rec.loda_dict(config.detect_config.rec_char_dict_path);
+    rec.load_allowed_chars(config.detect_config.rec_allowed_chars_path);
 
     const float default_wh_ratio =
         (config.detect_config.rec_img_h > 0)
@@ -560,11 +586,13 @@ int main(int argc, char** argv)
     int ret = 0;
     if (mode == "test")
     {
-        ret = run_test_mode(node, hik, det, rec, yaml_path, show_visual);
+        ret = run_test_mode(
+            node, hik, det, rec, config.detect_config, yaml_path, show_visual);
     }
     else if (mode == "production")
     {
-        ret = run_production_mode(node, hik, det, rec, show_visual);
+        ret = run_production_mode(
+            node, hik, det, rec, config.detect_config, show_visual);
     }
     else
     {

@@ -17,32 +17,36 @@
 #include "MvCameraControl.h"
 
 
-// 相机内参
+/**
+ * @brief 相机基本参数
+ */
 typedef struct
 {
-    int device_id;
-    int width;
-    int height;
-    int offset_x;
-    int offset_y;
-    int exposure;
+    int device_id; ///< 相机设备编号（枚举索引）
+    int width;     ///< 采集宽度（像素）
+    int height;    ///< 采集高度（像素）
+    int offset_x;  ///< ROI 水平偏移
+    int offset_y;  ///< ROI 垂直偏移
+    int exposure;  ///< 曝光时间（微秒）
 
 } s_camera_params;
 
 
+/**
+ * @brief 海康相机封装类，包装 MVS SDK 的设备管理与图像采集接口
+ */
 class HikGrab
 {
 private:
-    s_camera_params params_;
-    cv::Mat img_bayerrg_;
-    void* handle;
-    int nRet;
-    // ch:获取数据包大小 | en:Get payload size
-    MVCC_INTVALUE stParam;
-    MV_FRAME_OUT_INFO_EX stImageInfo;
+    s_camera_params params_;   ///< 相机初始化参数
+    cv::Mat img_bayerrg_;      ///< Bayer RG 原始格式缓存
+    void* handle;              ///< MVS 设备句柄
+    int nRet;                  ///< MVS API 返回值暂存
+    MVCC_INTVALUE stParam;     ///< 传输层参数（如 PayloadSize）
+    MV_FRAME_OUT_INFO_EX stImageInfo; ///< 帧信息（宽、高、时间戳等）
 
-    unsigned char * pData;
-    unsigned int nDataSize;
+    unsigned char * pData;     ///< 帧数据缓冲区
+    unsigned int nDataSize;    ///< 缓冲区大小
 
 
 public:
@@ -92,7 +96,7 @@ public:
  * @retval void
  */
 extern void __stdcall ImageCallBackEx(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo, void* pUser);
-extern cv::Mat img_rgb_;
-extern std::mutex img_mutex;
+extern cv::Mat img_rgb_;       ///< 全局 RGB 图像缓存（回调填充）
+extern std::mutex img_mutex;   ///< 图像缓存互斥锁
 
 // #endif

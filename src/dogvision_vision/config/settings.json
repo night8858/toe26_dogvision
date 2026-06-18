@@ -1,27 +1,29 @@
 {
-  //摄像头参数设置
+  // ── 海康相机参数 ──
     "hikcamera":
     {
-      "device_id": 0,
-      "width": 1440,
-      "height": 1080,
-      "offset_x":0,
-      "offset_y":0,
-      "exposure":12000,
-      "gain":9
+      "device_id": 0,     // 相机设备编号
+      "width": 1440,      // 采集宽度（像素）
+      "height": 1080,     // 采集高度（像素）
+      "offset_x":0,       // ROI 水平偏移
+      "offset_y":0,       // ROI 垂直偏移
+      "exposure":12000,   // 曝光时间（微秒）
+      "gain":9            // 增益
     },
 
+    // ── 鱼眼畸变参数 ──
     "lens_distortion":
     {
       "D":[ 1.9474519085664992e-02, 2.2096711413330011e-02,-4.1006640770500716e-02, 2.6220651979250005e-02 ]
     },
 
+    // ── USB 相机参数（最多 4 个） ──
     "usbcamera0":
     {
-      "device_id": 0,
-      "width": 1920,
-      "height": 1080,
-      "FPS":120
+      "device_id": 0,     // 设备编号
+      "width": 1920,      // 采集宽度
+      "height": 1080,     // 采集高度
+      "FPS":120           // 目标帧率
     },
     "usbcamera1":
     {
@@ -46,7 +48,7 @@
       "FPS":120
     },
 
-// OpenVINO模型路径和PPOCR模型路径
+    // ── OpenVINO 模型路径和 PPOCR 模型路径 ──
     "path":
     {
       "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolo/SENetV2_1_ov_FP16/best.bin",
@@ -56,44 +58,56 @@
       "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
       "ppocr_cls_model_path": "",
 
-      "ppocr_dict_path": "src/dogvision_vision/models/ppocr/Dict/ppocr_keys_v1.txt"
-
+      "ppocr_dict_path": "src/dogvision_vision/models/ppocr/Dict/ppocr_keys_v1.txt",
+      "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
     },
 
+    // ── OCR ROI 预处理参数 ──
+    "ocr_preprocess":
+    {
+      "enabled": true,          // 是否启用预处理
+      "clahe_clip_limit": 2.0,  // CLAHE 对比度限制
+      "clahe_tile_size": 8,     // CLAHE 分块尺寸
+      "gaussian_kernel_size": 3,// 高斯模糊核大小
+      "invert": false           // 是否反相二值化
+    },
+
+    // ── YOLO 网络输入尺寸（NCHW 格式） ──
     "NCHW":
     {
-      "batch_size": 1,
-      "C": 3,
-      "W": 640,
-      "H": 640
+      "batch_size": 1,  // 批处理大小
+      "C": 3,           // 通道数
+      "W": 640,         // 输入宽度
+      "H": 640          // 输入高度
       
     },
   
+    // ── 图像属性 ──
     "img":
     {
       "type种类: 0-rgb 1-bgr 2-yuv 3-yv12 4-bayerrg ...":"",
-      "type": 0,
-      "width": 1920,
-      "height": 1080
+      "type": 0,        // 色彩格式（0=rgb, 1=bgr, ...）
+      "width": 1920,    // 图像宽度
+      "height": 1080    // 图像高度
     },
   
+    // ── 阈值参数 ──
     "thresh":
     {
-        "nms_thresh": 0.6,
-        "bbox_conf_thresh": 0.6,
-        "merge_thresh": 0.8,
-        "max_wellid_distance": 8
+        "nms_thresh": 0.6,          // NMS IoU 阈值
+        "bbox_conf_thresh": 0.6,    // 边界框置信度阈值
+        "merge_thresh": 0.8,        // 多帧融合阈值
+        "max_wellid_distance": 8    // 最大焊点距离
     },
 
-    //类别数量设置
+    // ── 类别名称设置 ──
     "nums":
     {
-        "classes": 4,
-        "cls0":"food",
-        "cls1":"tool",
-        "cls2":"medicine",
-        "cls3":"instrument"
-        
+        "classes": 4,       // 类别总数
+        "cls0":"food",      // 第 0 类：食物
+        "cls1":"tool",      // 第 1 类：工具
+        "cls2":"medicine",  // 第 2 类：药品
+        "cls3":"instrument" // 第 3 类：仪器
     }
 
 }

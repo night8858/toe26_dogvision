@@ -1,8 +1,13 @@
 <?xml version="1.0"?>
+<!--
+  dogvision_vision 包描述
+  ROS2 功能包，提供海康/USB 相机采集、YOLO OpenVINO 检测、
+  PP-OCRv4 文本识别、算术题生成与测试等功能。
+-->
 <package format="3">
   <name>dogvision_vision</name>
   <version>1.0.0</version>
-  <description>ROS 2 camera, YOLO, PPOCR, and visual test nodes</description>
+  <description>ROS2 相机采集、YOLO 检测、PPOCR 识别与视觉测试节点集合</description>
   <maintainer email="toe@todo.todo">toe</maintainer>
   <license>MIT</license>
 

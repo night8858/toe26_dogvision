@@ -7,14 +7,17 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 
+/**
+ * @brief USB 相机封装类，基于 OpenCV VideoCapture 实现
+ */
 class usb_camera
 {
 
 public:
-    double FPS = 0.0;
+    double FPS = 0.0; ///< 实际帧率统计
 
-    int frame_width = 640;
-    int frame_height = 480;
+    int frame_width = 640;  ///< 帧宽度（像素）
+    int frame_height = 480; ///< 帧高度（像素）
 
     /**
      * @brief 构造 USB 相机封装对象。
@@ -30,8 +33,8 @@ public:
      */
     ~usb_camera() = default; // 析构函数
 
-    std::array<cv::Mat, 2> usb_frame_array;    // 存放USB相机帧
-    std::array<std::mutex, 2> usb_mutex_array; // 存放USB相机帧互斥锁
+    std::array<cv::Mat, 2> usb_frame_array;    ///< 双缓冲帧数组（交替写入）
+    std::array<std::mutex, 2> usb_mutex_array; ///< 对应帧缓冲的互斥锁
 
     /**
      * @brief 初始化 USB 相机采集对象。
@@ -56,9 +59,9 @@ public:
     bool usb_camera_get_frame(cv::VideoCapture &capture, cv::Mat &frame);
 
 private:
-    cv::VideoCapture cap;
-    std::mutex usb_frame_mutex;
-    cv::Mat frame;
+    cv::VideoCapture cap;        ///< OpenCV 视频采集对象
+    std::mutex usb_frame_mutex;  ///< 内部帧互斥锁
+    cv::Mat frame;               ///< 内部帧暂存
 };
 
 

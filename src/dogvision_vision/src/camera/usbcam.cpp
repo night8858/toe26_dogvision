@@ -5,62 +5,84 @@
 
 
 
-/// @brief   初始化USB相机参数
-/// @param usb_cam 使用的相机类
-/// @param capture 选定的视频捕获对象
-/// @param input_json 输入参数
+/**
+ * @brief 初始化 USB 相机
+ *
+ * 设置 MJPG 编码、640×480 分辨率、120 FPS，
+ * 并通过实际读取参数验证设置是否生效。
+ *
+ * @param capture 需初始化的 OpenCV VideoCapture 对象
+ * @retval true  初始化成功
+ * @retval false 分辨率校验失败或打开相机失败
+ */
 bool usb_camera::usb_camera_init(cv::VideoCapture &capture)
 {
     cv::VideoWriter writer;
-    // 内参设定
+    // 设置为 MJPG 编码格式以减少带宽占用
     int fourcc = writer.fourcc('M', 'J', 'P', 'G');
     capture.set(cv::CAP_PROP_FOURCC, fourcc);
+    // 设置目标分辨率
     capture.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     capture.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+    // 设置目标帧率
     capture.set(cv::CAP_PROP_FPS, 120);
 
+    // 验证实际分辨率是否与设置一致
     double actualWidth = capture.get(cv::CAP_PROP_FRAME_WIDTH);
     double actualHeight = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-    // 长宽比设定验证
     if (actualWidth != 640 || actualHeight != 480)
     {
-        std::cerr << "Error: 设定失败，实际分辨率与设定分辨率不一致" << std::endl;
+        std::cerr << "Error: USB camera resolution mismatch (set 640x480, got "
+                  << actualWidth << "x" << actualHeight << ")" << std::endl;
         return false;
     }
-    // 相机打开验证
+    // 验证相机是否已打开
     if (!capture.isOpened())
     {
-        std::cout << "Error: USB相机打开失败" << std::endl;
+        std::cout << "Error: USB camera failed to open" << std::endl;
         return false;
     }
-    std::cout << "USB相机初始化成功" << std::endl;
+    std::cout << "USB camera initialized successfully" << std::endl;
     return true;
 }
 
-/// @brief   获取USB相机帧
-/// @param capture 选定的视频捕获对象
-/// @param frame 相机帧
+/**
+ * @brief 从 USB 相机读取一帧图像
+ *
+ * 线程安全：使用互斥锁保护 capture >> frame 操作。
+ *
+ * @param capture 已打开的 OpenCV 采集对象
+ * @param frame   输出图像帧
+ * @retval true  始终返回 true
+ */
 bool usb_camera::usb_camera_get_frame(cv::VideoCapture &capture, cv::Mat &frame)
 {
-
-    
-    //frame = cv::imread("/home/toe-volleyball/toe_aimbot/data/best_openvino_model/20241018_10587.jpg");
+    // 加锁读取，防止多线程同时访问 capture
     usb_mutex_array[0].lock();
     capture >> frame;
     usb_mutex_array[0].unlock();
     return true;
 }
 
+/**
+ * @brief 在 OpenCV 窗口中显示最近一帧 USB 图像
+ */
 void usb_camera::usb_camera_show_frame(void)
 {
-    cv::imshow("USB相机", usb_frame_array[0]);
+    cv::imshow("USB Camera", usb_frame_array[0]);
     cv::waitKey(1);
-
 }
 
-/// @brief   判断颜色
-/// @param frame 相机帧
-/// @return 颜色是否符合要求
+/**
+ * @brief 判断图像帧中是否同时含有黄、蓝、白三种颜色区域
+ *
+ * 将 BGR 图像转为 HSV，分别提取黄、蓝、白的掩码，
+ * 若各颜色非零像素数均 > 5 则认为满足条件。
+ *
+ * @param frame 输入 BGR 图像帧
+ * @retval true  同时含有黄、蓝、白
+ * @retval false 缺少至少一种颜色或图像为空
+ */
 bool color_judge(cv::Mat &frame)
 {
     if (frame.empty())
@@ -96,11 +118,18 @@ bool color_judge(cv::Mat &frame)
         return false;
     }
 }
-//@brief   限制矩形面积
-/// @param input 输入矩形面积
-/// @param limit_min 最小限制
-/// @param limit_max 最大限制
-/// @return 限制后的矩形面积
+/**
+ * @brief 将面积值限制在指定范围 [limit_min, limit_max] 内
+ *
+ * 当 input < limit_min 时返回 limit_min，
+ * 当 input > limit_max 时返回 limit_max，
+ * 否则返回 input 本身。
+ *
+ * @param input     输入面积值
+ * @param limit_min 下限
+ * @param limit_max 上限
+ * @return 限幅后的面积值
+ */
 int rect_area_limit(int input, int limit_min, int limit_max)
 {
     if (input < limit_min)

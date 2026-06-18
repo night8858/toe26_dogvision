@@ -66,11 +66,11 @@ public:
     void appendToYaml(const std::string &problem, int answer, int mod4);
 
 private:
-    std::string yaml_path_;    // YAML 输出路径
-    int min_val_;              // 操作数下限
-    int max_val_;              // 操作数上限
-    int problem_index_;        // 题目序号（从 1 开始）
-    bool yaml_header_written_; // YAML 文件头是否已写入
+    std::string yaml_path_;     ///< YAML 输出文件路径
+    int min_val_;               ///< 操作数最小值（含）
+    int max_val_;               ///< 操作数最大值（含）
+    int problem_index_;         ///< 题目序号（从 1 开始递增）
+    bool yaml_header_written_;  ///< YAML 文件头是否已写入
 
     /**
      * @brief 获取适合当前屏幕的字体缩放比例

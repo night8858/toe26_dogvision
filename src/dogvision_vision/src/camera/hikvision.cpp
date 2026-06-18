@@ -15,13 +15,21 @@ cv::Mat img_rgb_right_;
 int l_camera = 0;
 int r_camera = 1;
 
+/**
+ * @brief 初始化海康 MVS 相机
+ *
+ * 流程：枚举 USB 设备 → 选择指定编号设备 → 创建句柄 → 打开设备 →
+ * 设置触发模式为连续（off）→ 开始取流 → 获取 PayloadSize 并分配帧缓冲区。
+ *
+ * @param 无
+ * @retval void
+ */
 void HikGrab::Hik_init()
 {
     MV_CC_DEVICE_INFO_LIST stDeviceList;
     memset(&stDeviceList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
 
-    // 枚举设备
-    // enum device
+    // 枚举所有 USB 接口的 MVS 兼容设备
     nRet = MV_CC_EnumDevices(MV_USB_DEVICE, &stDeviceList);
     if (MV_OK != nRet)
     {
@@ -119,15 +127,20 @@ void HikGrab::Hik_init()
     }
     nDataSize = stParam.nCurValue;
 
-    cout << "hik init" << endl;
+    std::cout << "Hik camera init done (device " << params_.device_id << ")" << std::endl;
 }
 
-
+/**
+ * @brief 停止采集并释放海康相机资源
+ *
+ * 流程：停止取流 → 关闭设备 → 销毁句柄 → 释放帧缓冲区。
+ * @param 无
+ * @retval void
+ */
 void HikGrab::Hik_end()
 {
 
     // 停止取流
-    // end grab image
     nRet = MV_CC_StopGrabbing(handle);
     if (MV_OK != nRet)
     {
@@ -166,24 +179,38 @@ void HikGrab::Hik_end()
 
 
 
+/**
+ * @brief 从海康相机获取一帧 BGR 图像
+ *
+ * 使用 MVS SDK 的同步取帧接口 MV_CC_GetOneFrameTimeout 获取原始 Bayer 数据，
+ * 再通过 OpenCV 的 cvtColor 完成 BayerRG → RGB 去马赛克转换。
+ * 右相机（id=1）额外缩放到 640×640。
+ *
+ * @param img 输出 BGR 图像
+ * @param id  相机编号（0=左, 1=右）
+ * @retval true  成功获取并转换图像
+ * @retval false 取帧超时或 API 错误
+ */
 bool HikGrab::get_one_frame(cv::Mat& img, int id)
 {
+    // 同步取帧，超时 1000ms
     nRet = MV_CC_GetOneFrameTimeout(handle, pData, nDataSize, &stImageInfo, 1000);
-    //cout << nRet << endl;
     if (nRet != MV_OK) return false;
+
+    // 将裸 Bayer 数据封装为 OpenCV Mat（8-bit 单通道）
     Mat img_bayerrg_ = Mat(stImageInfo.nHeight, stImageInfo.nWidth, CV_8UC1, pData);
     if (id == 0)
     {
+        // 左相机：BayerRG → RGB，保留原始分辨率
         cvtColor(img_bayerrg_, img, COLOR_BayerRG2RGB);
-        //cv::resize(img_rgb_left_, img,cv::Size(640,640));
     }
     else if (id == 1)
     {
+        // 右相机：BayerRG → RGB 后缩放到 640×640
         cvtColor(img_bayerrg_, img_rgb_right_, COLOR_BayerRG2RGB);
-        cv::resize(img_rgb_right_, img,cv::Size(640,640));
+        cv::resize(img_rgb_right_, img, cv::Size(640,640));
     }
     return true;
-
 }
 /*
 void __stdcall ImageCallBackEx(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo, void* pUser)

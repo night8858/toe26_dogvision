@@ -5,6 +5,7 @@
 #include <fstream>
 #include <jsoncpp/json/json.h>
 #include <opencv2/calib3d.hpp>
+#include <stdexcept>
 #include <string>
 
 // ---------------------------------------------------------------
@@ -63,7 +64,14 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         {
             if (p.empty() || p[0] == '/')
                 return p; // 已是绝对路径则直接使用
-            return (pkg / p).string();
+            const std::filesystem::path direct = pkg / p;
+            if (std::filesystem::exists(direct))
+                return direct.string();
+
+            const std::string source_prefix = "src/dogvision_vision/";
+            if (p.rfind(source_prefix, 0) == 0)
+                return (pkg / p.substr(source_prefix.size())).string();
+            return direct.string();
         };
 
         config.detect_config.bin_file_path = resolve(value["path"]["openvino_bin_file_path"].asString());
@@ -73,6 +81,32 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.ppocr_rec_model_path = resolve(value["path"]["ppocr_rec_model_path"].asString());
         config.detect_config.ppocr_cls_model_path = resolve(value["path"]["ppocr_cls_model_path"].asString());
         config.detect_config.rec_char_dict_path = resolve(value["path"]["ppocr_dict_path"].asString());
+        config.detect_config.rec_allowed_chars_path =
+            resolve(value["path"]["ppocr_allowed_chars_path"].asString());
+
+        const Json::Value& ocr_preprocess = value["ocr_preprocess"];
+        if (!ocr_preprocess.isNull())
+        {
+            config.detect_config.ocr_preprocess_enabled =
+                ocr_preprocess.get("enabled", true).asBool();
+            config.detect_config.ocr_clahe_clip_limit =
+                ocr_preprocess.get("clahe_clip_limit", 2.0).asDouble();
+            config.detect_config.ocr_clahe_tile_size =
+                ocr_preprocess.get("clahe_tile_size", 8).asInt();
+            config.detect_config.ocr_gaussian_kernel_size =
+                ocr_preprocess.get("gaussian_kernel_size", 3).asInt();
+            config.detect_config.ocr_preprocess_invert =
+                ocr_preprocess.get("invert", false).asBool();
+        }
+
+        if (config.detect_config.ocr_clahe_clip_limit <= 0.0)
+            throw std::invalid_argument("ocr_preprocess.clahe_clip_limit must be positive");
+        if (config.detect_config.ocr_clahe_tile_size <= 0)
+            throw std::invalid_argument("ocr_preprocess.clahe_tile_size must be positive");
+        if (config.detect_config.ocr_gaussian_kernel_size <= 0 ||
+            config.detect_config.ocr_gaussian_kernel_size % 2 == 0)
+            throw std::invalid_argument(
+                "ocr_preprocess.gaussian_kernel_size must be a positive odd number");
 
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();
@@ -171,8 +205,17 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
 
 }
 
+/**
+ * @brief 检测器构造函数
+ *
+ * 初始化图像标志位并从 config 中复制所有检测与 OCR 参数到本地成员。
+ * config 为 nullptr 时仅置零标志位并提前返回，用于仅加载配置的场景。
+ *
+ * @param config 应用配置指针；可为 nullptr
+ */
 detector::detector(Appconfig *config)
 {
+    // 清零各相机的新图像标志位
     hik_img_flag = 0;
     for (int i = 0; i < 4; ++i)
     {
@@ -184,30 +227,40 @@ detector::detector(Appconfig *config)
         return;
     }
 
-    // 初始化模型路径参数
+    // ── 复制模型路径 ──
     detect_config_.xml_file_path = config->detect_config.xml_file_path;
     detect_config_.bin_file_path = config->detect_config.bin_file_path;
 
-    // 初始化其他检测参数
+    // ── 复制网络输入尺寸 ──
     detect_config_.batch_size = config->detect_config.batch_size;
     detect_config_.h = config->detect_config.h;
     detect_config_.w = config->detect_config.w;
     detect_config_.c = config->detect_config.c;
 
+    // ── 复制图像属性 ──
     detect_config_.type = config->detect_config.type;
     detect_config_.width = config->detect_config.width;
     detect_config_.height = config->detect_config.height;
 
+    // ── 复制阈值参数 ──
     detect_config_.nms_thresh = config->detect_config.nms_thresh;
     detect_config_.bbox_conf_thresh = config->detect_config.bbox_conf_thresh;
     detect_config_.merge_thresh = config->detect_config.merge_thresh;
     detect_config_.classes = config->detect_config.classes;
 
+    // ── 复制 PPOCR 相关路径与参数 ──
     detect_config_.ppocr_det_model_path = config->detect_config.ppocr_det_model_path;
     detect_config_.ppocr_rec_model_path = config->detect_config.ppocr_rec_model_path;
     detect_config_.ppocr_cls_model_path = config->detect_config.ppocr_cls_model_path;
     detect_config_.rec_char_dict_path = config->detect_config.rec_char_dict_path;
+    detect_config_.rec_allowed_chars_path = config->detect_config.rec_allowed_chars_path;
+    detect_config_.ocr_preprocess_enabled = config->detect_config.ocr_preprocess_enabled;
+    detect_config_.ocr_clahe_clip_limit = config->detect_config.ocr_clahe_clip_limit;
+    detect_config_.ocr_clahe_tile_size = config->detect_config.ocr_clahe_tile_size;
+    detect_config_.ocr_gaussian_kernel_size = config->detect_config.ocr_gaussian_kernel_size;
+    detect_config_.ocr_preprocess_invert = config->detect_config.ocr_preprocess_invert;
 
+    // ── 复制类别名称 ──
     detect_config_.class0 = config->detect_config.class0;
     detect_config_.class1 = config->detect_config.class1;
     detect_config_.class2 = config->detect_config.class2;
@@ -223,51 +276,38 @@ const std::vector<Detection> *detector::yolo_results_ptr() const
     return nullptr;
 }
 
+/**
+ * @brief 将相机采集的图像推入检测器内部缓存
+ *
+ * cam_id = 0 对应海康相机，将图像克隆后同时存入环形缓存队列
+ * （维护最大 max_size_ 帧）和单帧缓存，并置位新图像标志。
+ * cam_id 1~4（USB 相机）的处理逻辑暂被注释，留作扩展。
+ *
+ * @param grab_img 需缓存的图像（BGR 格式）
+ * @param cam_id   相机编号（0 = 海康，1-4 = USB）
+ */
 void detector::push_img(cv::Mat &grab_img, int cam_id)
 {
-    // cam_id: 0 = hikvision camera, 1-4 = usb camera
     if (cam_id == 0)
     {
-        // 海康相机
+        // 海康相机图像入队
         {
             // 自动加锁，离开作用域自动解锁
             std::lock_guard<std::mutex> lock(hik_img_mutex_);
 
-            // Push to vector (maintain max_size_)
+            // 环形队列：超出最大数量时移除最旧的一帧
             if (input_imgs_hikvion.size() >= max_size_)
             {
                 input_imgs_hikvion.erase(input_imgs_hikvion.begin());
             }
             input_imgs_hikvion.push_back(grab_img.clone());
 
-            // Update single image buffer
+            // 更新单帧缓存并置标志位
             input_img_hik_ = grab_img.clone();
-            hik_img_flag = 1; // Set flag indicating new image available
+            hik_img_flag = 1; // 标记有新帧可用
         }
     }
-    // else if (cam_id >= 1 && cam_id <= 4)
-    // {
-    //     // USB camera (1-4)
-    //     int usb_idx = cam_id - 1;
-    //     {
-    //         std::lock_guard<std::mutex> lock(usb_img_mutex_[usb_idx]);
-
-    //         // Push to vector (maintain max_size_)
-    //         if (input_imgs_usb[usb_idx].size() >= max_size_)
-    //         {
-    //             input_imgs_usb[usb_idx].erase(input_imgs_usb[usb_idx].begin());
-    //         }
-    //         input_imgs_usb[usb_idx].push_back(grab_img.clone());
-
-    //         // Update single image buffer
-    //         input_img_usb_[usb_idx] = grab_img.clone();
-    //         usb_img_flag[usb_idx] = 1; // Set flag indicating new image available
-    //     }
-    // }
-    // else
-    // {
-    //     std::cerr << "Invalid camera ID: " << cam_id << std::endl;
-    // }
+    // USB 相机部分暂未启用，代码已注释保留
 }
 
 // 处理使用广角镜头后的畸变

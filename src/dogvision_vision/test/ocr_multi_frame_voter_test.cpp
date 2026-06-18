@@ -1,3 +1,15 @@
+/**
+ * @file ocr_multi_frame_voter_test.cpp
+ * @brief OCR 多帧投票器单元测试
+ *
+ * 测试覆盖：
+ *   - 正常稳定结果产生与替换
+ *   - 无效帧不影响分母
+ *   - 稳定结果丢失条件
+ *   - A→B→A 模式的稳定性切换
+ *   - reset 清空功能
+ */
+
 #include <dogvision_vision/ocr_MultiFrameVoter.hpp>
 
 #include <cstdlib>
@@ -7,11 +19,17 @@
 
 namespace
 {
+/**
+ * @brief 辅助函数：构建 OCRVoteResult
+ */
 OCRVoteResult result(const std::string& expr, int value = 0)
 {
     return OCRVoteResult{expr, value, ((value % 4) + 4) % 4};
 }
 
+/**
+ * @brief 断言条件为真，否则打印失败信息并退出
+ */
 void expect(bool condition, const char* message)
 {
     if (!condition)
@@ -21,6 +39,9 @@ void expect(bool condition, const char* message)
     }
 }
 
+/**
+ * @brief 向投票器添加一帧并断言返回的事件类型
+ */
 void add(OCRMultiFrameVoter& voter,
          const std::optional<OCRVoteResult>& value,
          OCRVoteEvent expected = OCRVoteEvent::None)
@@ -29,6 +50,9 @@ void add(OCRMultiFrameVoter& voter,
 }
 } // namespace
 
+/**
+ * @brief 测试入口：依次执行所有多帧投票测试用例
+ */
 int main()
 {
     {
