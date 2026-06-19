@@ -223,7 +223,8 @@ ros2 run dogvision_vision math_generator_node
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
 | `yolo_enable_keyboard_trigger` | `false` | 组合启动时关闭 YOLO Enter，避免争抢 stdin |
 | `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
-| `ppocr_show_visual` | `true` | PPOCR 是否显示可视化窗口 |
+| `ppocr_show_visual` | `true` | PPOCR 是否显示整帧结果窗口 |
+| `ppocr_show_ocr_roi` | `false` | PPOCR 是否显示实际送入 OCR 的扩张 ROI |
 | `ppocr_enable_keyboard_trigger` | `true` | 组合启动时由 Enter 触发 OCR |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 

@@ -10,7 +10,7 @@
  *   1. 从海康相机获取帧
  *   2. 鱼眼去畸变（可选）
  *   3. 定位白底算术题区域（find_math_proble）
- *   4. ROI 预处理（CLAHE + 高斯模糊 + Otsu 二值化）
+ *   4. 白屏矩形扩张并按配置选择彩色或灰度 ROI
  *   5. PPOCR 文本检测（detect_det_ppocr）
  *   6. PPOCR 文本识别（detect_rec_ppocr，含数学字符白名单）
  *   7. 算术表达式解析（parse_simple_expr）
@@ -46,8 +46,51 @@ namespace fs = std::filesystem;
 
 namespace
 {
+constexpr char kOcrWindowName[] = "Math OCR";
+constexpr char kOcrRoiWindowName[] = "Math OCR ROI";
+
 std::atomic<bool> g_ocr_triggered{false};
 std::atomic<bool> g_ocr_running{true};
+
+cv::Mat make_no_roi_canvas()
+{
+    cv::Mat canvas(240, 640, CV_8UC3, cv::Scalar(24, 24, 24));
+    const std::string message = "No math ROI detected";
+    int baseline = 0;
+    const cv::Size text_size = cv::getTextSize(
+        message, cv::FONT_HERSHEY_SIMPLEX, 0.8, 2, &baseline);
+    const cv::Point origin(
+        std::max(10, (canvas.cols - text_size.width) / 2),
+        std::max(text_size.height + 10, (canvas.rows + text_size.height) / 2));
+    cv::putText(canvas, message, origin, cv::FONT_HERSHEY_SIMPLEX,
+                0.8, cv::Scalar(220, 220, 220), 2, cv::LINE_AA);
+    return canvas;
+}
+
+bool handle_visualization(const cv::Mat& frame,
+                          const cv::Mat& ocr_roi,
+                          bool show_visual,
+                          bool show_ocr_roi,
+                          int wait_ms)
+{
+    if (show_visual)
+    {
+        cv::imshow(kOcrWindowName, frame);
+    }
+    if (show_ocr_roi)
+    {
+        cv::imshow(
+            kOcrRoiWindowName,
+            ocr_roi.empty() ? make_no_roi_canvas() : ocr_roi);
+    }
+    if (!show_visual && !show_ocr_roi)
+    {
+        return true;
+    }
+
+    const int key = cv::waitKey(wait_ms);
+    return key != 'q' && key != 'Q' && key != 27;
+}
 } // namespace
 
 /**
@@ -98,6 +141,7 @@ static void ocr_trigger_callback(const std_msgs::msg::String::SharedPtr msg)
  * @param int_result 输出四舍五入后的整数结果。
  * @param mod_result 输出非负的模 4 结果。
  * @param out_roi 可选输出的算术题区域。
+ * @param out_ocr_roi 可选输出实际送入 OCR 的扩张 ROI。
  * @retval bool 成功识别并解析表达式时返回 true。
  */
 static bool run_ocr_pipeline(cv::Mat& img,
@@ -108,29 +152,34 @@ static bool run_ocr_pipeline(cv::Mat& img,
                              std::string& expr_str,
                              int& int_result,
                              int& mod_result,
-                             cv::Rect2f* out_roi = nullptr)
+                             cv::Rect2f* out_roi = nullptr,
+                             cv::Mat* out_ocr_roi = nullptr)
 {
     cv::Mat det_input;
-    cv::Mat white_mask;  // 白色区域精确掩码，用于过滤非白色区域内的文字
-    cv::Rect2f math_roi = find_math_proble(img, &white_mask);
-
-    // math_rect 在此处统一定义，后续 ROI 裁剪和掩码过滤共用
-    cv::Rect math_rect(
-        static_cast<int>(math_roi.x),
-        static_cast<int>(math_roi.y),
-        static_cast<int>(math_roi.width),
-        static_cast<int>(math_roi.height));
-
-    if (math_roi.area() > 0.0f)
+    if (out_ocr_roi != nullptr)
     {
-        math_rect &= cv::Rect(0, 0, img.cols, img.rows);
-        if (math_rect.area() > 0)
+        out_ocr_roi->release();
+    }
+    const cv::Rect2f white_screen_roi = find_math_proble(img);
+    const cv::Rect ocr_rect = expand_ocr_roi(
+        white_screen_roi, img.size(), ocr_config.ocr_roi_expand_ratio);
+
+    if (white_screen_roi.area() > 0.0f && ocr_rect.area() > 0)
+    {
+        const cv::Mat raw_roi = img(ocr_rect);
+        det_input = prepare_ocr_roi(
+            raw_roi, ocr_config.ocr_roi_use_grayscale);
+        if (out_ocr_roi != nullptr)
         {
-            const cv::Mat raw_roi = img(math_rect);
-            det_input = preprocess_math_roi(raw_roi, ocr_config);
-            RCLCPP_INFO(logger, "Math ROI  : [%d, %d, %d x %d]",
-                        math_rect.x, math_rect.y, math_rect.width, math_rect.height);
+            *out_ocr_roi = det_input.clone();
         }
+        RCLCPP_INFO(logger, "White screen: [%.0f, %.0f, %.0f x %.0f]",
+                    white_screen_roi.x, white_screen_roi.y,
+                    white_screen_roi.width, white_screen_roi.height);
+        RCLCPP_INFO(logger, "OCR ROI     : [%d, %d, %d x %d], expand=%.3f, grayscale=%s",
+                    ocr_rect.x, ocr_rect.y, ocr_rect.width, ocr_rect.height,
+                    ocr_config.ocr_roi_expand_ratio,
+                    ocr_config.ocr_roi_use_grayscale ? "true" : "false");
     }
 
     if (det_input.empty())
@@ -145,7 +194,11 @@ static bool run_ocr_pipeline(cv::Mat& img,
 
     if (out_roi != nullptr)
     {
-        *out_roi = math_roi;
+        *out_roi = cv::Rect2f(
+            static_cast<float>(ocr_rect.x),
+            static_cast<float>(ocr_rect.y),
+            static_cast<float>(ocr_rect.width),
+            static_cast<float>(ocr_rect.height));
     }
 
     RCLCPP_INFO(logger, "Math ROI OK, starting OCR pipeline...");
@@ -155,32 +208,7 @@ static bool run_ocr_pipeline(cv::Mat& img,
     const std::vector<OCRBox>& all_boxes = det.ocr_det_out_;
     RCLCPP_INFO(logger, "Detected   : %zu text region(s)", all_boxes.size());
 
-    // ── 只保留中心点落在白色区域内的检测框 ──────────────────────────────────
-    // white_mask 为原图尺寸，det_input 是 math_roi 裁剪图，
-    // 因此将框中心从 det_input 坐标偏移 math_rect.tl() 即可得到原图坐标。
-    std::vector<OCRBox> boxes;
-    for (const auto& box : all_boxes)
-    {
-        // 计算四点中心（ROI 坐标系）
-        cv::Point2f center(0.f, 0.f);
-        for (int k = 0; k < 4; ++k)
-            center += box.pts[k];
-        center *= 0.25f;
-
-        // 转换到原图坐标系
-        const int cx = static_cast<int>(center.x + math_rect.x);
-        const int cy = static_cast<int>(center.y + math_rect.y);
-
-        // 检查是否在白色掩码内
-        if (cx >= 0 && cx < white_mask.cols &&
-            cy >= 0 && cy < white_mask.rows &&
-            white_mask.at<uchar>(cy, cx) > 0)
-        {
-            boxes.push_back(box);
-        }
-    }
-    RCLCPP_INFO(logger, "White-filter: %zu / %zu text region(s)",
-                boxes.size(), all_boxes.size());
+    const std::vector<OCRBox>& boxes = all_boxes;
 
     std::vector<OCRItem> ocr_items;
     for (size_t i = 0; i < boxes.size(); ++i)
@@ -273,6 +301,7 @@ static void draw_result_overlay(cv::Mat& frame,
  * @param rec 文本识别模型封装对象。
  * @param yaml_path YAML 输出文件路径。
  * @param show_visual 是否启用 OpenCV 可视化窗口。
+ * @param show_ocr_roi 是否显示实际送入 OCR 的 ROI。
  * @retval int 类进程退出码。
  */
 static int run_test_mode(const rclcpp::Node::SharedPtr& node,
@@ -281,7 +310,8 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
                          detect_rec_ppocr& rec,
                          const s_detector_params& ocr_config,
                          const std::string& yaml_path,
-                         bool show_visual)
+                         bool show_visual,
+                         bool show_ocr_roi)
 {
     auto logger = node->get_logger();
     int problem_id = 0;
@@ -323,10 +353,12 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         int int_result = 0;
         int mod_result = 0;
         cv::Rect2f math_roi;
+        cv::Mat ocr_roi;
         std::optional<OCRVoteResult> frame_result;
         if (run_ocr_pipeline(
                 frame, det, rec, ocr_config, logger,
-                expr_str, int_result, mod_result, &math_roi))
+                expr_str, int_result, mod_result, &math_roi,
+                &ocr_roi))
         {
             RCLCPP_INFO(logger, "Expr: %s  =>  %d  %%4 = %d",
                         expr_str.c_str(), int_result, mod_result);
@@ -375,13 +407,9 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
                 frame, stable_roi, stable.expr, stable.result, stable.mod4);
         }
 
-        if (show_visual)
-        {
-            cv::imshow("Math OCR", frame);
-        }
-
-        const int key = cv::waitKey(10);
-        if (key == 'q' || key == 'Q' || key == 27)
+        if (!handle_visualization(
+                frame, ocr_roi,
+                show_visual, show_ocr_roi, 10))
         {
             RCLCPP_INFO(logger, "Exit by user.");
             break;
@@ -399,6 +427,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
  * @param det 文本检测模型封装对象。
  * @param rec 文本识别模型封装对象。
  * @param show_visual 是否启用 OpenCV 可视化窗口。
+ * @param show_ocr_roi 是否显示实际送入 OCR 的 ROI。
  * @retval int 类进程退出码。
  */
 static int run_production_mode(const rclcpp::Node::SharedPtr& node,
@@ -407,6 +436,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                                detect_rec_ppocr& rec,
                                const s_detector_params& ocr_config,
                                bool show_visual,
+                               bool show_ocr_roi,
                                bool enable_keyboard_trigger)
 {
     auto logger = node->get_logger();
@@ -443,6 +473,8 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     cv::Rect2f stable_roi;
     bool has_stable_roi = false;
     bool tracking_active = false;
+    cv::Mat last_display_frame;
+    cv::Mat last_ocr_roi;
     rclcpp::WallRate idle_rate(20);
     while (rclcpp::ok())
     {
@@ -458,6 +490,17 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
 
         if (!tracking_active)
         {
+            if ((show_visual || show_ocr_roi) &&
+                !handle_visualization(
+                    last_display_frame.empty()
+                        ? cv::Mat::zeros(240, 640, CV_8UC3)
+                        : last_display_frame,
+                    last_ocr_roi,
+                    show_visual, show_ocr_roi, 1))
+            {
+                RCLCPP_INFO(logger, "Exit by user.");
+                break;
+            }
             idle_rate.sleep();
             continue;
         }
@@ -484,14 +527,20 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         int int_result = 0;
         int mod_result = 0;
         cv::Rect2f math_roi;
+        cv::Mat ocr_roi;
         std::optional<OCRVoteResult> frame_result;
         if (run_ocr_pipeline(
                 frame, det, rec, ocr_config, logger,
-                expr_str, int_result, mod_result, &math_roi))
+                expr_str, int_result, mod_result, &math_roi,
+                &ocr_roi))
         {
             frame_result = OCRVoteResult{expr_str, int_result, mod_result};
             stable_roi = math_roi;
             has_stable_roi = math_roi.area() > 0.0f;
+        }
+        if (!ocr_roi.empty())
+        {
+            last_ocr_roi = ocr_roi;
         }
 
         const OCRVoteEvent event = voter.update(frame_result);
@@ -524,22 +573,20 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             RCLCPP_INFO(logger, "Stable OCR lost after 10 invalid frames.");
         }
 
-        if (show_visual)
+        if (show_visual && voter.has_stable_result() && has_stable_roi)
         {
-            if (voter.has_stable_result() && has_stable_roi)
-            {
-                const OCRVoteResult& stable = voter.stable_result();
-                draw_result_overlay(
-                    frame, stable_roi, stable.expr, stable.result, stable.mod4);
-            }
+            const OCRVoteResult& stable = voter.stable_result();
+            draw_result_overlay(
+                frame, stable_roi, stable.expr, stable.result, stable.mod4);
+        }
+        last_display_frame = frame.clone();
 
-            cv::imshow("Math OCR", frame);
-            const int key = cv::waitKey(1);
-            if (key == 'q' || key == 'Q' || key == 27)
-            {
-                RCLCPP_INFO(logger, "Exit by user.");
-                break;
-            }
+        if (!handle_visualization(
+                frame, ocr_roi,
+                show_visual, show_ocr_roi, 1))
+        {
+            RCLCPP_INFO(logger, "Exit by user.");
+            break;
         }
     }
 
@@ -569,12 +616,15 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("config_path", share_dir + "/config/settings.json");
     node->declare_parameter<std::string>("mode", "production");
     node->declare_parameter<bool>("show_visual", true);
+    node->declare_parameter<bool>("show_ocr_roi", false);
     node->declare_parameter<bool>("enable_keyboard_trigger", true);
     node->declare_parameter<std::string>("yaml_path", share_dir + "/data/ocr_output/ocr_results.yaml");
 
     const std::string config_path = node->get_parameter("config_path").as_string();
     const std::string mode = node->get_parameter("mode").as_string();
     const bool show_visual = node->get_parameter("show_visual").as_bool();
+    const bool show_ocr_roi =
+        node->get_parameter("show_ocr_roi").as_bool();
     const bool enable_keyboard_trigger =
         node->get_parameter("enable_keyboard_trigger").as_bool();
     const std::string yaml_path = node->get_parameter("yaml_path").as_string();
@@ -626,13 +676,14 @@ int main(int argc, char** argv)
     if (mode == "test")
     {
         ret = run_test_mode(
-            node, hik, det, rec, config.detect_config, yaml_path, show_visual);
+            node, hik, det, rec, config.detect_config, yaml_path,
+            show_visual, show_ocr_roi);
     }
     else if (mode == "production")
     {
         ret = run_production_mode(
             node, hik, det, rec, config.detect_config,
-            show_visual, enable_keyboard_trigger);
+            show_visual, show_ocr_roi, enable_keyboard_trigger);
     }
     else
     {
@@ -641,7 +692,7 @@ int main(int argc, char** argv)
     }
 
     hik.Hik_end();
-    if (show_visual)
+    if (show_visual || show_ocr_roi)
     {
         cv::destroyAllWindows();
     }

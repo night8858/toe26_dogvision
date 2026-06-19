@@ -1292,3 +1292,197 @@ math_problems:
     question: "19 * 9 / 19 - 6 + 1 = "
     answer: 4
     mod4: 0
+math_problems:
+  - id: 1
+    question: "19 - 18 + 6 * 11 / 11 = "
+    answer: 7
+    mod4: 3
+  - id: 2
+    question: "7 * 7 + 20 - 12 / 4 = "
+    answer: 66
+    mod4: 2
+  - id: 3
+    question: "9 + 2 / 2 * 3 - 13 = "
+    answer: -1
+    mod4: 3
+  - id: 4
+    question: "8 + 6 - 13 * 18 / 9 = "
+    answer: -12
+    mod4: 0
+  - id: 5
+    question: "16 * 5 - 14 / 1 + 20 = "
+    answer: 86
+    mod4: 2
+  - id: 6
+    question: "15 * 10 - 2 / 1 + 12 = "
+    answer: 160
+    mod4: 0
+  - id: 7
+    question: "11 * 19 + 11 / 1 - 2 = "
+    answer: 218
+    mod4: 2
+  - id: 8
+    question: "9 / 9 + 20 * 6 - 12 = "
+    answer: 109
+    mod4: 1
+  - id: 9
+    question: "19 / 1 * 10 - 11 + 8 = "
+    answer: 187
+    mod4: 3
+  - id: 10
+    question: "13 * 15 / 1 - 18 + 12 = "
+    answer: 189
+    mod4: 1
+  - id: 11
+    question: "2 + 18 * 15 - 3 / 1 = "
+    answer: 269
+    mod4: 1
+  - id: 12
+    question: "7 / 7 * 17 - 10 + 14 = "
+    answer: 21
+    mod4: 1
+  - id: 13
+    question: "8 + 2 * 19 - 20 / 20 = "
+    answer: 45
+    mod4: 1
+  - id: 14
+    question: "4 + 17 / 17 - 5 * 8 = "
+    answer: -35
+    mod4: 1
+  - id: 15
+    question: "15 - 12 / 4 * 1 + 9 = "
+    answer: 21
+    mod4: 1
+  - id: 16
+    question: "6 * 10 + 15 / 15 - 4 = "
+    answer: 57
+    mod4: 1
+  - id: 17
+    question: "18 - 2 + 16 * 14 / 2 = "
+    answer: 128
+    mod4: 0
+  - id: 18
+    question: "3 / 1 * 10 - 1 + 18 = "
+    answer: 47
+    mod4: 3
+  - id: 19
+    question: "3 * 13 + 17 / 17 - 17 = "
+    answer: 23
+    mod4: 3
+  - id: 20
+    question: "14 * 3 + 15 / 5 - 3 = "
+    answer: 42
+    mod4: 2
+  - id: 21
+    question: "5 / 1 + 4 * 20 - 19 = "
+    answer: 66
+    mod4: 2
+  - id: 22
+    question: "3 * 9 - 1 / 1 + 14 = "
+    answer: 40
+    mod4: 0
+  - id: 23
+    question: "18 / 6 + 1 - 20 * 9 = "
+    answer: -176
+    mod4: 0
+  - id: 24
+    question: "20 + 3 * 2 / 2 - 17 = "
+    answer: 6
+    mod4: 2
+  - id: 25
+    question: "20 / 2 * 12 - 6 + 10 = "
+    answer: 124
+    mod4: 0
+  - id: 26
+    question: "9 * 7 / 9 - 4 + 6 = "
+    answer: 9
+    mod4: 1
+  - id: 27
+    question: "3 * 20 + 12 / 3 - 10 = "
+    answer: 54
+    mod4: 2
+  - id: 28
+    question: "13 / 13 * 13 - 14 + 10 = "
+    answer: 9
+    mod4: 1
+  - id: 29
+    question: "3 / 1 * 16 - 17 + 17 = "
+    answer: 48
+    mod4: 0
+  - id: 30
+    question: "6 - 8 * 7 / 2 + 13 = "
+    answer: -9
+    mod4: 3
+  - id: 31
+    question: "3 * 13 + 14 / 7 - 17 = "
+    answer: 24
+    mod4: 0
+  - id: 32
+    question: "11 - 11 * 11 / 11 + 13 = "
+    answer: 13
+    mod4: 1
+  - id: 33
+    question: "18 - 17 / 17 * 3 + 10 = "
+    answer: 25
+    mod4: 1
+  - id: 34
+    question: "8 - 5 * 12 + 15 / 15 = "
+    answer: -51
+    mod4: 1
+  - id: 35
+    question: "19 - 18 * 7 / 18 + 7 = "
+    answer: 19
+    mod4: 3
+math_problems:
+  - id: 1
+    question: "9 * 14 + 17 / 1 - 1 = "
+    answer: 142
+    mod4: 2
+  - id: 2
+    question: "15 * 11 + 10 - 6 / 6 = "
+    answer: 174
+    mod4: 2
+  - id: 3
+    question: "11 - 1 * 2 / 1 + 6 = "
+    answer: 15
+    mod4: 3
+  - id: 4
+    question: "20 / 4 + 6 * 16 - 14 = "
+    answer: 87
+    mod4: 3
+  - id: 5
+    question: "17 / 1 + 11 - 6 * 9 = "
+    answer: -26
+    mod4: 2
+  - id: 6
+    question: "1 * 17 / 17 + 10 - 16 = "
+    answer: -5
+    mod4: 3
+  - id: 7
+    question: "16 - 10 * 4 + 5 / 1 = "
+    answer: -19
+    mod4: 1
+  - id: 8
+    question: "5 + 5 - 19 / 1 * 16 = "
+    answer: -294
+    mod4: 2
+  - id: 9
+    question: "16 * 15 - 12 + 13 / 13 = "
+    answer: 229
+    mod4: 1
+  - id: 10
+    question: "3 + 19 - 6 * 13 / 6 = "
+    answer: 9
+    mod4: 1
+  - id: 11
+    question: "13 * 17 + 10 - 18 / 1 = "
+    answer: 213
+    mod4: 1
+  - id: 12
+    question: "3 + 13 - 6 / 6 * 9 = "
+    answer: 7
+    mod4: 3
+  - id: 13
+    question: "16 / 1 + 16 - 7 * 14 = "
+    answer: -66
+    mod4: 2

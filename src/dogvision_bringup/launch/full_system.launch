@@ -16,6 +16,7 @@
   <arg name="yolo_enable_keyboard_trigger" default="false"/>
   <arg name="ppocr_mode" default="production"/>
   <arg name="ppocr_show_visual" default="true"/>
+  <arg name="ppocr_show_ocr_roi" default="false"/>
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
@@ -39,6 +40,7 @@
     <arg name="yolo_enable_keyboard_trigger" value="$(var yolo_enable_keyboard_trigger)"/>
     <arg name="ppocr_mode" value="$(var ppocr_mode)"/>
     <arg name="ppocr_show_visual" value="$(var ppocr_show_visual)"/>
+    <arg name="ppocr_show_ocr_roi" value="$(var ppocr_show_ocr_roi)"/>
     <arg name="ppocr_enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)"/>
     <arg name="ocr_yaml_path" value="$(var ocr_yaml_path)"/>
   </include>

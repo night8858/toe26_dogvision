@@ -94,12 +94,9 @@ typedef struct
     std::string rec_char_dict_path;      ///< 全量识别字典路径（ppocr_keys_v1.txt）
     std::string rec_allowed_chars_path;  ///< 允许输出的数学字符白名单路径
 
-    // ── OCR 图像预处理参数 ──
-    bool   ocr_preprocess_enabled  = true;  ///< 是否启用 OCR ROI 预处理
-    double ocr_clahe_clip_limit    = 2.0;   ///< CLAHE 对比度限制值
-    int    ocr_clahe_tile_size     = 8;     ///< CLAHE 分块尺寸（像素）
-    int    ocr_gaussian_kernel_size = 3;    ///< 高斯模糊核大小（奇数）
-    bool   ocr_preprocess_invert    = false;///< 是否反相二值化（黑底白字）
+    // ── OCR ROI 参数 ──
+    double ocr_roi_expand_ratio = 0.05; ///< 白屏矩形每侧扩张比例
+    bool ocr_roi_use_grayscale = false; ///< 是否将 OCR ROI 转为三通道灰度图
 
     // ── 类别名称（JSON 中 cls0~cls3 字段） ──
     std::string class0; ///< 第 0 类名称

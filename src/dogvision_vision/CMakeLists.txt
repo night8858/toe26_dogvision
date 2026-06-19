@@ -127,14 +127,14 @@ if(BUILD_TESTING)
   target_link_libraries(ocr_multi_frame_voter_test dogvision_vision_lib)
   add_test(NAME ocr_multi_frame_voter_test COMMAND ocr_multi_frame_voter_test)
 
-  add_executable(ocr_preprocess_decode_test
-    test/ocr_preprocess_decode_test.cpp
+  add_executable(ocr_roi_decode_test
+    test/ocr_roi_decode_test.cpp
   )
-  target_compile_definitions(ocr_preprocess_decode_test PRIVATE
+  target_compile_definitions(ocr_roi_decode_test PRIVATE
     DOGVISION_VISION_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
   )
-  target_link_libraries(ocr_preprocess_decode_test dogvision_vision_lib)
-  add_test(NAME ocr_preprocess_decode_test COMMAND ocr_preprocess_decode_test)
+  target_link_libraries(ocr_roi_decode_test dogvision_vision_lib)
+  add_test(NAME ocr_roi_decode_test COMMAND ocr_roi_decode_test)
 endif()
 
 # ── 安装规则 ──

@@ -84,29 +84,17 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.rec_allowed_chars_path =
             resolve(value["path"]["ppocr_allowed_chars_path"].asString());
 
-        const Json::Value& ocr_preprocess = value["ocr_preprocess"];
-        if (!ocr_preprocess.isNull())
+        const Json::Value& ocr_roi = value["ocr_roi"];
+        if (!ocr_roi.isNull())
         {
-            config.detect_config.ocr_preprocess_enabled =
-                ocr_preprocess.get("enabled", true).asBool();
-            config.detect_config.ocr_clahe_clip_limit =
-                ocr_preprocess.get("clahe_clip_limit", 2.0).asDouble();
-            config.detect_config.ocr_clahe_tile_size =
-                ocr_preprocess.get("clahe_tile_size", 8).asInt();
-            config.detect_config.ocr_gaussian_kernel_size =
-                ocr_preprocess.get("gaussian_kernel_size", 3).asInt();
-            config.detect_config.ocr_preprocess_invert =
-                ocr_preprocess.get("invert", false).asBool();
+            config.detect_config.ocr_roi_expand_ratio =
+                ocr_roi.get("expand_ratio", 0.05).asDouble();
+            config.detect_config.ocr_roi_use_grayscale =
+                ocr_roi.get("use_grayscale", false).asBool();
         }
 
-        if (config.detect_config.ocr_clahe_clip_limit <= 0.0)
-            throw std::invalid_argument("ocr_preprocess.clahe_clip_limit must be positive");
-        if (config.detect_config.ocr_clahe_tile_size <= 0)
-            throw std::invalid_argument("ocr_preprocess.clahe_tile_size must be positive");
-        if (config.detect_config.ocr_gaussian_kernel_size <= 0 ||
-            config.detect_config.ocr_gaussian_kernel_size % 2 == 0)
-            throw std::invalid_argument(
-                "ocr_preprocess.gaussian_kernel_size must be a positive odd number");
+        if (config.detect_config.ocr_roi_expand_ratio < 0.0)
+            throw std::invalid_argument("ocr_roi.expand_ratio must be non-negative");
 
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();
@@ -254,11 +242,8 @@ detector::detector(Appconfig *config)
     detect_config_.ppocr_cls_model_path = config->detect_config.ppocr_cls_model_path;
     detect_config_.rec_char_dict_path = config->detect_config.rec_char_dict_path;
     detect_config_.rec_allowed_chars_path = config->detect_config.rec_allowed_chars_path;
-    detect_config_.ocr_preprocess_enabled = config->detect_config.ocr_preprocess_enabled;
-    detect_config_.ocr_clahe_clip_limit = config->detect_config.ocr_clahe_clip_limit;
-    detect_config_.ocr_clahe_tile_size = config->detect_config.ocr_clahe_tile_size;
-    detect_config_.ocr_gaussian_kernel_size = config->detect_config.ocr_gaussian_kernel_size;
-    detect_config_.ocr_preprocess_invert = config->detect_config.ocr_preprocess_invert;
+    detect_config_.ocr_roi_expand_ratio = config->detect_config.ocr_roi_expand_ratio;
+    detect_config_.ocr_roi_use_grayscale = config->detect_config.ocr_roi_use_grayscale;
 
     // ── 复制类别名称 ──
     detect_config_.class0 = config->detect_config.class0;

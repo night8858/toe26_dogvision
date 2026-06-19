@@ -62,14 +62,11 @@
       "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
     },
 
-    // ── OCR ROI 预处理参数 ──
-    "ocr_preprocess":
+    // ── OCR ROI 参数 ──
+    "ocr_roi":
     {
-      "enabled": true,          // 是否启用预处理
-      "clahe_clip_limit": 2.0,  // CLAHE 对比度限制
-      "clahe_tile_size": 8,     // CLAHE 分块尺寸
-      "gaussian_kernel_size": 3,// 高斯模糊核大小
-      "invert": false           // 是否反相二值化
+      "expand_ratio": 0.05,      // 白屏矩形每侧扩张比例
+      "use_grayscale": false     // true=三通道灰度 ROI，false=原始彩色 ROI
     },
 
     // ── YOLO 网络输入尺寸（NCHW 格式） ──

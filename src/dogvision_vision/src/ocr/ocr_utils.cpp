@@ -12,58 +12,50 @@
 
 #include <opencv2/calib3d.hpp>
 
-// ============================================================
-//  preprocess_math_roi
-// ============================================================
-cv::Mat preprocess_math_roi(const cv::Mat& input,
-                            const s_detector_params& config)
+cv::Rect expand_ocr_roi(const cv::Rect2f& roi,
+                        const cv::Size& image_size,
+                        double expand_ratio)
+{
+    if (expand_ratio < 0.0)
+        throw std::invalid_argument("OCR ROI expand ratio must be non-negative");
+    if (roi.area() <= 0.0f || image_size.width <= 0 || image_size.height <= 0)
+        return {};
+
+    const double pad_x = static_cast<double>(roi.width) * expand_ratio;
+    const double pad_y = static_cast<double>(roi.height) * expand_ratio;
+    const int left = static_cast<int>(std::floor(roi.x - pad_x));
+    const int top = static_cast<int>(std::floor(roi.y - pad_y));
+    const int right = static_cast<int>(
+        std::ceil(roi.x + roi.width + pad_x));
+    const int bottom = static_cast<int>(
+        std::ceil(roi.y + roi.height + pad_y));
+
+    cv::Rect expanded(left, top, right - left, bottom - top);
+    expanded &= cv::Rect(0, 0, image_size.width, image_size.height);
+    return expanded;
+}
+
+cv::Mat prepare_ocr_roi(const cv::Mat& input, bool use_grayscale)
 {
     if (input.empty())
         return {};
 
-    if (!config.ocr_preprocess_enabled)
-        return input.clone();
-
-    if (config.ocr_clahe_clip_limit <= 0.0)
-        throw std::invalid_argument("OCR CLAHE clip limit must be positive");
-    if (config.ocr_clahe_tile_size <= 0)
-        throw std::invalid_argument("OCR CLAHE tile size must be positive");
-    if (config.ocr_gaussian_kernel_size <= 0 ||
-        config.ocr_gaussian_kernel_size % 2 == 0)
-        throw std::invalid_argument("OCR Gaussian kernel size must be a positive odd number");
-
-    cv::Mat gray;
-    if (input.channels() == 1)
-        gray = input.clone();
-    else if (input.channels() == 3)
-        cv::cvtColor(input, gray, cv::COLOR_BGR2GRAY);
+    cv::Mat bgr;
+    if (input.channels() == 3)
+        bgr = input.clone();
+    else if (input.channels() == 1)
+        cv::cvtColor(input, bgr, cv::COLOR_GRAY2BGR);
     else if (input.channels() == 4)
-        cv::cvtColor(input, gray, cv::COLOR_BGRA2GRAY);
+        cv::cvtColor(input, bgr, cv::COLOR_BGRA2BGR);
     else
         throw std::invalid_argument("OCR ROI must have 1, 3, or 4 channels");
 
-    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(
-        config.ocr_clahe_clip_limit,
-        cv::Size(config.ocr_clahe_tile_size, config.ocr_clahe_tile_size));
-    cv::Mat enhanced;
-    clahe->apply(gray, enhanced);
+    if (!use_grayscale)
+        return bgr;
 
-    cv::Mat denoised;
-    cv::GaussianBlur(
-        enhanced,
-        denoised,
-        cv::Size(config.ocr_gaussian_kernel_size,
-                 config.ocr_gaussian_kernel_size),
-        0.0);
-
-    const int threshold_type =
-        (config.ocr_preprocess_invert ? cv::THRESH_BINARY_INV : cv::THRESH_BINARY) |
-        cv::THRESH_OTSU;
-    cv::Mat binary;
-    cv::threshold(denoised, binary, 0, 255, threshold_type);
-
-    cv::Mat bgr;
-    cv::cvtColor(binary, bgr, cv::COLOR_GRAY2BGR);
+    cv::Mat gray;
+    cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(gray, bgr, cv::COLOR_GRAY2BGR);
     return bgr;
 }
 

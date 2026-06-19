@@ -220,7 +220,7 @@ static std::vector<std::string> tokenize_command(const std::string& data)
  *                            tokens[1] 分派 ────────┘          │
  *                            ├─ ON[,speed] → 开泵+设速         │
  *                            └─ OFF → 关泵                     │
- *                                                               │
+ *                                                              │
  *                                       4阀关+泵关+反馈 ───────┘
  *
  * @section 命令间隔设计

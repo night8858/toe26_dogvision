@@ -360,6 +360,10 @@ ros2 topic list
 ctest --test-dir build/dogvision_arm -R answer_frame_test --output-on-failure
 ```
 
+```bash
+ros2 topic pub --once /ocr/answer std_msgs/msg/UInt8 "{data: 2}"
+```
+
 测试使用伪终端校验答案 0-3 的 8 字节帧、帧尾及 CRC8-0x07。
 
 ### 4. 监听状态数据

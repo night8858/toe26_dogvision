@@ -2203,3 +2203,106 @@ ocr_results:
     question: "1-11*12/2+15"
     answer: -50
     mod4: 2
+ocr_results:
+  - id: 1
+    question: "7*7+20-12/4"
+    answer: 66
+    mod4: 2
+  - id: 2
+    question: "9+2/2*3-13"
+    answer: -1
+    mod4: 3
+  - id: 3
+    question: "16*5-14/1+20"
+    answer: 86
+    mod4: 2
+  - id: 4
+    question: "15*10-2/1+12"
+    answer: 160
+    mod4: 0
+  - id: 5
+    question: "9/9+20*6-12"
+    answer: 109
+    mod4: 1
+  - id: 6
+    question: "19/1*10-11+8"
+    answer: 187
+    mod4: 3
+ocr_results:
+  - id: 1
+    question: "3/1*10-1+18"
+    answer: 47
+    mod4: 3
+  - id: 2
+    question: "3*13+17/17-17"
+    answer: 23
+    mod4: 3
+  - id: 3
+    question: "9-3"
+    answer: 6
+    mod4: 2
+  - id: 4
+    question: "5-3"
+    answer: 2
+    mod4: 2
+  - id: 5
+    question: "5/1+4*20-19"
+    answer: 66
+    mod4: 2
+  - id: 6
+    question: "3*9-1/1+14"
+    answer: 40
+    mod4: 0
+  - id: 7
+    question: "18/6+1-20*9"
+    answer: -176
+    mod4: 0
+  - id: 8
+    question: "20+3*2/2-17"
+    answer: 6
+    mod4: 2
+  - id: 9
+    question: "9*7/9-4+6"
+    answer: 9
+    mod4: 1
+  - id: 10
+    question: "3*20+12/3-10"
+    answer: 54
+    mod4: 2
+  - id: 11
+    question: "6-8*7/2+13"
+    answer: -9
+    mod4: 3
+  - id: 12
+    question: "3*13+14/7-17"
+    answer: 24
+    mod4: 0
+  - id: 13
+    question: "18-17/17*3+10"
+    answer: 25
+    mod4: 1
+  - id: 14
+    question: "18-17/17*3+10"
+    answer: 25
+    mod4: 1
+  - id: 15
+    question: "18-17/17*3+10"
+    answer: 25
+    mod4: 1
+  - id: 16
+    question: "8-5*12+15/15"
+    answer: -51
+    mod4: 1
+  - id: 17
+    question: "19-18*7/18+7"
+    answer: 19
+    mod4: 3
+ocr_results:
+  - id: 1
+    question: "16*15-12+13/13"
+    answer: 229
+    mod4: 1
+  - id: 2
+    question: "3+19-6*13/6"
+    answer: 9
+    mod4: 1
