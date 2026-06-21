@@ -94,9 +94,12 @@ typedef struct
     std::string rec_char_dict_path;      ///< 全量识别字典路径（ppocr_keys_v1.txt）
     std::string rec_allowed_chars_path;  ///< 允许输出的数学字符白名单路径
 
-    // ── OCR ROI 参数 ──
-    double ocr_roi_expand_ratio = 0.05; ///< 白屏矩形每侧扩张比例
-    bool ocr_roi_use_grayscale = false; ///< 是否将 OCR ROI 转为三通道灰度图
+    // ── OCR 数学题后置筛选参数 ──
+    bool ocr_math_use_grayscale = false; ///< 是否将整帧 OCR 输入转为三通道灰度图
+    double ocr_math_min_surround_white_ratio = 0.50; ///< 最小外围白色比例
+    double ocr_math_surround_margin_ratio = 0.50; ///< 外围环带宽度/平均文字高度
+    int ocr_math_white_s_max = 110; ///< HSV 白色区域 S 通道上限
+    int ocr_math_white_v_min = 50; ///< HSV 白色区域 V 通道下限
 
     // ── 类别名称（JSON 中 cls0~cls3 字段） ──
     std::string class0; ///< 第 0 类名称
@@ -203,6 +206,22 @@ typedef struct  {
     OCRBox box;     ///< 文本检测框
     OCRRecResult rec; ///< 识别结果
 }OCRItem;
+
+/**
+ * @brief 从整帧 OCR 结果中筛选出的单行算术题候选。
+ */
+typedef struct {
+    std::vector<size_t> item_indices; ///< 构成候选的 OCRItem 索引
+    std::string raw_text;             ///< OCR 原始拼接文本
+    std::string expression;           ///< 归一化后的严格算术表达式
+    double result = 0.0;              ///< 表达式计算结果
+    float mean_score = 0.0f;          ///< 候选内文字平均识别置信度
+    float surround_white_ratio = 0.0f;///< 文字外围环带白色比例
+    float rank_score = 0.0f;          ///< 候选综合排序分数
+    cv::Rect text_bounds;             ///< 所有候选文字框的合并矩形
+    cv::Rect surround_bounds;         ///< 裁剪到图像边界后的环带外矩形
+    bool white_pass = false;          ///< 是否通过白色比例门槛
+} OCRMathCandidate;
 
 /**
  * @brief 文本检测预处理阶段的缩放元信息

@@ -60,7 +60,9 @@ static std::string build_status_payload(const arm_internation &my_arm)
     const ArmEndPosFloat rf = my_arm.get_arm_pos_float(1);
     const ArmEndPosFloat lb = my_arm.get_arm_pos_float(2);
     const ArmEndPosFloat rb = my_arm.get_arm_pos_float(3);
+
     const GimbalAngleFloat gim = my_arm.get_gimbal_float();
+    
     oss << "LF:" << lf.x << "," << lf.y
         << ";RF:" << rf.x << "," << rf.y
         << ";LB:" << lb.x << "," << lb.y
@@ -99,7 +101,7 @@ static std::string build_status_payload(const arm_internation &my_arm)
  *
  * @section 异常处理
  * - open() 失败：不退出节点，保持存活等待重连
- * - 未知协议：回退到 "aa" 并 WARN
+ * - 协议参数与编译协议不匹配：FATAL 并退出，不连接串口
  * - 无效命令：WARN 日志，不崩溃
  *
  * @param argc 命令行参数数量。
@@ -122,7 +124,7 @@ int main(int argc, char **argv)
     node->declare_parameter<std::string>("ocr_answer_topic", "/ocr/answer");     // OCR 稳定答案，UInt8 0..3
     node->declare_parameter<double>("pos_scale", 0.01);                          // 位置解码缩放，默认0.01即1cm单位
     node->declare_parameter<double>("angle_scale", 0.01);                        // 角度解码缩放，默认0.01即1度单位
-    node->declare_parameter<std::string>("protocol", "aa");
+    node->declare_parameter<std::string>("protocol", "compiled");
 
     const std::string hw_id = node->get_parameter("hw_id").as_string();
     const int baud_rate = static_cast<int>(node->get_parameter("baud_rate").as_int());
@@ -140,12 +142,15 @@ int main(int argc, char **argv)
     arm_internation my_arm;
     if (!my_arm.set_protocol_from_string(protocol))
     {
-        RCLCPP_WARN(logger, "[arm_internation_node] unknown protocol '%s', fallback to aa",
-                    protocol.c_str());
-        my_arm.set_protocol_from_string("aa");
+        RCLCPP_FATAL(
+            logger,
+            "[arm_internation_node] requested protocol='%s' does not match compiled protocol='%s'",
+            protocol.c_str(), my_arm.protocol_name());
+        rclcpp::shutdown();
+        return 2;
     }
     my_arm.set_decode_scale(static_cast<float>(pos_scale), static_cast<float>(angle_scale));
-    RCLCPP_INFO(logger, "[arm_internation_node] protocol: %s", my_arm.protocol_name());
+    RCLCPP_INFO(logger, "[arm_internation_node] compiled protocol: %s", my_arm.protocol_name());
 
     auto cmd_sub = node->create_subscription<std_msgs::msg::String>(
         cmd_topic, rclcpp::QoS(20),

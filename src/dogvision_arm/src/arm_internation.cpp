@@ -657,35 +657,58 @@ void arm_internation::close()
 // ╔═══════════════════════════════════════════════════════════════╗
 // ║           协议模式配置                                         ║
 // ╚═══════════════════════════════════════════════════════════════╝
-//  支持 AA（平面 4 臂）与 BB（4DOF 双臂）两种协议模式切换。
+//  协议由 CMake 在编译时锁定；该接口仅保留为兼容性校验入口。
 bool arm_internation::is_open() const { return fd_ >= 0; }
 
 bool arm_internation::set_protocol_from_string(const std::string &protocol_name)
 {
     const std::string p = to_lower_copy(trim_copy(protocol_name));
-    if (p == "aa" || p == "plane" || p == "plane_aa" || p == "平面")
+    if (p == "compiled")
     {
-        protocol_ = ArmProtocol::PlaneAA;
-        clear_report_state();
         return true;
     }
-    if (p == "bb" || p == "4dof" || p == "dof4" || p == "dof4_bb" || p == "双臂")
-    {
-        protocol_ = ArmProtocol::Dof4BB;
-        clear_report_state();
-        return true;
-    }
-    return false;
+
+    const bool requests_aa =
+        p == "aa" || p == "plane" || p == "plane_aa" || p == "平面";
+    const bool requests_4dof =
+        p == "bb" || p == "4dof" || p == "dof4" || p == "dof4_bb" || p == "双臂";
+
+#if DOGVISION_ARM_USE_4DOF
+    return requests_4dof;
+#else
+    return requests_aa;
+#endif
 }
 
 ArmProtocol arm_internation::protocol() const
 {
-    return protocol_;
+#if DOGVISION_ARM_USE_4DOF
+    return ArmProtocol::Dof4BB;
+#else
+    return ArmProtocol::PlaneAA;
+#endif
 }
 
 const char *arm_internation::protocol_name() const
 {
-    return protocol_ == ArmProtocol::Dof4BB ? "4dof" : "aa";
+#if DOGVISION_ARM_USE_4DOF
+    return "4dof";
+#else
+    return "aa";
+#endif
+}
+
+// Keep both protocol implementations link-compatible. Public methods for the
+// protocol not selected at build time reject the operation instead of writing
+// an incompatible frame to the serial device.
+namespace
+{
+constexpr bool kCompiledFor4Dof =
+#if DOGVISION_ARM_USE_4DOF
+    true;
+#else
+    false;
+#endif
 }
 
 // ╔═══════════════════════════════════════════════════════════════╗
@@ -706,7 +729,7 @@ uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
 // ╔═══════════════════════════════════════════════════════════════╗
 // ║           反馈帧解析（接收路径）                                ║
 // ╚═══════════════════════════════════════════════════════════════╝
-//  parse_feedback_frame()      : 按当前协议分派到 AA 或 BB 解析器
+//  parse_feedback_frame()      : 按编译时协议分派到 AA 或 BB 解析器
 //  parse_plane_feedback_frame(): AA 协议 "滑动窗口 + 双帧长" 帧同步
 //  parse_4dof_feedback_frame() : BB 协议固定 46 字节帧同步
 //
@@ -718,9 +741,9 @@ uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
  *
  * 状态转换图：
  *  ┌──────────┐   搜索到 0xAA 0x01    ┌──────────────┐
- *  │ 搜索帧头  │─────────────────────▶│ 候选帧校验    │
- *  │(滑动窗口) │◀────────────────────│              │
- *  └──────────┘  坏帧：丢弃1字节      └──────┬───────┘
+ *  │ 搜索帧头  │─────────────────────▶│ 候选帧校验     │
+ *  │(滑动窗口) │◀──────────────────── │              │
+ *  └──────────┘  坏帧：丢弃1字节       └──────┬───────┘
  *        │          继续搜索                  │
  *        │ 数据不足                           │ tail + CRC 通过
  *        ▼                                    ▼
@@ -743,7 +766,7 @@ uint8_t arm_internation::calc_crc8(const uint8_t *data, size_t len)
  */
 bool arm_internation::parse_feedback_frame()
 {
-    if (protocol_ == ArmProtocol::Dof4BB)
+    if (kCompiledFor4Dof)
     {
         return parse_4dof_feedback_frame();
     }
@@ -1024,7 +1047,7 @@ bool arm_internation::receive_once()
      *       否 → 静默返回 false
      *
      * [3] parse_feedback_frame()
-     *     按当前协议（AA/BB）搜索完整帧、校验 CRC
+     *     按编译时协议（AA/BB）搜索完整帧、校验 CRC
      *     成功 → 更新状态缓存，返回 true
      *     失败 → 返回 false（等待下次 receive_once 累积更多字节）
      *
@@ -1215,7 +1238,7 @@ bool arm_internation::write_bytes(const uint8_t *data, size_t len)
 //  send_4dof_*back*()   : BB 14/15/22 背部固定动作
 bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 {
-    if (protocol_ == ArmProtocol::Dof4BB)
+    if (kCompiledFor4Dof)
     {
         // 4DOF 模式必须使用显式 4POSE 命令，避免旧 LF/RF 文本被误当成双臂控制。
         return false;
@@ -1238,7 +1261,7 @@ bool arm_internation::send_arm_cmd(int arm_id, float x, float y)
 
 bool arm_internation::send_gimbal_cmd(int gimbal_id, float yaw, float pitch)
 {
-    if (protocol_ == ArmProtocol::Dof4BB)
+    if (kCompiledFor4Dof)
     {
         // BB 4DOF 协议没有云台命令，保守拒绝。
         return false;
@@ -1258,7 +1281,7 @@ bool arm_internation::send_gimbal_cmd(int gimbal_id, float yaw, float pitch)
 bool arm_internation::send_valve_cmd(int valve_id, bool state)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
-    const uint8_t head = protocol_ == ArmProtocol::Dof4BB ? kHeadB : kHeadA;
+    const uint8_t head = kCompiledFor4Dof ? kHeadB : kHeadA;
     uint8_t buf[7] = {head, kCmdValv, (uint8_t)valve_id, (uint8_t)state, 0xFF, 0xEE, 0};
     buf[6] = calc_crc8(buf, 6);
     return write_bytes(buf, 7);
@@ -1269,7 +1292,7 @@ bool arm_internation::send_answer_cmd(uint8_t answer)
 {
     // AA: 任务赛答案；BB: CMD4_ANSWER_CONTROL 当前在 STM32 端预留，仍按协议发 3 字节 DATA。
     std::lock_guard<std::mutex> lock(send_mutex_);
-    const uint8_t head = protocol_ == ArmProtocol::Dof4BB ? kHeadB : kHeadA;
+    const uint8_t head = kCompiledFor4Dof ? kHeadB : kHeadA;
     uint8_t buf[8] = {head, kCmdAns, answer,0, 0, 0xFF, 0xEE, 0};
     buf[7] = calc_crc8(buf, 7);
     return write_bytes(buf, 8);
@@ -1282,7 +1305,7 @@ bool arm_internation::send_pump_cmd(bool on, int speed)
 {
     std::lock_guard<std::mutex> lock(send_mutex_);
     uint8_t on_off = on ? 1 : 0;
-    const uint8_t head = protocol_ == ArmProtocol::Dof4BB ? kHeadB : kHeadA;
+    const uint8_t head = kCompiledFor4Dof ? kHeadB : kHeadA;
     uint8_t buf[10] = {head, kCmdPump, on_off, 0, 0,0,0, 0xFF, 0xEE, 0};
     encode_float_le(static_cast<float>(speed), buf + 3);
     buf[9] = calc_crc8(buf, 9);
@@ -1291,7 +1314,7 @@ bool arm_internation::send_pump_cmd(bool on, int speed)
 
 bool arm_internation::send_4dof_pose_cmd(int arm_id, float x, float y, float z, float pitch)
 {
-    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1)
+    if (!kCompiledFor4Dof || arm_id < 0 || arm_id > 1)
     {
         return false;
     }
@@ -1315,7 +1338,7 @@ bool arm_internation::send_4dof_pose_cmd(int arm_id, float x, float y, float z, 
 
 bool arm_internation::send_4dof_action_cmd(uint8_t action_id)
 {
-    if (protocol_ != ArmProtocol::Dof4BB)
+    if (!kCompiledFor4Dof)
     {
         return false;
     }
@@ -1329,7 +1352,7 @@ bool arm_internation::send_4dof_action_cmd(uint8_t action_id)
 
 bool arm_internation::send_4dof_start_cmd(float offset_x, float offset_y, float offset_z)
 {
-    if (protocol_ != ArmProtocol::Dof4BB)
+    if (!kCompiledFor4Dof)
     {
         // START,x,y,z 是 4DOF 固件专用命令；AA 平面臂没有对应 0x99 语义。
         return false;
@@ -1358,7 +1381,7 @@ static bool is_finite_xyz(float x, float y, float z)
 
 bool arm_internation::send_4dof_pick_cmd(int arm_id, float x, float y, float z)
 {
-    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
+    if (!kCompiledFor4Dof || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
     {
         return false;
     }
@@ -1381,7 +1404,7 @@ bool arm_internation::send_4dof_pick_cmd(int arm_id, float x, float y, float z)
 
 bool arm_internation::send_4dof_place_1f_cmd(int arm_id, float x, float y, float z)
 {
-    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
+    if (!kCompiledFor4Dof || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
     {
         return false;
     }
@@ -1402,7 +1425,7 @@ bool arm_internation::send_4dof_place_1f_cmd(int arm_id, float x, float y, float
 
 bool arm_internation::send_4dof_place_2f_cmd(int arm_id, float x, float y, float z)
 {
-    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
+    if (!kCompiledFor4Dof || arm_id < 0 || arm_id > 1 || !is_finite_xyz(x, y, z))
     {
         return false;
     }
@@ -1423,7 +1446,7 @@ bool arm_internation::send_4dof_place_2f_cmd(int arm_id, float x, float y, float
 
 bool arm_internation::send_4dof_put_block_back_cmd(int arm_id)
 {
-    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1)
+    if (!kCompiledFor4Dof || arm_id < 0 || arm_id > 1)
     {
         return false;
     }
@@ -1439,7 +1462,7 @@ bool arm_internation::send_4dof_put_block_back_cmd(int arm_id)
 
 bool arm_internation::send_4dof_get_block_back_cmd(int arm_id)
 {
-    if (protocol_ != ArmProtocol::Dof4BB || arm_id < 0 || arm_id > 1)
+    if (!kCompiledFor4Dof || arm_id < 0 || arm_id > 1)
     {
         return false;
     }
@@ -1455,7 +1478,7 @@ bool arm_internation::send_4dof_get_block_back_cmd(int arm_id)
 bool arm_internation::send_4dof_pick_all_cmd(float lx, float ly, float lz,
                                              float rx, float ry, float rz)
 {
-    if (protocol_ != ArmProtocol::Dof4BB ||
+    if (!kCompiledFor4Dof ||
         !is_finite_xyz(lx, ly, lz) || !is_finite_xyz(rx, ry, rz))
     {
         return false;
@@ -1485,7 +1508,7 @@ bool arm_internation::send_4dof_pick_all_cmd(float lx, float ly, float lz,
 
 bool arm_internation::send_4dof_put_block_back_all_cmd()
 {
-    if (protocol_ != ArmProtocol::Dof4BB)
+    if (!kCompiledFor4Dof)
     {
         return false;
     }

@@ -71,15 +71,33 @@ int main()
     expect(slave_name != nullptr, "ptsname failed");
 
     arm_internation arm;
-    expect(arm.set_protocol_from_string("4dof"), "failed to select 4dof protocol");
+    expect(arm.set_protocol_from_string("compiled"), "compiled protocol validation failed");
+#if DOGVISION_ARM_USE_4DOF
+    expect(arm.protocol() == ArmProtocol::Dof4BB, "expected compiled 4dof protocol");
+    expect(arm.set_protocol_from_string("4dof"), "4dof alias should match compiled protocol");
+    expect(!arm.set_protocol_from_string("aa"), "aa must not override compiled 4dof protocol");
+    constexpr uint8_t expected_head = 0xBB;
+#else
+    expect(arm.protocol() == ArmProtocol::PlaneAA, "expected compiled aa protocol");
+    expect(arm.set_protocol_from_string("aa"), "aa alias should match compiled protocol");
+    expect(!arm.set_protocol_from_string("4dof"), "4dof must not override compiled aa protocol");
+    constexpr uint8_t expected_head = 0xAA;
+#endif
     expect(arm.open(slave_name, 115200), "failed to open pseudo serial port");
+
+#if DOGVISION_ARM_USE_4DOF
+    expect(!arm.send_arm_cmd(0, 1.0F, 2.0F), "AA command must fail in 4dof build");
+#else
+    expect(!arm.send_4dof_pose_cmd(0, 0.1F, 0.2F, 0.3F, 0.4F),
+           "4dof command must fail in AA build");
+#endif
 
     for (uint8_t answer = 0; answer <= 3; ++answer)
     {
         expect(arm.send_answer_cmd(answer), "send_answer_cmd failed");
         const std::array<uint8_t, 8> frame = read_frame(master_fd);
         const std::array<uint8_t, 7> expected_prefix = {
-            0xBB, 0x05, answer, 0x00, 0x00, 0xFF, 0xEE
+            expected_head, 0x05, answer, 0x00, 0x00, 0xFF, 0xEE
         };
         for (size_t i = 0; i < expected_prefix.size(); ++i)
         {
@@ -90,6 +108,6 @@ int main()
 
     arm.close();
     ::close(master_fd);
-    std::cout << "BB 05 answer frame tests passed" << std::endl;
+    std::cout << arm.protocol_name() << " 05 answer frame tests passed" << std::endl;
     return 0;
 }

@@ -5,6 +5,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(DOGVISION_ARM_USE_4DOF "Build dogvision_arm for the BB/4DOF protocol" ON)
+configure_file(
+  include/dogvision_arm/protocol_config.hpp.in
+  ${CMAKE_CURRENT_BINARY_DIR}/include/dogvision_arm/protocol_config.hpp
+)
+
+if(DOGVISION_ARM_USE_4DOF)
+  message(STATUS "dogvision_arm: compile-time protocol = BB/4DOF")
+else()
+  message(STATUS "dogvision_arm: compile-time protocol = AA/plane")
+endif()
+
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -18,6 +30,7 @@ add_library(dogvision_arm_lib
 target_compile_features(dogvision_arm_lib PUBLIC cxx_std_17)
 target_include_directories(dogvision_arm_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
   $<INSTALL_INTERFACE:include>
   ${LIBUSB_INCLUDE_DIRS}
 )
@@ -65,6 +78,11 @@ install(TARGETS
 )
 install(DIRECTORY include/
   DESTINATION include
+  PATTERN "*.in" EXCLUDE
+)
+install(FILES
+  ${CMAKE_CURRENT_BINARY_DIR}/include/dogvision_arm/protocol_config.hpp
+  DESTINATION include/dogvision_arm
 )
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}

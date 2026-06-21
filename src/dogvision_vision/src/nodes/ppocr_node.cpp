@@ -9,11 +9,11 @@
  * 完整流水线：
  *   1. 从海康相机获取帧
  *   2. 鱼眼去畸变（可选）
- *   3. 定位白底算术题区域（find_math_proble）
- *   4. 白屏矩形扩张并按配置选择彩色或灰度 ROI
- *   5. PPOCR 文本检测（detect_det_ppocr）
- *   6. PPOCR 文本识别（detect_rec_ppocr，含数学字符白名单）
- *   7. 算术表达式解析（parse_simple_expr）
+ *   3. 按配置准备彩色或三通道灰度整帧 OCR 输入
+ *   4. PPOCR 文本检测（detect_det_ppocr）
+ *   5. PPOCR 文本识别（detect_rec_ppocr，含数学字符白名单）
+ *   6. 单行算术候选组合与严格表达式校验
+ *   7. 文字外围白色环带筛选
  *   8. 多帧滑动窗口投票（OCRMultiFrameVoter）提高稳定性
  */
 
@@ -30,6 +30,8 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -47,7 +49,7 @@ namespace fs = std::filesystem;
 namespace
 {
 constexpr char kOcrWindowName[] = "Math OCR";
-constexpr char kOcrRoiWindowName[] = "Math OCR ROI";
+constexpr char kOcrRoiWindowName[] = "Math OCR Candidate";
 
 std::atomic<bool> g_ocr_triggered{false};
 std::atomic<bool> g_ocr_running{true};
@@ -55,7 +57,7 @@ std::atomic<bool> g_ocr_running{true};
 cv::Mat make_no_roi_canvas()
 {
     cv::Mat canvas(240, 640, CV_8UC3, cv::Scalar(24, 24, 24));
-    const std::string message = "No math ROI detected";
+    const std::string message = "No math candidate detected";
     int baseline = 0;
     const cv::Size text_size = cv::getTextSize(
         message, cv::FONT_HERSHEY_SIMPLEX, 0.8, 2, &baseline);
@@ -90,6 +92,84 @@ bool handle_visualization(const cv::Mat& frame,
 
     const int key = cv::waitKey(wait_ms);
     return key != 'q' && key != 'Q' && key != 27;
+}
+
+void draw_ocr_item(cv::Mat& frame, const OCRItem& item)
+{
+    std::vector<cv::Point> polygon;
+    for (const cv::Point2f& point : item.box.pts)
+    {
+        polygon.emplace_back(
+            static_cast<int>(std::round(point.x)),
+            static_cast<int>(std::round(point.y)));
+    }
+    cv::polylines(
+        frame, polygon, true, cv::Scalar(255, 180, 0), 2, cv::LINE_AA);
+
+    std::ostringstream label;
+    label << item.rec.text << " " << std::fixed
+          << std::setprecision(2) << item.rec.score;
+    const cv::Point origin(
+        polygon[0].x,
+        std::max(15, polygon[0].y - 5));
+    cv::putText(
+        frame, label.str(), origin, cv::FONT_HERSHEY_SIMPLEX,
+        0.5, cv::Scalar(255, 180, 0), 1, cv::LINE_AA);
+}
+
+void draw_math_candidate(
+    cv::Mat& frame,
+    const OCRMathCandidate& candidate,
+    bool selected)
+{
+    const cv::Scalar color =
+        candidate.white_pass ? cv::Scalar(0, 220, 0)
+                             : cv::Scalar(0, 0, 255);
+    cv::rectangle(
+        frame, candidate.surround_bounds,
+        selected ? color : cv::Scalar(0, 165, 255),
+        selected ? 3 : 1);
+    cv::rectangle(frame, candidate.text_bounds, color, selected ? 3 : 2);
+
+    std::ostringstream label;
+    label << candidate.expression
+          << " white=" << std::fixed << std::setprecision(2)
+          << candidate.surround_white_ratio
+          << (candidate.white_pass ? " PASS" : " REJECT");
+    const cv::Point origin(
+        candidate.surround_bounds.x,
+        std::max(18, candidate.surround_bounds.y - 6));
+    cv::putText(
+        frame, label.str(), origin, cv::FONT_HERSHEY_SIMPLEX,
+        selected ? 0.65 : 0.5, color, selected ? 2 : 1, cv::LINE_AA);
+}
+
+cv::Mat make_candidate_canvas(
+    const cv::Mat& original,
+    const OCRMathCandidate& candidate)
+{
+    if (original.empty() || candidate.surround_bounds.empty())
+        return {};
+
+    cv::Mat crop = original(candidate.surround_bounds).clone();
+    const int banner_height = 42;
+    cv::Mat canvas(
+        crop.rows + banner_height, crop.cols, CV_8UC3,
+        cv::Scalar(24, 24, 24));
+    crop.copyTo(canvas(cv::Rect(0, banner_height, crop.cols, crop.rows)));
+
+    std::ostringstream label;
+    label << candidate.expression
+          << "  white=" << std::fixed << std::setprecision(2)
+          << candidate.surround_white_ratio
+          << (candidate.white_pass ? " PASS" : " REJECT");
+    cv::putText(
+        canvas, label.str(), cv::Point(8, 28),
+        cv::FONT_HERSHEY_SIMPLEX, 0.62,
+        candidate.white_pass ? cv::Scalar(0, 220, 0)
+                             : cv::Scalar(0, 0, 255),
+        2, cv::LINE_AA);
+    return canvas;
 }
 } // namespace
 
@@ -140,8 +220,8 @@ static void ocr_trigger_callback(const std_msgs::msg::String::SharedPtr msg)
  * @param expr_str 输出识别到的表达式字符串。
  * @param int_result 输出四舍五入后的整数结果。
  * @param mod_result 输出非负的模 4 结果。
- * @param out_roi 可选输出的算术题区域。
- * @param out_ocr_roi 可选输出实际送入 OCR 的扩张 ROI。
+ * @param out_roi 可选输出最终算术题文字区域。
+ * @param out_ocr_roi 可选输出当前最优算术候选可视化图。
  * @retval bool 成功识别并解析表达式时返回 true。
  */
 static bool run_ocr_pipeline(cv::Mat& img,
@@ -155,65 +235,35 @@ static bool run_ocr_pipeline(cv::Mat& img,
                              cv::Rect2f* out_roi = nullptr,
                              cv::Mat* out_ocr_roi = nullptr)
 {
-    cv::Mat det_input;
+    const cv::Mat original_frame = img.clone();
     if (out_ocr_roi != nullptr)
     {
         out_ocr_roi->release();
     }
-    const cv::Rect2f white_screen_roi = find_math_proble(img);
-    const cv::Rect ocr_rect = expand_ocr_roi(
-        white_screen_roi, img.size(), ocr_config.ocr_roi_expand_ratio);
-
-    if (white_screen_roi.area() > 0.0f && ocr_rect.area() > 0)
-    {
-        const cv::Mat raw_roi = img(ocr_rect);
-        det_input = prepare_ocr_roi(
-            raw_roi, ocr_config.ocr_roi_use_grayscale);
-        if (out_ocr_roi != nullptr)
-        {
-            *out_ocr_roi = det_input.clone();
-        }
-        RCLCPP_INFO(logger, "White screen: [%.0f, %.0f, %.0f x %.0f]",
-                    white_screen_roi.x, white_screen_roi.y,
-                    white_screen_roi.width, white_screen_roi.height);
-        RCLCPP_INFO(logger, "OCR ROI     : [%d, %d, %d x %d], expand=%.3f, grayscale=%s",
-                    ocr_rect.x, ocr_rect.y, ocr_rect.width, ocr_rect.height,
-                    ocr_config.ocr_roi_expand_ratio,
-                    ocr_config.ocr_roi_use_grayscale ? "true" : "false");
-    }
-
+    cv::Mat det_input = prepare_ocr_input(
+        original_frame, ocr_config.ocr_math_use_grayscale);
     if (det_input.empty())
     {
         if (out_roi != nullptr)
-        {
             *out_roi = cv::Rect2f();
-        }
-        RCLCPP_INFO(logger, "No math problem region in frame, skip inference.");
+        RCLCPP_WARN(logger, "Empty full-frame OCR input, skip inference.");
         return false;
     }
 
-    if (out_roi != nullptr)
-    {
-        *out_roi = cv::Rect2f(
-            static_cast<float>(ocr_rect.x),
-            static_cast<float>(ocr_rect.y),
-            static_cast<float>(ocr_rect.width),
-            static_cast<float>(ocr_rect.height));
-    }
-
-    RCLCPP_INFO(logger, "Math ROI OK, starting OCR pipeline...");
+    RCLCPP_INFO(
+        logger, "Full-frame OCR: %dx%d, grayscale=%s",
+        det_input.cols, det_input.rows,
+        ocr_config.ocr_math_use_grayscale ? "true" : "false");
     det.preprocess(det_input);
     det.inference();
     det.postprocess();
     const std::vector<OCRBox>& all_boxes = det.ocr_det_out_;
     RCLCPP_INFO(logger, "Detected   : %zu text region(s)", all_boxes.size());
 
-    const std::vector<OCRBox>& boxes = all_boxes;
-
     std::vector<OCRItem> ocr_items;
-    for (size_t i = 0; i < boxes.size(); ++i)
+    for (size_t i = 0; i < all_boxes.size(); ++i)
     {
-        cv::Mat crop = crop_text_region(det_input, boxes[i]);
+        cv::Mat crop = crop_text_region(det_input, all_boxes[i]);
         if (crop.empty())
         {
             continue;
@@ -226,7 +276,7 @@ static bool run_ocr_pipeline(cv::Mat& img,
         if (!rec.result.empty() && !rec.result[0].text.empty())
         {
             OCRItem item;
-            item.box = boxes[i];
+            item.box = all_boxes[i];
             item.rec = rec.result[0];
             ocr_items.push_back(item);
             RCLCPP_INFO(logger, "  [%zu] \"%s\"  score=%.3f",
@@ -234,22 +284,60 @@ static bool run_ocr_pipeline(cv::Mat& img,
         }
     }
 
-    std::string all_text;
     for (const auto& item : ocr_items)
+        draw_ocr_item(img, item);
+
+    std::vector<OCRMathCandidate> candidates =
+        find_math_candidates(original_frame, ocr_items, ocr_config);
+    RCLCPP_INFO(logger, "Math candidates: %zu", candidates.size());
+    for (size_t i = 0; i < candidates.size(); ++i)
     {
-        all_text += item.rec.text + " ";
+        const OCRMathCandidate& candidate = candidates[i];
+        draw_math_candidate(img, candidate, i == 0);
+        RCLCPP_INFO(
+            logger,
+            "  candidate[%zu] \"%s\" score=%.3f white=%.3f %s",
+            i, candidate.expression.c_str(), candidate.mean_score,
+            candidate.surround_white_ratio,
+            candidate.white_pass ? "PASS" : "REJECT");
     }
 
-    RCLCPP_INFO(logger, "All OCR    : \"%s\"", all_text.c_str());
-    double calc_result = 0.0;
-    if (!parse_simple_expr(all_text, calc_result, expr_str))
+    if (candidates.empty())
     {
-        RCLCPP_WARN(logger, "No arithmetic expression found.");
+        if (out_roi != nullptr)
+            *out_roi = cv::Rect2f();
+        RCLCPP_WARN(logger, "No valid arithmetic candidate found.");
         return false;
     }
 
-    int_result = static_cast<int>(std::round(calc_result));
+    const OCRMathCandidate& best = candidates.front();
+    if (out_ocr_roi != nullptr)
+        *out_ocr_roi = make_candidate_canvas(original_frame, best);
+    if (!best.white_pass)
+    {
+        if (out_roi != nullptr)
+            *out_roi = cv::Rect2f();
+        RCLCPP_WARN(
+            logger,
+            "Best arithmetic candidate rejected by white surround: %.3f < %.3f",
+            best.surround_white_ratio,
+            ocr_config.ocr_math_min_surround_white_ratio);
+        return false;
+    }
+
+    expr_str = best.expression;
+    if (best.result < static_cast<double>(std::numeric_limits<int>::min()) ||
+        best.result > static_cast<double>(std::numeric_limits<int>::max()))
+    {
+        if (out_roi != nullptr)
+            *out_roi = cv::Rect2f();
+        RCLCPP_WARN(logger, "Arithmetic result is outside int range.");
+        return false;
+    }
+    int_result = static_cast<int>(std::round(best.result));
     mod_result = ((int_result % 4) + 4) % 4;
+    if (out_roi != nullptr)
+        *out_roi = cv::Rect2f(best.text_bounds);
     return true;
 }
 
@@ -301,7 +389,7 @@ static void draw_result_overlay(cv::Mat& frame,
  * @param rec 文本识别模型封装对象。
  * @param yaml_path YAML 输出文件路径。
  * @param show_visual 是否启用 OpenCV 可视化窗口。
- * @param show_ocr_roi 是否显示实际送入 OCR 的 ROI。
+ * @param show_ocr_roi 是否显示当前最优算术候选。
  * @retval int 类进程退出码。
  */
 static int run_test_mode(const rclcpp::Node::SharedPtr& node,
@@ -427,7 +515,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
  * @param det 文本检测模型封装对象。
  * @param rec 文本识别模型封装对象。
  * @param show_visual 是否启用 OpenCV 可视化窗口。
- * @param show_ocr_roi 是否显示实际送入 OCR 的 ROI。
+ * @param show_ocr_roi 是否显示当前最优算术候选。
  * @retval int 类进程退出码。
  */
 static int run_production_mode(const rclcpp::Node::SharedPtr& node,

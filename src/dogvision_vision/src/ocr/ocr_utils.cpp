@@ -4,7 +4,8 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <regex>
+#include <limits>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -12,30 +13,7 @@
 
 #include <opencv2/calib3d.hpp>
 
-cv::Rect expand_ocr_roi(const cv::Rect2f& roi,
-                        const cv::Size& image_size,
-                        double expand_ratio)
-{
-    if (expand_ratio < 0.0)
-        throw std::invalid_argument("OCR ROI expand ratio must be non-negative");
-    if (roi.area() <= 0.0f || image_size.width <= 0 || image_size.height <= 0)
-        return {};
-
-    const double pad_x = static_cast<double>(roi.width) * expand_ratio;
-    const double pad_y = static_cast<double>(roi.height) * expand_ratio;
-    const int left = static_cast<int>(std::floor(roi.x - pad_x));
-    const int top = static_cast<int>(std::floor(roi.y - pad_y));
-    const int right = static_cast<int>(
-        std::ceil(roi.x + roi.width + pad_x));
-    const int bottom = static_cast<int>(
-        std::ceil(roi.y + roi.height + pad_y));
-
-    cv::Rect expanded(left, top, right - left, bottom - top);
-    expanded &= cv::Rect(0, 0, image_size.width, image_size.height);
-    return expanded;
-}
-
-cv::Mat prepare_ocr_roi(const cv::Mat& input, bool use_grayscale)
+cv::Mat prepare_ocr_input(const cv::Mat& input, bool use_grayscale)
 {
     if (input.empty())
         return {};
@@ -125,7 +103,7 @@ static std::string normalize_expr(const std::string& src)
         {"×", "*"}, {"÷", "/"}, {"＋", "+"}, {"－", "-"},
         {"（", "("}, {"）", ")"},
         {"X", "*"}, {"x", "*"},
-        {" ", ""}, {"=", ""}, {"?", ""}, {"？", ""},
+        {" ", ""},
     };
     for (const auto& p : repl) {
         size_t pos = 0;
@@ -144,9 +122,12 @@ static std::string normalize_expr(const std::string& src)
 //   factor = '(' expr ')' | ['-'] number
 struct Parser {
     const std::string& s;
-    size_t pos;
+    size_t pos = 0;
+    int number_count = 0;
+    int binary_operator_count = 0;
+    bool valid = true;
 
-    explicit Parser(const std::string& str) : s(str), pos(0) {}
+    explicit Parser(const std::string& str) : s(str) {}
 
     void skip_ws() { while (pos < s.size() && s[pos] == ' ') ++pos; }
     char peek()    { skip_ws(); return pos < s.size() ? s[pos] : '\0'; }
@@ -154,49 +135,111 @@ struct Parser {
 
     bool read_number(double& val) {
         skip_ws();
-        size_t j = pos;
-        while (j < s.size() && (std::isdigit((unsigned char)s[j]) || s[j] == '.')) ++j;
-        if (j == pos) return false;
-        val = std::stod(s.substr(pos, j - pos));
-        pos = j;
+        const size_t start = pos;
+        bool has_digit = false;
+        bool has_dot = false;
+        while (pos < s.size())
+        {
+            const unsigned char c = static_cast<unsigned char>(s[pos]);
+            if (std::isdigit(c))
+            {
+                has_digit = true;
+                ++pos;
+            }
+            else if (s[pos] == '.' && !has_dot)
+            {
+                has_dot = true;
+                ++pos;
+            }
+            else
+            {
+                break;
+            }
+        }
+        if (!has_digit)
+        {
+            pos = start;
+            return false;
+        }
+        try
+        {
+            val = std::stod(s.substr(start, pos - start));
+        }
+        catch (const std::exception&)
+        {
+            valid = false;
+            return false;
+        }
+        ++number_count;
+        return std::isfinite(val);
+    }
+
+    bool factor(double& value) {
+        skip_ws();
+        if (pos >= s.size()) return false;
+        bool negative = false;
+        if (s[pos] == '-')
+        {
+            negative = true;
+            ++pos;
+        }
+        if (pos < s.size() && s[pos] == '(') {
+            ++pos;
+            if (!expr(value))
+                return false;
+            skip_ws();
+            if (pos >= s.size() || s[pos] != ')')
+                return false;
+            ++pos;
+            if (negative)
+                value = -value;
+            return true;
+        }
+        if (!read_number(value))
+            return false;
+        if (negative)
+            value = -value;
         return true;
     }
 
-    double factor() {
-        skip_ws();
-        if (pos >= s.size()) return 0.0;
-        if (s[pos] == '(') {
-            ++pos;
-            double val = expr();
-            skip_ws();
-            if (pos < s.size() && s[pos] == ')') ++pos;
-            return val;
-        }
-        bool neg = false;
-        if (s[pos] == '-') { neg = true; ++pos; }
-        double val = 0.0;
-        read_number(val);
-        return neg ? -val : val;
-    }
-
-    double term() {
-        double val = factor();
+    bool term(double& value) {
+        if (!factor(value))
+            return false;
         while (true) {
             char c = peek();
-            if (c == '*' || c == '/') { consume(); val = (c == '*') ? val * factor() : val / factor(); }
-            else break;
+            if (c != '*' && c != '/')
+                break;
+            consume();
+            double rhs = 0.0;
+            if (!factor(rhs))
+                return false;
+            ++binary_operator_count;
+            if (c == '/' && std::abs(rhs) <= 1e-12)
+                return false;
+            value = (c == '*') ? value * rhs : value / rhs;
+            if (!std::isfinite(value))
+                return false;
         }
-        return val;
+        return true;
     }
 
-    double expr() {
-        double val = term();
+    bool expr(double& value) {
+        if (!term(value))
+            return false;
         while (true) {
             char c = peek();
-            if (c == '+' || c == '-') { consume(); val = (c == '+') ? val + term() : val - term(); }
-            else break;
+            if (c != '+' && c != '-')
+                break;
+            consume();
+            double rhs = 0.0;
+            if (!term(rhs))
+                return false;
+            ++binary_operator_count;
+            value = (c == '+') ? value + rhs : value - rhs;
+            if (!std::isfinite(value))
+                return false;
         }
-        return val;
+        return true;
     }
 };
 
@@ -206,28 +249,269 @@ struct Parser {
 bool parse_simple_expr(const std::string& text, double& result, std::string& expr_str)
 {
     std::string norm = normalize_expr(text);
-
-    // 找到第一个以数字或左括号开头的子串
-    std::regex start_pat(R"([(\-]?\d|[(])");
-    std::smatch sm;
-    if (!std::regex_search(norm, sm, start_pat))
+    if (!norm.empty() && norm.back() == '=')
+        norm.pop_back();
+    if (norm.empty() || norm.find('=') != std::string::npos)
         return false;
 
-    std::string candidate = norm.substr(sm.position());
+    for (const unsigned char c : norm)
+    {
+        if (!std::isdigit(c) &&
+            c != '.' && c != '+' && c != '-' &&
+            c != '*' && c != '/' && c != '(' && c != ')')
+        {
+            return false;
+        }
+    }
 
-    // 至少含一个运算符才是表达式
-    if (candidate.find_first_of("+-*/") == std::string::npos)
+    Parser parser(norm);
+    double value = 0.0;
+    if (!parser.expr(value))
+        return false;
+    parser.skip_ws();
+    if (!parser.valid || parser.pos != norm.size() ||
+        parser.number_count < 2 || parser.binary_operator_count < 1 ||
+        !std::isfinite(value))
         return false;
 
-    Parser parser(candidate);
-    double val = parser.expr();
-    expr_str = candidate.substr(0, parser.pos);
-
-    if (expr_str.find_first_of("+-*/") == std::string::npos)
-        return false;
-
-    result = val;
+    expr_str = norm;
+    result = value;
     return true;
+}
+
+cv::Rect ocr_box_bounds(const OCRBox& box, const cv::Size& image_size)
+{
+    std::vector<cv::Point2f> points(box.pts.begin(), box.pts.end());
+    cv::Rect bounds = cv::boundingRect(points);
+    bounds &= cv::Rect(0, 0, image_size.width, image_size.height);
+    return bounds;
+}
+
+float calculate_surround_white_ratio(
+    const cv::Mat& image,
+    const cv::Rect& text_bounds,
+    float average_text_height,
+    const s_detector_params& config,
+    cv::Rect* surround_bounds)
+{
+    if (image.empty() || text_bounds.empty() || average_text_height <= 0.0f)
+        return 0.0f;
+
+    const int margin = std::max(
+        1, static_cast<int>(std::round(
+               average_text_height * config.ocr_math_surround_margin_ratio)));
+    cv::Rect outer(
+        text_bounds.x - margin,
+        text_bounds.y - margin,
+        text_bounds.width + margin * 2,
+        text_bounds.height + margin * 2);
+    outer &= cv::Rect(0, 0, image.cols, image.rows);
+    if (surround_bounds != nullptr)
+        *surround_bounds = outer;
+    if (outer.empty())
+        return 0.0f;
+
+    cv::Mat bgr = prepare_ocr_input(image, false);
+    cv::Mat hsv;
+    cv::cvtColor(bgr(outer), hsv, cv::COLOR_BGR2HSV);
+    cv::Mat white_mask;
+    cv::inRange(
+        hsv,
+        cv::Scalar(0, 0, config.ocr_math_white_v_min),
+        cv::Scalar(180, config.ocr_math_white_s_max, 255),
+        white_mask);
+
+    cv::Mat ring_mask(outer.size(), CV_8UC1, cv::Scalar(255));
+    cv::Rect inner = text_bounds & outer;
+    inner.x -= outer.x;
+    inner.y -= outer.y;
+    inner &= cv::Rect(0, 0, outer.width, outer.height);
+    if (!inner.empty())
+        cv::rectangle(ring_mask, inner, cv::Scalar(0), cv::FILLED);
+
+    const int ring_pixels = cv::countNonZero(ring_mask);
+    if (ring_pixels <= 0)
+        return 0.0f;
+    cv::Mat white_ring;
+    cv::bitwise_and(white_mask, ring_mask, white_ring);
+    return static_cast<float>(cv::countNonZero(white_ring)) /
+           static_cast<float>(ring_pixels);
+}
+
+namespace
+{
+struct ItemGeometry
+{
+    size_t index = 0;
+    cv::Rect bounds;
+    float center_y = 0.0f;
+};
+
+float vertical_overlap_ratio(const cv::Rect& a, const cv::Rect& b)
+{
+    const int overlap =
+        std::max(0, std::min(a.y + a.height, b.y + b.height) -
+                        std::max(a.y, b.y));
+    return static_cast<float>(overlap) /
+           static_cast<float>(std::max(1, std::min(a.height, b.height)));
+}
+
+OCRMathCandidate make_math_candidate(
+    const cv::Mat& image,
+    const std::vector<OCRItem>& items,
+    const std::vector<size_t>& indices,
+    const s_detector_params& config)
+{
+    OCRMathCandidate candidate;
+    candidate.item_indices = indices;
+    float height_sum = 0.0f;
+    float score_sum = 0.0f;
+    for (const size_t index : indices)
+    {
+        const cv::Rect bounds = ocr_box_bounds(items[index].box, image.size());
+        candidate.text_bounds =
+            candidate.text_bounds.empty()
+                ? bounds
+                : (candidate.text_bounds | bounds);
+        candidate.raw_text += items[index].rec.text;
+        height_sum += static_cast<float>(bounds.height);
+        score_sum += items[index].rec.score;
+    }
+    const float count = static_cast<float>(indices.size());
+    candidate.mean_score = count > 0.0f ? score_sum / count : 0.0f;
+    const float average_height = count > 0.0f ? height_sum / count : 0.0f;
+    candidate.surround_white_ratio = calculate_surround_white_ratio(
+        image, candidate.text_bounds, average_height, config,
+        &candidate.surround_bounds);
+    candidate.white_pass =
+        candidate.surround_white_ratio >=
+        static_cast<float>(config.ocr_math_min_surround_white_ratio);
+    return candidate;
+}
+} // namespace
+
+std::vector<OCRMathCandidate> find_math_candidates(
+    const cv::Mat& original_image,
+    const std::vector<OCRItem>& items,
+    const s_detector_params& config)
+{
+    std::vector<OCRMathCandidate> candidates;
+    if (original_image.empty() || items.empty())
+        return candidates;
+
+    std::vector<ItemGeometry> geometries;
+    geometries.reserve(items.size());
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        const cv::Rect bounds = ocr_box_bounds(items[i].box, original_image.size());
+        if (!bounds.empty())
+        {
+            geometries.push_back({
+                i, bounds,
+                static_cast<float>(bounds.y) + bounds.height * 0.5f});
+        }
+    }
+    std::sort(geometries.begin(), geometries.end(),
+              [](const ItemGeometry& a, const ItemGeometry& b)
+              {
+                  if (std::abs(a.center_y - b.center_y) < 1.0f)
+                      return a.bounds.x < b.bounds.x;
+                  return a.center_y < b.center_y;
+              });
+
+    std::vector<std::vector<ItemGeometry>> lines;
+    for (const ItemGeometry& geometry : geometries)
+    {
+        bool assigned = false;
+        for (auto& line : lines)
+        {
+            cv::Rect line_bounds;
+            for (const auto& existing : line)
+                line_bounds = line_bounds.empty()
+                    ? existing.bounds : (line_bounds | existing.bounds);
+            const float center_delta = std::abs(
+                geometry.center_y -
+                (static_cast<float>(line_bounds.y) + line_bounds.height * 0.5f));
+            if (vertical_overlap_ratio(geometry.bounds, line_bounds) >= 0.40f ||
+                center_delta <=
+                    0.60f * static_cast<float>(
+                                std::max(geometry.bounds.height, line_bounds.height)))
+            {
+                line.push_back(geometry);
+                assigned = true;
+                break;
+            }
+        }
+        if (!assigned)
+            lines.push_back({geometry});
+    }
+
+    for (auto& line : lines)
+    {
+        std::sort(line.begin(), line.end(),
+                  [](const ItemGeometry& a, const ItemGeometry& b)
+                  {
+                      return a.bounds.x < b.bounds.x;
+                  });
+
+        size_t segment_begin = 0;
+        while (segment_begin < line.size())
+        {
+            size_t segment_end = segment_begin + 1;
+            while (segment_end < line.size())
+            {
+                const cv::Rect& previous = line[segment_end - 1].bounds;
+                const cv::Rect& current = line[segment_end].bounds;
+                const int gap = current.x - (previous.x + previous.width);
+                const float max_gap =
+                    3.0f * static_cast<float>(
+                               std::max(previous.height, current.height));
+                if (gap > max_gap)
+                    break;
+                ++segment_end;
+            }
+
+            for (size_t begin = segment_begin; begin < segment_end; ++begin)
+            {
+                std::vector<size_t> indices;
+                std::string text;
+                for (size_t end = begin; end < segment_end; ++end)
+                {
+                    indices.push_back(line[end].index);
+                    text += items[line[end].index].rec.text;
+                    double result = 0.0;
+                    std::string expression;
+                    if (!parse_simple_expr(text, result, expression))
+                        continue;
+                    OCRMathCandidate candidate =
+                        make_math_candidate(
+                            original_image, items, indices, config);
+                    candidate.expression = expression;
+                    candidate.result = result;
+                    const float length_bonus = std::min(
+                        0.10f,
+                        static_cast<float>(expression.size()) / 100.0f);
+                    candidate.rank_score =
+                        candidate.mean_score * 0.45f +
+                        candidate.surround_white_ratio * 0.45f +
+                        length_bonus;
+                    candidates.push_back(std::move(candidate));
+                }
+            }
+            segment_begin = segment_end;
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const OCRMathCandidate& a, const OCRMathCandidate& b)
+              {
+                  if (a.white_pass != b.white_pass)
+                      return a.white_pass > b.white_pass;
+                  if (std::abs(a.rank_score - b.rank_score) > 1e-6f)
+                      return a.rank_score > b.rank_score;
+                  return a.expression.size() > b.expression.size();
+              });
+    return candidates;
 }
 
 // ============================================================

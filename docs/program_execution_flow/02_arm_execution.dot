@@ -29,7 +29,7 @@ digraph arm_execution {
   ];
 
   launch [
-    label="arm_control.launch\n启动两个节点\n默认 protocol=4dof",
+    label="arm_control.launch\n启动两个节点\nprotocol=compiled（仅校验）",
     fillcolor="#DCFCE7",
     color="#15803D",
     penwidth=2
@@ -84,7 +84,7 @@ digraph arm_execution {
     fillcolor="#EFF6FF";
 
     comm_init [
-      label="设置 BB/4DOF 协议与缩放\n配置 HWID 自动重连\n创建 cmd 订阅与 data 发布"
+      label="读取编译时锁定的 AA/BB 协议\n校验 protocol 参数并设置缩放\n配置 HWID 自动重连"
     ];
     loop_start [label="进入 while (rclcpp::ok())\n记录当前时间", fillcolor="#E0E7FF", color="#7C3AED"];
     conn_due [label="到 1 秒连接检查点？", shape=diamond, fillcolor="#FEF3C7"];

@@ -12,7 +12,7 @@ ROS 2 相机采集、YOLO 目标检测、PP-OCR 文字识别与算术题识别�
 |---|---|---|
 | `yolo_node` | `yolo_node` | 触发式单帧抓帧 → YOLO 推理 → 2×4 网格分配 → JSON 发布 |
 | `yolo_accuracy_test_node` | `yolo_accuracy_test_node` | 连续实时 YOLO 推理 → 标注可视化 → 带标注视频录制 |
-| `ppocr_node` | `ppocr_node` | 海康相机取帧 → 白屏定位并扩张 ROI → 可选灰度化 → PP-OCR 数学字符识别 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
+| `ppocr_node` | `ppocr_node` | 海康相机取帧 → 整帧 PP-OCR → 单行算术候选组合 → 白色外围筛选 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
 | `math_generator_node` | `math_generator_node` | 随机生成复合四则运算题 → 全屏渲染显示 → 追加写入 YAML |
 
 ---
@@ -57,7 +57,7 @@ dogvision_vision/
 │   └── yolo/                      # YOLO OpenVINO 模型文件（.xml / .bin）
 ├── test/
 │   ├── ocr_multi_frame_voter_test.cpp
-│   └── ocr_roi_decode_test.cpp
+│   └── ocr_math_filter_decode_test.cpp
 └── src/
     ├── camera/
     │   ├── hikvision.cpp
@@ -186,10 +186,13 @@ source install/setup.bash
     "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
   },
 
-  // OCR ROI
-  "ocr_roi": {
-    "expand_ratio": 0.05,
-    "use_grayscale": false
+  // OCR 数学题后置筛选
+  "ocr_math_filter": {
+    "use_grayscale": false,
+    "min_surround_white_ratio": 0.50,
+    "surround_margin_ratio": 0.50,
+    "white_s_max": 110,
+    "white_v_min": 50
   },
 
   // YOLO 输入张量形状 NCHW
@@ -217,12 +220,15 @@ source install/setup.bash
 }
 ```
 
-OCR ROI 参数：
+OCR 数学题筛选参数：
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
-| `expand_ratio` | `0.05` | 白屏矩形每侧扩张比例，必须大于等于 0 |
-| `use_grayscale` | `false` | `false` 使用原始彩色 ROI，`true` 使用三通道灰度 ROI |
+| `use_grayscale` | `false` | `false` 使用原始彩色整帧，`true` 使用三通道灰度整帧 |
+| `min_surround_white_ratio` | `0.50` | 算术候选外围环带的最小白色比例，范围 `[0,1]` |
+| `surround_margin_ratio` | `0.50` | 环带宽度与候选平均文字高度之比，范围 `(0,1]` |
+| `white_s_max` | `110` | HSV 白色判定的 S 通道上限，范围 `[0,255]` |
+| `white_v_min` | `50` | HSV 白色判定的 V 通道下限，范围 `[0,255]` |
 
 `ppocr_keys_v1.txt` 必须保留为官方完整字典，不能直接裁剪或重排，否则会破坏识别模型的类别索引。`math_chars.txt` 是解码白名单，当前允许：
 
@@ -230,7 +236,7 @@ OCR ROI 参数：
 0-9  +  -  *  /  ×  ÷  =  .  (  )
 ```
 
-启动时会校验 ROI 参数、完整字典、白名单字符以及模型输出类别数；配置不合法时会直接报错。
+启动时会校验数学筛选参数、完整字典、白名单字符以及模型输出类别数；配置不合法时会直接报错。
 
 鱼眼去畸变内参矩阵 K 在 `src/core/detector.cpp` 中以硬编码常量定义（从 `fisheye_params.yaml` 标定结果提取）。如需修改，需同步更新该文件。
 
@@ -334,7 +340,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 2. 两种运行模式：
 
    **test 模式**（连续测试 + YAML 输出）：
-   - 循环取帧 → 去畸变 → 定位白屏 → 四边扩张 ROI → 可选灰度化 → 文本检测 → 数学字符约束识别 → 表达式解析计算 → 多帧投票
+   - 循环取帧 → 去畸变 → 整帧文本检测与识别 → 单行算术候选组合 → 白色外围筛选 → 多帧投票
    - 稳定结果发生变化时追加写入 `ocr_results.yaml`
 
    **production 模式**（触发式生产）：
@@ -343,17 +349,16 @@ ros2 run dogvision_vision yolo_accuracy_test_node
    - 首个稳定结果通过 `/ocr/result` 发布 JSON，并通过 `/ocr/answer` 发布 `UInt8 mod4`
    - 发布一次后停止跟踪，等待下一次触发
 
-**OCR ROI 流程**：
+**全帧 OCR 与后置筛选流程**：
 
-1. 使用 `find_math_proble()` 定位白屏外接矩形。
-2. 左右各扩张白屏宽度的 `expand_ratio`，上下各扩张白屏高度的 `expand_ratio`。
-3. 将扩张矩形裁剪到原图边界。
-4. 根据 `use_grayscale` 选择原始彩色或三通道灰度 ROI。
-5. 文本检测和识别仅处理该 ROI，不再使用原白屏掩码二次过滤。
+1. 根据 `use_grayscale` 选择原始彩色或三通道灰度整帧作为 OCR 输入。
+2. 识别画面中的全部文字，按垂直重叠和水平间距组合单行候选。
+3. 严格校验算术语法，拒绝残缺括号、无二元运算符、除零和非有限结果。
+4. 合并候选文字框，并按平均文字高度向外扩张形成外围环带。
+5. 在原始彩色画面上统计环带白色比例，达到门槛后才进入多帧投票。
 
-不再执行 CLAHE、高斯模糊或二值化。最终检测框与文字仍绘制在原始彩色画面上。
-
-启用 `show_ocr_roi` 后，会在 `"Math OCR ROI"` 窗口中显示实际送入 OCR 的图像。
+白屏位置、面积和画面中心不再作为 OCR 前置条件。启用 `show_ocr_roi` 后，
+`"Math OCR Candidate"` 窗口显示当前最优算术候选及其白色比例和通过状态。
 
 **数学字符约束**：
 
@@ -376,7 +381,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
 | `mode` | string | `"production"` | 运行模式：`"test"` 或 `"production"` |
 | `show_visual` | bool | true | 是否显示 `"Math OCR"` 整帧结果窗口 |
-| `show_ocr_roi` | bool | false | 是否显示实际送入 OCR 的扩张 ROI |
+| `show_ocr_roi` | bool | false | 是否显示当前最优算术候选及筛选状态 |
 | `enable_keyboard_trigger` | bool | true | production 模式是否允许 Enter 触发 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | test 模式下 YAML 输出路径 |
 
@@ -389,7 +394,7 @@ ros2 launch dogvision_vision ppocr_test.launch
 # production 模式（由 vision.launch 默认启动）
 ros2 launch dogvision_bringup vision.launch     # 含 ppocr 和 yolo
 
-# production 同时显示整帧结果和 OCR ROI
+# production 同时显示整帧筛选结果和最佳算术候选
 ros2 launch dogvision_bringup vision.launch \
   ppocr_show_visual:=true \
   ppocr_show_ocr_roi:=true
@@ -603,11 +608,12 @@ public:
 
 | 函数 | 说明 |
 |---|---|
-| `expand_ocr_roi(roi, image_size, ratio)` | 按比例扩张白屏矩形并裁剪到图像边界 |
-| `prepare_ocr_roi(input, use_grayscale)` | 输出原始彩色或三通道灰度 OCR ROI |
+| `prepare_ocr_input(input, use_grayscale)` | 输出原始彩色或三通道灰度整帧 OCR 输入 |
 | `crop_text_region(src, box)` | 透视变换裁剪四点文本框 |
 | `draw_ocr_result(vis, box, rec)` | 在图像上绘制 OCR 框和识别标签 |
-| `parse_simple_expr(text, result, expr_str)` | 从 OCR 文本中解析并计算四则运算表达式 |
+| `parse_simple_expr(text, result, expr_str)` | 严格解析完整四则运算表达式 |
+| `calculate_surround_white_ratio(...)` | 计算文字外围环带中的白色比例 |
+| `find_math_candidates(image, items, config)` | 组合、筛选并排序整帧单行算术候选 |
 | `show_result_window(expr_str, mod_result)` | 显示 OCR 算术结果窗口 |
 | `find_math_proble(input, mask_out, white_s_max, white_v_min)` | 定位白底算术题区域（HSV 白色掩码+形态学+轮廓筛选） |
 | `init_fisheye_undistort(image_width, image_height)` | 初始化鱼眼去畸变映射表 |
@@ -696,7 +702,7 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false v
 |---|---|---|---|
 | `config_path` | string | `<share>/config/settings.json` | 视觉配置文件 |
 | `show_visual` | bool | true | 是否显示整帧 OCR 结果窗口 |
-| `show_ocr_roi` | bool | true | 是否显示实际送入 OCR 的扩张 ROI |
+| `show_ocr_roi` | bool | true | 是否显示当前最优算术候选及筛选状态 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | 输出 YAML 路径 |
 
 ```bash
@@ -779,7 +785,7 @@ ctest --test-dir build/dogvision_vision --output-on-failure
 
 # 或分别直接运行
 ./build/dogvision_vision/ocr_multi_frame_voter_test
-./build/dogvision_vision/ocr_roi_decode_test
+./build/dogvision_vision/ocr_math_filter_decode_test
 ```
 
 `test/ocr_multi_frame_voter_test.cpp` 覆盖：
@@ -792,12 +798,12 @@ ctest --test-dir build/dogvision_vision --output-on-failure
 - A-B-A 切换模式
 - `reset()` 清空状态
 
-`test/ocr_roi_decode_test.cpp` 覆盖：
+`test/ocr_math_filter_decode_test.cpp` 覆盖：
 
-- 5% ROI 扩张、边界裁剪和零扩张
-- 负数扩张比例校验
-- 彩色 ROI 原样传递
-- 可选三通道灰度转换及尺寸保持
+- 彩色整帧原样传递和可选三通道灰度转换
+- 严格表达式语法、括号、小数和除零校验
+- 白色外围环带比例与图像边缘裁剪
+- 多 OCR 框单行组合、偏离中心候选和多候选排序
 - 数学字符白名单加载及缺失字符检查
 - 构造 CTC logits，验证无关字符分数更高时仍只输出数学字符
 - CTC 重复折叠、blank 删除和字典类别数校验

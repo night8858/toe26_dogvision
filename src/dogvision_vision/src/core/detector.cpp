@@ -84,17 +84,38 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.rec_allowed_chars_path =
             resolve(value["path"]["ppocr_allowed_chars_path"].asString());
 
-        const Json::Value& ocr_roi = value["ocr_roi"];
-        if (!ocr_roi.isNull())
+        const Json::Value& math_filter = value["ocr_math_filter"];
+        if (!math_filter.isNull())
         {
-            config.detect_config.ocr_roi_expand_ratio =
-                ocr_roi.get("expand_ratio", 0.05).asDouble();
-            config.detect_config.ocr_roi_use_grayscale =
-                ocr_roi.get("use_grayscale", false).asBool();
+            config.detect_config.ocr_math_use_grayscale =
+                math_filter.get("use_grayscale", false).asBool();
+            config.detect_config.ocr_math_min_surround_white_ratio =
+                math_filter.get("min_surround_white_ratio", 0.50).asDouble();
+            config.detect_config.ocr_math_surround_margin_ratio =
+                math_filter.get("surround_margin_ratio", 0.50).asDouble();
+            config.detect_config.ocr_math_white_s_max =
+                math_filter.get("white_s_max", 110).asInt();
+            config.detect_config.ocr_math_white_v_min =
+                math_filter.get("white_v_min", 50).asInt();
         }
 
-        if (config.detect_config.ocr_roi_expand_ratio < 0.0)
-            throw std::invalid_argument("ocr_roi.expand_ratio must be non-negative");
+        const double min_white =
+            config.detect_config.ocr_math_min_surround_white_ratio;
+        if (min_white < 0.0 || min_white > 1.0)
+            throw std::invalid_argument(
+                "ocr_math_filter.min_surround_white_ratio must be in [0, 1]");
+        if (config.detect_config.ocr_math_surround_margin_ratio <= 0.0 ||
+            config.detect_config.ocr_math_surround_margin_ratio > 1.0)
+            throw std::invalid_argument(
+                "ocr_math_filter.surround_margin_ratio must be in (0, 1]");
+        if (config.detect_config.ocr_math_white_s_max < 0 ||
+            config.detect_config.ocr_math_white_s_max > 255)
+            throw std::invalid_argument(
+                "ocr_math_filter.white_s_max must be in [0, 255]");
+        if (config.detect_config.ocr_math_white_v_min < 0 ||
+            config.detect_config.ocr_math_white_v_min > 255)
+            throw std::invalid_argument(
+                "ocr_math_filter.white_v_min must be in [0, 255]");
 
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();
@@ -242,8 +263,16 @@ detector::detector(Appconfig *config)
     detect_config_.ppocr_cls_model_path = config->detect_config.ppocr_cls_model_path;
     detect_config_.rec_char_dict_path = config->detect_config.rec_char_dict_path;
     detect_config_.rec_allowed_chars_path = config->detect_config.rec_allowed_chars_path;
-    detect_config_.ocr_roi_expand_ratio = config->detect_config.ocr_roi_expand_ratio;
-    detect_config_.ocr_roi_use_grayscale = config->detect_config.ocr_roi_use_grayscale;
+    detect_config_.ocr_math_use_grayscale =
+        config->detect_config.ocr_math_use_grayscale;
+    detect_config_.ocr_math_min_surround_white_ratio =
+        config->detect_config.ocr_math_min_surround_white_ratio;
+    detect_config_.ocr_math_surround_margin_ratio =
+        config->detect_config.ocr_math_surround_margin_ratio;
+    detect_config_.ocr_math_white_s_max =
+        config->detect_config.ocr_math_white_s_max;
+    detect_config_.ocr_math_white_v_min =
+        config->detect_config.ocr_math_white_v_min;
 
     // ── 复制类别名称 ──
     detect_config_.class0 = config->detect_config.class0;

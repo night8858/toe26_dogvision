@@ -23,7 +23,7 @@ static void print_help()
               << "    VALVE/V,id|ALL,ON/OFF   电磁阀\n"
               << "    PUMP/P,ON[,speed]|OFF   气泵\n"
               << "  低层指令（加 $ 前缀发往 /arm_internation/cmd）\n"
-              << "    启动 4DOF: ros2 launch dogvision_arm arm_test.launch protocol:=4dof\n"
+              << "    协议由 DOGVISION_ARM_USE_4DOF 在编译时锁定\n"
               << "    AA 平面臂: $LF,X:10,Y:20\n"
               << "    BB 4DOF:  $4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4\n"
               << "    BB 4DOF:  $4POSE,R,0.1,0.2,0.3,0.4\n"
@@ -35,11 +35,11 @@ static void print_help()
               << "    BB 4DOF:  $4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21\n"
               << "    BB 4DOF:  $4PUTBACKALL\n"
               << "    BB 4DOF:  $START,0,0,0      带初始偏移启动(mm)\n"
-              << "    $V,id,ON/OFF\n"
-              << "    $P,ON,speed\n"
-              << "  系统\n"
-              << "    help    显示本帮助\n"
-              << "    quit    退出\n"
+              << "    $V,id,ON/OFF                             \n"
+              << "    $P,ON,speed                              \n"
+              << "    系统                                      \n"
+              << "    help    显示本帮助                         \n"
+              << "    quit    退出                              \n"
               << std::endl;
 }
 

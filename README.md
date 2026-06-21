@@ -128,7 +128,7 @@ source /home/waterking/openvino_toolkit_ubuntu24_2025.4.1.20426.82bbf0292c5_x86_
 source install/setup.bash
 ```
 
-启动全系统。默认使用 4DOF 协议；Enter 触发一次 OCR，稳定后的 `mod4` 自动通过 BB 05 发送到 STM32：
+启动全系统。机械臂协议由编译选项锁定（默认 BB/4DOF）；Enter 触发一次 OCR，BB 构建会将稳定后的 `mod4` 通过 BB 05 发送到 STM32：
 
 ```bash
 ros2 launch dogvision_bringup full_system.launch
@@ -213,7 +213,7 @@ ros2 run dogvision_vision math_generator_node
 | `port` | 空字符串 | 指定串口路径，非空时跳过 HWID 扫描 |
 | `pos_scale` | `0.01` | 机械臂坐标换算比例 |
 | `angle_scale` | `0.01` | 云台角度换算比例 |
-| `protocol` | `4dof` | 机械臂串口协议；OCR 自动答案要求 4DOF/BB |
+| `protocol` | `compiled` | 仅校验是否匹配编译协议；OCR 自动答案要求 BB/4DOF 构建 |
 | `ocr_answer_topic` | `/ocr/answer` | OCR 答案到机械臂的 UInt8 话题 |
 | `mission_config` | `<share>/dogvision_arm/config/pos_set.yaml` | 机械臂任务位置配置 |
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
@@ -224,7 +224,7 @@ ros2 run dogvision_vision math_generator_node
 | `yolo_enable_keyboard_trigger` | `false` | 组合启动时关闭 YOLO Enter，避免争抢 stdin |
 | `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
 | `ppocr_show_visual` | `true` | PPOCR 是否显示整帧结果窗口 |
-| `ppocr_show_ocr_roi` | `false` | PPOCR 是否显示实际送入 OCR 的扩张 ROI |
+| `ppocr_show_ocr_roi` | `false` | PPOCR 是否显示当前最佳算术候选及白色筛选状态 |
 | `ppocr_enable_keyboard_trigger` | `true` | 组合启动时由 Enter 触发 OCR |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 
@@ -375,7 +375,19 @@ PPOCR 使用最近 10 个处理帧进行投票。某个归一化算式至少出�
 
 设备通过 USB-CDC 连接，默认 VID:PID 为 `0483:5740`，波特率 `115200`。
 
-反馈帧使用 `AA 01`：
+机械臂协议通过 CMake 在编译时选择，不能由 launch 动态切换：
+
+```bash
+# 默认 BB/4DOF
+colcon build --packages-select dogvision_arm \
+  --cmake-args -DDOGVISION_ARM_USE_4DOF=ON
+
+# AA 平面机械臂
+colcon build --packages-select dogvision_arm \
+  --cmake-args -DDOGVISION_ARM_USE_4DOF=OFF
+```
+
+AA 构建的反馈帧使用 `AA 01`：
 
 | 字节范围 | 内容 |
 |---|---|

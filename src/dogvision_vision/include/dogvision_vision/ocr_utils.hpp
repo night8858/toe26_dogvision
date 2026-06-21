@@ -6,23 +6,12 @@
 #include <dogvision_vision/common_structs.h>
 
 /**
- * @brief 按比例扩张 ROI 并限制在图像边界内。
- * @param roi 原始浮点 ROI。
- * @param image_size 原图尺寸。
- * @param expand_ratio 每侧扩张比例，必须大于等于 0。
- * @retval cv::Rect 扩张并裁剪后的整数 ROI。
- */
-cv::Rect expand_ocr_roi(const cv::Rect2f& roi,
-                        const cv::Size& image_size,
-                        double expand_ratio);
-
-/**
- * @brief 准备实际送入 OCR 的 ROI。
- * @param input 原始 ROI，支持 1/3/4 通道图像。
+ * @brief 准备实际送入 OCR 的整帧图像。
+ * @param input 原始图像，支持 1/3/4 通道。
  * @param use_grayscale 是否转换为三通道灰度图。
  * @retval cv::Mat 与输入同尺寸的三通道 BGR 图。
  */
-cv::Mat prepare_ocr_roi(const cv::Mat& input, bool use_grayscale);
+cv::Mat prepare_ocr_input(const cv::Mat& input, bool use_grayscale);
 
 /**
  * @brief 使用透视变换裁剪四点 OCR 文本区域。
@@ -49,6 +38,35 @@ void draw_ocr_result(cv::Mat& vis, const OCRBox& box, const OCRRecResult& rec);
  * @retval bool 找到并成功计算算术表达式时返回 true。
  */
 bool parse_simple_expr(const std::string& text, double& result, std::string& expr_str);
+
+/**
+ * @brief 计算 OCR 四点框的轴对齐外接矩形。
+ */
+cv::Rect ocr_box_bounds(const OCRBox& box, const cv::Size& image_size);
+
+/**
+ * @brief 计算文字合并框外围环带中的白色像素比例。
+ * @param image 原始彩色图像。
+ * @param text_bounds 文字合并矩形。
+ * @param average_text_height 候选文字框平均高度。
+ * @param config OCR 数学题筛选配置。
+ * @param surround_bounds 可选输出裁剪后的环带外矩形。
+ */
+float calculate_surround_white_ratio(
+    const cv::Mat& image,
+    const cv::Rect& text_bounds,
+    float average_text_height,
+    const s_detector_params& config,
+    cv::Rect* surround_bounds = nullptr);
+
+/**
+ * @brief 从整帧 OCR 结果中组合并筛选单行算术题候选。
+ * @return 按通过状态和综合分数从高到低排列的候选。
+ */
+std::vector<OCRMathCandidate> find_math_candidates(
+    const cv::Mat& original_image,
+    const std::vector<OCRItem>& items,
+    const s_detector_params& config);
 
 /**
  * @brief 在本地 OpenCV 窗口中显示 OCR 算术结果。

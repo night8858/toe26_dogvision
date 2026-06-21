@@ -62,11 +62,14 @@
       "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
     },
 
-    // ── OCR ROI 参数 ──
-    "ocr_roi":
+    // ── OCR 数学题后置筛选参数 ──
+    "ocr_math_filter":
     {
-      "expand_ratio": 0.05,      // 白屏矩形每侧扩张比例
-      "use_grayscale": false     // true=三通道灰度 ROI，false=原始彩色 ROI
+      "use_grayscale": false,             // true=整帧三通道灰度，false=原始彩色
+      "min_surround_white_ratio": 0.50,   // 数学题外围环带最小白色比例
+      "surround_margin_ratio": 0.50,      // 环带宽度/平均文字高度
+      "white_s_max": 110,                 // HSV 白色区域 S 通道上限
+      "white_v_min": 50                   // HSV 白色区域 V 通道下限
     },
 
     // ── YOLO 网络输入尺寸（NCHW 格式） ──

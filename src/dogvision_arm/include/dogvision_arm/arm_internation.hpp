@@ -9,6 +9,8 @@
 #include <atomic>
 #include <vector>
 
+#include <dogvision_arm/protocol_config.hpp>
+
 // ============================================================
 //  协议数据结构
 // ============================================================
@@ -130,7 +132,7 @@ enum class ArmProtocol {
 
 //  用法（典型）：
 //    arm_internation comm;
-//    comm.set_protocol_from_string("4dof");  // 可选；默认是旧 AA 协议
+//    comm.set_protocol_from_string("compiled");  // 可选；仅校验编译时锁定的协议
 //    comm.open("/dev/ttyUSB0", 115200);
 //    // 接收线程：while(running) comm.receive_once();
 //    comm.send_arm_cmd(0, 100, 200);
@@ -211,18 +213,17 @@ public:
     bool try_reconnect_once();
 
     // ---- 协议模式 ------------------------------------------------
-    /// @brief 动态切换通信协议。
-    /// @param protocol_name 协议标识："aa"/"plane"/"平面" 或 "bb"/"4dof"/"双臂"
-    /// @retval true 切换成功
-    /// @retval false 非法参数，协议保持不变
-    /// @note 切换协议会清空内部上报缓存（clear_report_state），
-    ///       避免旧协议残留数据被上层读取。
+    /// @brief 校验协议名称是否与编译时锁定的协议一致。
+    /// @param protocol_name "compiled"，或当前编译协议对应的 AA/BB 别名
+    /// @retval true 参数与编译协议一致
+    /// @retval false 参数非法或请求了另一种协议
+    /// @note 该接口为源码兼容而保留，不再切换协议。
     bool set_protocol_from_string(const std::string& protocol_name);
 
-    /// @brief 获取当前协议枚举值。
+    /// @brief 获取编译时锁定的协议枚举值。
     ArmProtocol protocol() const;
 
-    /// @brief 获取当前协议名称字符串（"aa" 或 "4dof"）。
+    /// @brief 获取编译时锁定的协议名称字符串（"aa" 或 "4dof"）。
     const char* protocol_name() const;
 
     // ---- 接收 & 解析 --------------------------------------------
@@ -450,7 +451,7 @@ private:
     static uint8_t calc_crc8(const uint8_t* data, size_t len);
 
     // ---- 帧解析 & 写 --------------------------------------------
-    /// @brief 按当前协议分派反馈帧解析（PlaneAA 或 Dof4BB）。
+    /// @brief 按编译时锁定的协议分派反馈帧解析。
     /// @retval true 成功解析一帧并更新状态缓存
     /// @retval false 未找到有效帧（等待更多数据）
     /// @note 内部可能消耗部分 rx_buf_ 字节（找到帧头但数据不足时保留帧头）。
@@ -541,9 +542,6 @@ private:
     SensorStatus       sensor_     = {};         ///< 电磁阀 + 微动开关状态
     size_t             pending_done_feedback_count_ = 0; ///< 待 ROS 节点发布的 BB CC 完成事件数量
     /// @}
-
-    // ---- 协议模式 ------------------------------------------------
-    ArmProtocol protocol_ = ArmProtocol::PlaneAA;  ///< 当前通信协议（默认 AA）
 
     // ---- 解码比例（raw int16 -> float）--------------------------
     /// @name int16 视图换算比例

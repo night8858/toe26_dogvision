@@ -4,7 +4,7 @@
   <arg name="port" default=""/>
   <arg name="pos_scale" default="0.01"/>
   <arg name="angle_scale" default="0.01"/>
-  <arg name="protocol" default="4dof"/>
+  <arg name="protocol" default="compiled"/>
   <arg name="ocr_answer_topic" default="/ocr/answer"/>
   <arg name="mission_config" default="$(find-pkg-share dogvision_arm)/config/pos_set.yaml"/>
 
