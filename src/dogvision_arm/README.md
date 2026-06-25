@@ -582,7 +582,285 @@ ros2 topic echo /arm_internation/data
 ros2 topic echo /arm_internation/state
 ```
 
-### 5. 手动发布低层命令（无需终端节点）
+---
+
+### 5. 4DOF 双臂操作测试（仅 BB/4DOF 协议）
+
+> 以下所有命令需确保包以 `DOGVISION_ARM_USE_4DOF=ON` 编译，且 `arm_internation_node` 已连接串口。
+
+#### 5.1 位姿控制（4POSE）
+
+**左臂位姿（带前缀格式）**：
+
+```bash
+# 左臂移动到绝对坐标 (x=0.1, y=0.2, z=0.3, pitch=0.4)，单位 m
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'}"
+```
+
+**右臂位姿（简写格式）**：
+
+```bash
+# 右臂：简写逗号分隔，顺序 x,y,z,pitch
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4POSE,R,0.1,0.2,0.3,0.4'}"
+```
+
+**终端交互方式**：
+
+```bash
+ros2 launch dogvision_arm arm_test.launch
+# 终端输入：
+$4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
+$4POSE,R,0.15,0.25,0.35,0.45
+```
+
+**臂别名**：左臂：`L` / `LEFT` / `左` / `0`；右臂：`R` / `RIGHT` / `右` / `1`。
+
+#### 5.2 单臂取块（4PICK）
+
+发送 `BB 11` 帧，单臂按 PC 目标点执行取块动作，xyz 单位 m。
+
+```bash
+# 左臂取块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PICK,L,0.45,0.42,-0.21'}"
+
+# 右臂取块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PICK,R,0.45,-0.40,-0.21'}"
+```
+
+**验证**：等待 STM32 返回 `BB CC FF EE CRC8`，`/arm_internation/state` 会发布 `DONE`。
+
+```bash
+# 另开终端监听动作完成
+ros2 topic echo /arm_internation/state
+```
+
+#### 5.3 单臂放块（4PLACE）
+
+发送 `BB 12` 帧，单臂执行放块动作。
+
+```bash
+# 左臂放块到目标位置
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PLACE,L,0.45,0.42,-0.21'}"
+
+# 右臂放块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PLACE,R,0.45,-0.40,-0.21'}"
+```
+
+#### 5.4 单臂背部放块（4PUTBACK）
+
+发送 `BB 14` 帧，单臂执行放块到背部的固定动作，无需坐标参数。
+
+```bash
+# 左臂放块到背部
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PUTBACK,L'}"
+
+# 右臂放块到背部
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PUTBACK,R'}"
+```
+
+#### 5.5 单臂背部取块（4GETBACK）
+
+发送 `BB 15` 帧，单臂从背部取块的固定动作。
+
+```bash
+# 左臂从背部取块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4GETBACK,L'}"
+
+# 右臂从背部取块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4GETBACK,R'}"
+```
+
+#### 5.6 双臂同时取块（4PICKALL）
+
+发送 `BB 21` 帧，双臂按各自 PC 目标点同时取块，xyz 单位 m。参数顺序：`lx,ly,lz,rx,ry,rz`。
+
+```bash
+# 双臂同时取块：左(x,y,z) 右(x,y,z)
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'}"
+```
+
+#### 5.7 双臂同时背部放块（4PUTBACKALL）
+
+发送 `BB 22` 帧，双臂同时放块到背部的固定动作，无参数。
+
+```bash
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PUTBACKALL'}"
+```
+
+#### 5.8 预设动作（4ACT）
+
+发送 BB 预设动作帧。`id=0` 中止当前动作，`id=1-N` 触发对应预设动作。
+
+```bash
+# 触发 1 号预设动作
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4ACT,1'}"
+
+# 中止当前动作
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4ACT,0'}"
+```
+
+#### 5.9 启动初始化（START）
+
+发送 `BB 99` 帧，带初始偏移启动机械臂系统。偏移单位 mm。
+
+```bash
+# 零偏移启动
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'START,0,0,0'}"
+
+# 带 X 偏移 50mm 启动
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'START,50,0,0'}"
+
+# 带前缀格式
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'START,X:0,Y:0,Z:0'}"
+```
+
+#### 5.10 OCR 答案测试
+
+**自动答案链路**（仅 BB 协议，仅 0-3）：
+
+```bash
+# 发送 OCR 答案 2 → arm_internation_node 自动封装为 BB 05 帧
+ros2 topic pub --once /ocr/answer std_msgs/msg/UInt8 "{data: 2}"
+
+# 终端方式手动发送（支持 0-255）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'A,2'}"
+```
+
+**C++ 单元测试**：
+
+```bash
+ctest --test-dir build/dogvision_arm -R answer_frame_test --output-on-failure
+```
+
+#### 5.11 阀/泵通用操作
+
+4DOF 协议下电磁阀和气泵命令与 AA 通用：
+
+```bash
+# 打开 1 号电磁阀
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'V,1,ON'}"
+
+# 关闭所有电磁阀
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'V,ALL,OFF'}"
+
+# 开泵（速度 2500）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'P,ON,2500'}"
+
+# 关泵
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: 'P,OFF'}"
+
+# 终端交互方式
+$V,1,ON
+$P,ON,2500
+```
+
+#### 5.12 4DOF 状态数据监听
+
+4DOF 协议下 `/arm_internation/data` 格式：
+
+```
+MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n
+```
+
+```bash
+# 实时监听双臂位姿和传感器状态
+ros2 topic echo /arm_internation/data
+
+# 监听动作完成事件（目标 BB CC FF EE）
+ros2 topic echo /arm_internation/state
+```
+
+#### 5.13 完整双臂取放工作流测试
+
+完整端到端测试流程（终端交互方式）：
+
+```bash
+ros2 launch dogvision_arm arm_test.launch
+```
+
+在终端依次输入：
+
+```text
+# 1. 启动系统（零偏移）
+$START,0,0,0
+
+# 2. 开泵
+$P,ON,2500
+
+# 3. 左臂取块（在 (0.45,0.42,-0.21) 位置）
+$4PICK,L,0.45,0.42,-0.21
+
+# 4. 等待 DONE（监听 /arm_internation/state）
+# 5. 左臂放块到目标
+$4PLACE,L,0.45,0.42,-0.21
+
+# 6. 右臂取块
+$4PICK,R,0.45,-0.42,-0.21
+
+# 7. 等待 DONE
+# 8. 右臂放块
+$4PLACE,R,0.45,-0.42,-0.21
+
+# 9. 双臂同时背部取块
+$4GETBACK,L
+$4GETBACK,R
+
+# 10. 双臂同时背部放块
+$4PUTBACKALL
+
+# 11. 关泵
+$P,OFF
+```
+
+**话题方式批量测试**：
+
+```bash
+# 启动
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "{data: 'START,0,0,0'}"
+sleep 1
+
+# 开泵
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "{data: 'P,ON,2500'}"
+sleep 0.5
+
+# 双臂同时取块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'}"
+# 等待动作完成（监听 /arm_internation/state 的 DONE）
+
+# 双臂背部放块
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
+  "{data: '4PUTBACKALL'}"
+
+# 关泵
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "{data: 'P,OFF'}"
+```
+
+---
+
+### 6. 手动发布低层命令（无需终端节点）
 
 ```bash
 # AA 协议：控制 LF 臂到 (10, 20)
@@ -598,14 +876,14 @@ ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'START,0,0,0'" --once
 ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'V,1,ON'" --once
 ```
 
-### 6. 手动发布高层任务命令
+### 7. 手动发布高层任务命令
 
 ```bash
 ros2 topic pub /arm/mission_cmd std_msgs/String "data: 'STOW,ALL'" --once
 ros2 topic pub /arm/mission_cmd std_msgs/String "data: 'PICK,RF'" --once
 ```
 
-### 7. 单独运行各节点
+### 8. 单独运行各节点
 
 ```bash
 # 只运行串口通信节点（需要先有串口设备）
@@ -618,7 +896,7 @@ ros2 run dogvision_arm arm_mission_node
 ros2 run dogvision_arm arm_cmd_terminal_node
 ```
 
-### 8. 查看节点参数
+### 9. 查看节点参数
 
 ```bash
 ros2 param dump /arm_internation_node
@@ -626,14 +904,14 @@ ros2 param dump /arm_mission_node
 ros2 param dump /arm_cmd_terminal_node
 ```
 
-### 9. 指定串口直连（跳过 HWID 扫描）
+### 10. 指定串口直连（跳过 HWID 扫描）
 
 ```bash
 # 启动时指定串口路径
 ros2 launch dogvision_arm arm_control.launch port:=/dev/ttyUSB0
 ```
 
-### 10. 修改波特率
+### 11. 修改波特率
 
 ```bash
 ros2 launch dogvision_arm arm_control.launch baud_rate:=9600
