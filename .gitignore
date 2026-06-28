@@ -20,3 +20,8 @@ logs/
 
 #vscode生成的文件
 .vscode/
+
+
+#codex的生成文件
+.agents/
+.codex/

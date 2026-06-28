@@ -15,7 +15,7 @@ public:
         declare_parameter<std::string>("mission_topic", "/arm/mission_cmd");        // 
         declare_parameter<std::string>("cmd_topic", "/arm_internation/cmd");        // 发送话题
         declare_parameter<std::string>("state_topic", "/arm_internation/state");    // 下位机反馈状态话题，主要是 DONE / DIAG
-        declare_parameter<int>("timeout_ms", 5000);                                 // 超时毫秒数，设为 0 或负数则禁用超时
+        declare_parameter<int>("timeout_ms", 10000);                                 // 超时毫秒数，设为 0 或负数则禁用超时
 
         mission_topic_ = get_parameter("mission_topic").as_string();
         cmd_topic_ = get_parameter("cmd_topic").as_string();
