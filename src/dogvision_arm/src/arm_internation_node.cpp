@@ -17,13 +17,30 @@ using namespace std::chrono_literals;
  * 设计意图：将 arm_internation 内部状态缓存序列化为单行文本，
  * 便于 ROS 话题监控、日志记录和下游节点解析。
  *
- * 输出格式按协议区分：
- * - AA 协议：LF:x,y;RF:x,y;LB:x,y;RB:x,y;YAW:yaw;PITCH:pitch;VALVE_BITS:n;MICRO_BITS:n
- * - BB 协议：MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n
+ * 输出格式固定为：
+ * MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n
  *
  * @param my_arm 用于读取当前状态的机械臂通信对象。
  * @retval std::string 用于 /arm_internation/data 的状态数据。
  */
+static std::string build_diagnostic_payload(const Arm4DofDiagnostic &diagnostic)
+{
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(3);
+    oss << "DIAG,arm=" << static_cast<unsigned>(diagnostic.arm_id)
+        << ",reason=" << static_cast<unsigned>(diagnostic.reason)
+        << ",mask=" << static_cast<unsigned>(diagnostic.joint_mask)
+        << ",req=" << diagnostic.requested_pose.x << "/"
+        << diagnostic.requested_pose.y << "/"
+        << diagnostic.requested_pose.z << "/"
+        << diagnostic.requested_pose.pitch
+        << ",lim=" << diagnostic.limited_pose.x << "/"
+        << diagnostic.limited_pose.y << "/"
+        << diagnostic.limited_pose.z << "/"
+        << diagnostic.limited_pose.pitch;
+    return oss.str();
+}
+
 static std::string build_status_payload(const arm_internation &my_arm)
 {
     const SensorStatus sensor = my_arm.get_sensor();
@@ -44,31 +61,11 @@ static std::string build_status_payload(const arm_internation &my_arm)
 
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(3);
-    if (my_arm.protocol() == ArmProtocol::Dof4BB)
-    {
-        const Arm4DofPoseFloat left4 = my_arm.get_4dof_pose_float(0);
-        const Arm4DofPoseFloat right4 = my_arm.get_4dof_pose_float(1);
-        oss << "MODE:4DOF"
-            << ";L4:" << left4.x << "," << left4.y << "," << left4.z << "," << left4.pitch
-            << ";R4:" << right4.x << "," << right4.y << "," << right4.z << "," << right4.pitch
-            << ";VALVE_BITS:" << valve_bits
-            << ";MICRO_BITS:" << micro_bits;
-        return oss.str();
-    }
-
-    const ArmEndPosFloat lf = my_arm.get_arm_pos_float(0);
-    const ArmEndPosFloat rf = my_arm.get_arm_pos_float(1);
-    const ArmEndPosFloat lb = my_arm.get_arm_pos_float(2);
-    const ArmEndPosFloat rb = my_arm.get_arm_pos_float(3);
-
-    const GimbalAngleFloat gim = my_arm.get_gimbal_float();
-    
-    oss << "LF:" << lf.x << "," << lf.y
-        << ";RF:" << rf.x << "," << rf.y
-        << ";LB:" << lb.x << "," << lb.y
-        << ";RB:" << rb.x << "," << rb.y
-        << ";YAW:" << gim.yaw
-        << ";PITCH:" << gim.pitch
+    const Arm4DofPoseFloat left4 = my_arm.get_4dof_pose_float(0);
+    const Arm4DofPoseFloat right4 = my_arm.get_4dof_pose_float(1);
+    oss << "MODE:4DOF"
+        << ";L4:" << left4.x << "," << left4.y << "," << left4.z << "," << left4.pitch
+        << ";R4:" << right4.x << "," << right4.y << "," << right4.z << "," << right4.pitch
         << ";VALVE_BITS:" << valve_bits
         << ";MICRO_BITS:" << micro_bits;
     return oss.str();
@@ -101,7 +98,6 @@ static std::string build_status_payload(const arm_internation &my_arm)
  *
  * @section 异常处理
  * - open() 失败：不退出节点，保持存活等待重连
- * - 协议参数与编译协议不匹配：FATAL 并退出，不连接串口
  * - 无效命令：WARN 日志，不崩溃
  *
  * @param argc 命令行参数数量。
@@ -123,8 +119,6 @@ int main(int argc, char **argv)
     node->declare_parameter<std::string>("state_topic", "/arm_internation/state"); // 发布一次性事件，如下位机 BB CC 完成反馈
     node->declare_parameter<std::string>("ocr_answer_topic", "/ocr/answer");     // OCR 稳定答案，UInt8 0..3
     node->declare_parameter<double>("pos_scale", 0.01);                          // 位置解码缩放，默认0.01即1cm单位
-    node->declare_parameter<double>("angle_scale", 0.01);                        // 角度解码缩放，默认0.01即1度单位
-    node->declare_parameter<std::string>("protocol", "compiled");
 
     const std::string hw_id = node->get_parameter("hw_id").as_string();
     const int baud_rate = static_cast<int>(node->get_parameter("baud_rate").as_int());
@@ -135,22 +129,10 @@ int main(int argc, char **argv)
     const std::string ocr_answer_topic =
         node->get_parameter("ocr_answer_topic").as_string();
     const double pos_scale = node->get_parameter("pos_scale").as_double();
-    const double angle_scale = node->get_parameter("angle_scale").as_double();
-    const std::string protocol = node->get_parameter("protocol").as_string();
-
         //
     arm_internation my_arm;
-    if (!my_arm.set_protocol_from_string(protocol))
-    {
-        RCLCPP_FATAL(
-            logger,
-            "[arm_internation_node] requested protocol='%s' does not match compiled protocol='%s'",
-            protocol.c_str(), my_arm.protocol_name());
-        rclcpp::shutdown();
-        return 2;
-    }
-    my_arm.set_decode_scale(static_cast<float>(pos_scale), static_cast<float>(angle_scale));
-    RCLCPP_INFO(logger, "[arm_internation_node] compiled protocol: %s", my_arm.protocol_name());
+    my_arm.set_decode_scale(static_cast<float>(pos_scale));
+    RCLCPP_INFO(logger, "[arm_internation_node] protocol: %s", my_arm.protocol_name());
 
     auto cmd_sub = node->create_subscription<std_msgs::msg::String>(
         cmd_topic, rclcpp::QoS(20),
@@ -173,13 +155,6 @@ int main(int argc, char **argv)
                 RCLCPP_ERROR(logger,
                              "[arm_internation_node] OCR answer out of range [0,3]: %u",
                              static_cast<unsigned>(answer));
-                return;
-            }
-            if (my_arm.protocol() != ArmProtocol::Dof4BB)
-            {
-                RCLCPP_ERROR(logger,
-                             "[arm_internation_node] OCR answer requires protocol=4dof; current=%s",
-                             my_arm.protocol_name());
                 return;
             }
             if (!my_arm.is_open())
@@ -247,6 +222,16 @@ int main(int argc, char **argv)
             std_msgs::msg::String msg;
             msg.data = "DONE";
             state_pub->publish(msg);
+        }
+
+        const size_t diagnostic_count = my_arm.consume_diagnostic_feedback_count();
+        if (diagnostic_count > 0)
+        {
+            const Arm4DofDiagnostic diagnostic = my_arm.get_last_diagnostic();
+            std_msgs::msg::String msg;
+            msg.data = build_diagnostic_payload(diagnostic);
+            state_pub->publish(msg);
+            RCLCPP_WARN(logger, "[arm_internation_node] %s", msg.data.c_str());
         }
 
         if (now >= next_publish_time)

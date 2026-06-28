@@ -1,5 +1,0 @@
-#pragma once
-
-// 由 CMake 的 DOGVISION_ARM_USE_4DOF 选项生成。
-// 1: BB/4DOF 双臂协议；0: AA 平面机械臂协议。
-#cmakedefine01 DOGVISION_ARM_USE_4DOF

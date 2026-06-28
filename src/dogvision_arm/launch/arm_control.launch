@@ -3,22 +3,18 @@
   <arg name="baud_rate" default="115200"/>
   <arg name="port" default=""/>
   <arg name="pos_scale" default="0.01"/>
-  <arg name="angle_scale" default="0.01"/>
-  <arg name="protocol" default="compiled"/>
   <arg name="ocr_answer_topic" default="/ocr/answer"/>
-  <arg name="mission_config" default="$(find-pkg-share dogvision_arm)/config/pos_set.yaml"/>
+  <arg name="timeout_ms" default="3000"/>
 
   <node pkg="dogvision_arm" exec="arm_internation_node" name="arm_internation_node" output="screen">
     <param name="hw_id" value="$(var hw_id)" type="str"/>
     <param name="baud_rate" value="$(var baud_rate)" type="int"/>
     <param name="port" value="$(var port)" type="str"/>
     <param name="pos_scale" value="$(var pos_scale)" type="float"/>
-    <param name="angle_scale" value="$(var angle_scale)" type="float"/>
-    <param name="protocol" value="$(var protocol)" type="str"/>
     <param name="ocr_answer_topic" value="$(var ocr_answer_topic)" type="str"/>
   </node>
 
   <node pkg="dogvision_arm" exec="arm_mission_node" name="arm_mission_node" output="screen">
-    <param from="$(var mission_config)"/>
+    <param name="timeout_ms" value="$(var timeout_ms)" type="int"/>
   </node>
 </launch>

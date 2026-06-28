@@ -17,25 +17,27 @@ static void print_help()
     std::cout << "\n"
               << "  机械臂控制终端\n"
               << "  高层指令（发往 /arm/mission_cmd）\n"
-              << "    STOW[,ALL|alias]        收起\n"
-              << "    PICK[,ALL|alias]        吸取位置\n"
-              << "    PLACE,ALL|alias|id,X,Y  放置\n"
-              << "    VALVE/V,id|ALL,ON/OFF   电磁阀\n"
-              << "    PUMP/P,ON[,speed]|OFF   气泵\n"
+              << "    PICK,ID,x,y,z                 单臂到目标取\n"
+              << "    PICKALL,lx,ly,lz,rx,ry,rz     双臂到目标取\n"
+              << "    PLACE,ID,x,y,z                单臂到目标放\n"
+              << "    PLACEALL,lx,ly,lz,rx,ry,rz    双臂到目标放\n"
+              << "    PUTBACK,ID                    单臂放置到背部\n"
+              << "    PUTBACKALL                    双臂放置到背部\n"
+              << "    GETBACK,ID                    单臂从背部取\n"
+              << "    GETBACKALL                    双臂从背部取\n"
+              << "    ID 支持 0/L/LEFT/左 与 1/R/RIGHT/右\n"
               << "  低层指令（加 $ 前缀发往 /arm_internation/cmd）\n"
-              << "    协议由 DOGVISION_ARM_USE_4DOF 在编译时锁定\n"
-              << "    AA 平面臂: $LF,X:10,Y:20\n"
               << "    BB 4DOF:  $4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4\n"
               << "    BB 4DOF:  $4POSE,R,0.1,0.2,0.3,0.4\n"
               << "    BB 4DOF:  $4ACT,0/1\n"
-              << "    BB 4DOF:  $4PICK,L,0.45,0.42,-0.21\n"
-              << "    BB 4DOF:  $4PLACE1,R,0.45,-0.40,-0.21\n"
-              << "    BB 4DOF:  $4PLACE2,L,X:0.45,Y:0.40,Z:0.04\n"
-              << "    BB 4DOF:  $4PUTBACK,L / $4GETBACK,R\n"
-              << "    BB 4DOF:  $4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21\n"
-              << "    BB 4DOF:  $4PUTBACKALL\n"
+              << "    BB 4DOF:  $PICK,L,0.45,0.42,-0.21\n"
+              << "    BB 4DOF:  $PLACE,R,0.45,-0.40,-0.21\n"
+              << "    BB 4DOF:  $PUTBACK,L / $GETBACK,R\n"
+              << "    BB 4DOF:  $PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21\n"
+              << "    BB 4DOF:  $PLACEALL,0.45,0.42,-0.21,0.45,-0.42,-0.21\n"
+              << "    BB 4DOF:  $PUTBACKALL / $GETBACKALL\n"
               << "    BB 4DOF:  $START,0,0,0      带初始偏移启动(mm)\n"
-              << "    $V,id,ON/OFF                             \n"
+              << "    $V,id|ALL,ON/OFF                         \n"
               << "    $P,ON,speed                              \n"
               << "    系统                                      \n"
               << "    help    显示本帮助                         \n"
@@ -68,19 +70,18 @@ static std::string trim_line(const std::string& line)
  *   stdin 输入
  *      │
  *      ├── 以 '$' 开头 ──▶ /arm_internation/cmd      （低层协议指令）
- *      │                   例：$LF,X:10,Y:20
- *      │                       $4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
+ *      │                   例：$4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
  *      │                       $V,1,ON
  *      │
  *      └── 无前缀 ──────▶ /arm/mission_cmd          （高层任务指令）
- *                          例：STOW,ALL
- *                              PICK,RF
- *                              PLACE,ALL
+ *                          例：PICK,L,0.45,0.42,-0.21
+ *                              PLACEALL,0.45,0.42,-0.21,0.45,-0.42,-0.21
+ *                              GETBACKALL
  *
  * $ 前缀的设计意图：
  * - 区分"调试/手动控制"（低层）与"任务编排"（高层）两类使用场景
  * - 低层命令直接透传 arm_internation 协议引擎，不做任务级语义解析
- * - 高层命令由 arm_mission_node 拆解为一系列低层命令序列
+ * - 高层命令由 arm_mission_node 转发为一个 4DOF 动作，并等待 DONE 反馈
  *
  * @section 输入线程模型
  * std::getline() 在独立线程中阻塞等待用户输入，通过 atomic<bool> running

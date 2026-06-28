@@ -1,940 +1,640 @@
 # dogvision_arm
 
-ROS2 Jazzy 机械臂控制包，支持 **AA（平面4臂）** 和 **BB（4DOF双臂）** 两种协议。协议通过 CMake 宏在编译时锁定，一次构建只支持其中一种。
-
-## 架构概览
-
-本包采用三层职责分离架构：
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ arm_cmd_terminal_node        arm_mission_node        arm_internation_node │
-│ (用户终端 stdin)       ──▶   (任务拆解)        ──▶       (串口收发)      │
-│                              │                              │              │
-│ 发布: /arm/mission_cmd       │ 订阅: /arm/mission_cmd       │ 订阅: /arm_internation/cmd │
-│       /arm_internation/cmd   │ 发布: /arm_internation/cmd   │ 发布: /arm_internation/data │
-│                              │       /arm/mission_cmd(反馈)  │       /arm_internation/state│
-└─────────────────────────────────────────────────────────────────┘
-```
-
-| 层 | 节点 | 职责 |
-|----|------|------|
-| 人机交互 | `arm_cmd_terminal_node` | stdin 输入，按 `$` 前缀路由到高层或低层话题 |
-| 任务编排 | `arm_mission_node` | 理解"收起/吸取/放置"等高层语义，拆解为低层指令序列 |
-| 串口通信 | `arm_internation_node` | 协议帧打包/解析、串口连接/断线自动重连、状态发布 |
-
-核心库 `dogvision_arm_lib`（`arm_internation` 类）封装了串口连接管理、协议帧编解码、自动重连状态机、CRC-8 校验等底层细节。
+ROS2 上位机机械臂通信包，支持 BB/4DOF 双臂协议与 CC 云台协议。上位机负责文本命令解析、串口打帧、状态发布和高层任务等待；STM32 执行动作完成后返回 `BB CC FF EE CRC8`，节点再发布完成反馈。
 
 ---
 
-## 输入接口总览
+## 目录
 
-机械臂包当前没有 ROS Service 或 Action，所有控制输入来自 **终端 stdin、ROS 话题、启动参数、STM32 串口反馈** 或底层 C++ API。
-
-| 输入接口 | 类型/格式 | 接收方 | 控制用途 | 协议 |
-|---|---|---|---|---|
-| 终端标准输入 | 文本行 | `arm_cmd_terminal_node` | 无 `$` 发布高层任务；有 `$` 发布低层命令 | 取决于目标话题 |
-| `/arm/mission_cmd` | `std_msgs/msg/String` | `arm_mission_node` | 收起、吸取、启动、放置、阀和泵等任务编排 | 位置任务仅 AA；阀/泵 AA、BB 通用 |
-| `/arm_internation/cmd` | `std_msgs/msg/String` | `arm_internation_node` | 直接控制协议帧：AA 四臂/云台，BB 双臂动作，阀、泵、答案 | AA 或 BB |
-| `/ocr/answer` | `std_msgs/msg/UInt8` | `arm_internation_node` | 将 OCR 稳定答案 0-3 封装为 BB 05 发送 STM32 | 仅 BB/4DOF |
-| STM32 串口 | AA/BB 二进制帧 | `arm_internation_node` | 输入位姿、传感器状态和动作完成事件 | AA 01、BB 01、BB CC |
-| ROS 参数/YAML | 节点参数 | 三个节点 | 配置串口、协议一致性校验、话题和 AA 预设位置 | 启动时生效 |
-| `arm_internation` C++ API | 函数调用 | 直接使用核心库的程序 | 绕过文本话题直接发送协议命令 | AA 或 BB |
-
-### 节点分配与数据流
-
-```text
-stdin
-  │
-  ▼
-arm_cmd_terminal_node
-  ├─ 普通文本 ──▶ /arm/mission_cmd ──▶ arm_mission_node
-  │                                      └─▶ /arm_internation/cmd
-  └─ $低层命令 ─────────────────────────────▶ arm_internation_node ──▶ STM32
-
-/ocr/answer ─────────────────────────────────▶ arm_internation_node ──▶ STM32
-STM32 AA01/BB01/BBCC ─────────────────────────▶ arm_internation_node
-                                                ├─▶ /arm_internation/data
-                                                └─▶ /arm_internation/state
-```
-
-### 协议兼容性
-
-| 功能 | AA 平面4臂 | BB 4DOF双臂 |
-|---|---:|---:|
-| `/arm/mission_cmd` 的 `STOW/PICK/START/PLACE` | 支持 | 不支持，生成的 LF/RF/LB/RB 命令会被 BB 模式拒绝 |
-| `/arm/mission_cmd` 的 `VALVE/PUMP/PLACE_END` | 支持 | 支持 |
-| 低层 `LF/RF/LB/RB`、`G` | 支持 | 不支持 |
-| 低层 `4POSE/4ACT/4PICK/.../START,x,y,z` | 不支持 | 支持 |
-| 低层 `V/P/A` | 支持 | 支持 |
-| `/ocr/answer` 自动答案 | 不支持 | 支持，且仅接受 0-3 |
-
-> 协议不能通过 launch 动态切换。默认构建为 BB/4DOF；需要 AA 平面臂时，必须以 `DOGVISION_ARM_USE_4DOF=OFF` 重新编译。`protocol` 参数仅校验启动配置是否与编译结果一致。
+- [系统架构](#系统架构)
+- [BB 帧协议详解（下位机参考）](#bb-帧协议详解下位机参考)
+  - [CRC8 算法](#crc8-算法)
+  - [上行帧（STM32 → 上位机）](#上行帧stm32--上位机)
+  - [下行帧（上位机 → STM32）](#下行帧上位机--stm32)
+- [CC 云台协议](#cc-云台协议)
+- [节点与话题](#节点与话题)
+- [测试接口](#测试接口)
+  - [终端命令测试](#终端命令测试)
+  - [C++ 单元测试](#c-单元测试)
+  - [手动发送话题测试](#手动发送话题测试)
+- [启动与参数](#启动与参数)
+- [下位机对接要点](#下位机对接要点)
 
 ---
 
-## 快速启动
+## 系统架构
 
-### 标准启动
+```mermaid
+graph TD
+    A[arm_cmd_terminal_node] -->|高层任务| B[/arm/mission_cmd]
+    A -->|$低层命令| C[/arm_internation/cmd]
+    B --> D[arm_mission_node]
+    D -->|转发低层命令| C
+    C --> E[arm_internation_node]
+    E -->|串口 BB/CC 帧| F[STM32 下位机]
+    F -->|BB 01 反馈 / BB CC 完成| E
+    E -->|状态数据| G[/arm_internation/data]
+    E -->|完成事件 DONE| H[/arm_internation/state]
+    H -->|监听 DONE| D
+    D -->|FEEDBACK:DONE| B
+```
+
+> **代码结构**：`arm_internation.cpp` 负责串口连接/CRC/重连等公共逻辑；`arm_internation_bb.cpp` 实现 BB/4DOF 双臂协议；`arm_internation_cc.cpp` 实现 CC 云台协议。文本命令由 `handle_text_command()` 统一入口按协议分派。
+
+---
+
+## BB 帧协议详解（下位机参考）
+
+> **关键约定**：所有多字节数值均为 **小端字节序（Little-Endian）**，float 类型为 IEEE 754 单精度（4 字节），帧尾固定为 `FF EE`，最后一字节为 CRC8 校验值。
+
+### CRC8 算法
+
+- **多项式**：`0x07`（CRC-8/SMBus）
+- **初始值**：`0x00`
+- **不反转、不异或输出**
+- **C 参考实现**：
+
+```c
+uint8_t calc_crc8(const uint8_t *data, size_t len) {
+    uint8_t crc = 0x00;
+    for (size_t i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++)
+            crc = (crc & 0x80) ? (crc << 1) ^ 0x07 : (crc << 1);
+    }
+    return crc;
+}
+```
+
+---
+
+### 上行帧（STM32 → 上位机）
+
+#### BB 01 — 周期位姿反馈（固定 46 字节）
+
+STM32 应以约 100Hz 周期发送此帧，CRC8 覆盖字节 `[0]~[44]`。
+
+| 字节偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | uint8 | 帧头 |
+| 1 | 1 | `0x01` | uint8 | 命令字：反馈 |
+| 2-5 | 4 | 左臂 X | float32 LE | 末端 X 坐标 |
+| 6-9 | 4 | 左臂 Y | float32 LE | 末端 Y 坐标 |
+| 10-13 | 4 | 左臂 Z | float32 LE | 末端 Z 坐标 |
+| 14-17 | 4 | 左臂 Pitch | float32 LE | 末端俯仰角 |
+| 18-21 | 4 | 右臂 X | float32 LE | 末端 X 坐标 |
+| 22-25 | 4 | 右臂 Y | float32 LE | 末端 Y 坐标 |
+| 26-29 | 4 | 右臂 Z | float32 LE | 末端 Z 坐标 |
+| 30-33 | 4 | 右臂 Pitch | float32 LE | 末端俯仰角 |
+| 34 | 1 | valve0 | uint8 | bit0=1 表示开 |
+| 35 | 1 | valve1 | uint8 | bit0=1 表示开 |
+| 36 | 1 | valve2 | uint8 | bit0=1 表示开 |
+| 37 | 1 | valve3 | uint8 | bit0=1 表示开 |
+| 38 | 1 | microswitch0 | uint8 | bit0=1 表示触发（预留） |
+| 39 | 1 | microswitch1 | uint8 | bit0=1 表示触发（预留） |
+| 40 | 1 | microswitch2 | uint8 | bit0=1 表示触发（预留） |
+| 41 | 1 | microswitch3 | uint8 | bit0=1 表示触发（预留） |
+| 42 | 1 | reserved | uint8 | 预留，填 0 |
+| 43 | 1 | `0xFF` | uint8 | 帧尾 A |
+| 44 | 1 | `0xEE` | uint8 | 帧尾 B |
+| 45 | 1 | CRC8 | uint8 | 覆盖 [0]~[44] |
+
+#### BB CC — 动作完成事件（固定 5 字节）
+
+当 STM32 完成一个动作（PICK/PLACE/PUTBACK/GETBACK 及其变体）后，发送此帧。上位机收到后发布 `/arm_internation/state = "DONE"`。
+
+| 字节偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | uint8 | 帧头 |
+| 1 | 1 | `0xCC` | uint8 | 命令字：动作完成 |
+| 2 | 1 | `0xFF` | uint8 | 帧尾 A |
+| 3 | 1 | `0xEE` | uint8 | 帧尾 B |
+| 4 | 1 | CRC8 | uint8 | 覆盖 [0]~[3] |
+
+---
+
+### 下行帧（上位机 → STM32）
+
+> **通用帧结构**：`BB <CMD> [DATA...] FF EE CRC8`，CRC8 覆盖 CRC 字节之前的所有字节。
+
+#### 命令字速查表
+
+| 命令字 | 帧长 | 用途 | 可控末端 |
+|:---:|:---:|------|:---:|
+| `0x02` | 22 | 4DOF 位姿控制 | ✅ |
+| `0x03` | 6 | 预设动作触发 | ❌ |
+| `0x04` | 7 | 电磁阀控制 | — |
+| `0x05` | 8 | 答案/语音 | — |
+| `0x06` | 10 | 气泵控制 | — |
+| `0x11` | 18 | 单臂取块 | ✅ |
+| `0x12` | 18 | 单臂放块 | ✅ |
+| `0x14` | 6 | 单臂放回背部 | ❌ |
+| `0x15` | 6 | 单臂从背部取块 | ❌ |
+| `0x21` | 29 | 双臂取块 | ✅ |
+| `0x22` | 5 | 双臂放回背部 | ❌ |
+| `0x23` | 29 | 双臂放块 | ✅ |
+| `0x24` | 5 | 双臂从背部取块 | ❌ |
+| `0x99` | 17 | 带偏移启动 | — |
+
+---
+
+#### BB 02 — 4DOF 单臂位姿控制（22 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x02` | | |
+| 2 | 1 | arm_id | uint8 | 0=左臂, 1=右臂 |
+| 3-6 | 4 | X | float32 LE | |
+| 7-10 | 4 | Y | float32 LE | |
+| 11-14 | 4 | Z | float32 LE | |
+| 15-18 | 4 | Pitch | float32 LE | |
+| 19 | 1 | `0xFF` | | |
+| 20 | 1 | `0xEE` | | |
+| 21 | 1 | CRC8 | | 覆盖 [0]~[20] |
+
+---
+
+#### BB 03 — 预设动作触发（6 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x03` | | |
+| 2 | 1 | action_id | uint8 | 0=中止, 1..N=预设动作 |
+| 3 | 1 | `0xFF` | | |
+| 4 | 1 | `0xEE` | | |
+| 5 | 1 | CRC8 | | 覆盖 [0]~[4] |
+
+---
+
+#### BB 04 — 电磁阀控制（7 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x04` | | |
+| 2 | 1 | valve_id | uint8 | 0~3 |
+| 3 | 1 | state | uint8 | 0=关, 1=开 |
+| 4 | 1 | `0xFF` | | |
+| 5 | 1 | `0xEE` | | |
+| 6 | 1 | CRC8 | | 覆盖 [0]~[5] |
+
+---
+
+#### BB 05 — 答案/语音控制（8 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x05` | | |
+| 2 | 1 | answer | uint8 | 0~255 |
+| 3 | 1 | 0x00 | | 预留 |
+| 4 | 1 | 0x00 | | 预留 |
+| 5 | 1 | `0xFF` | | |
+| 6 | 1 | `0xEE` | | |
+| 7 | 1 | CRC8 | | 覆盖 [0]~[6] |
+
+---
+
+#### BB 06 — 气泵控制（10 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x06` | | |
+| 2 | 1 | on_off | uint8 | 0=关泵, 1=开泵 |
+| 3-6 | 4 | speed | float32 LE | 泵速 |
+| 7 | 1 | `0xFF` | | |
+| 8 | 1 | `0xEE` | | |
+| 9 | 1 | CRC8 | | 覆盖 [0]~[8] |
+
+---
+
+#### BB 11 — 单臂取块（18 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x11` | | |
+| 2 | 1 | arm_id | uint8 | 0=左臂, 1=右臂 |
+| 3-6 | 4 | X | float32 LE | **单位：米（m）** |
+| 7-10 | 4 | Y | float32 LE | **单位：米（m）** |
+| 11-14 | 4 | Z | float32 LE | **单位：米（m）** |
+| 15 | 1 | `0xFF` | | |
+| 16 | 1 | `0xEE` | | |
+| 17 | 1 | CRC8 | | 覆盖 [0]~[16] |
+
+---
+
+#### BB 12 — 单臂放块（18 字节）
+
+格式同 BB 11，命令字为 `0x12`。XYZ 单位 **米**。
+
+---
+
+#### BB 14 — 单臂放回背部（6 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x14` | | |
+| 2 | 1 | arm_id | uint8 | 0=左臂, 1=右臂 |
+| 3 | 1 | `0xFF` | | |
+| 4 | 1 | `0xEE` | | |
+| 5 | 1 | CRC8 | | 覆盖 [0]~[4] |
+
+---
+
+#### BB 15 — 单臂从背部取块（6 字节）
+
+格式同 BB 14，命令字为 `0x15`。
+
+---
+
+#### BB 21 — 双臂取块（29 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x21` | | |
+| 2-5 | 4 | 左臂 X | float32 LE | **单位：米（m）** |
+| 6-9 | 4 | 左臂 Y | float32 LE | |
+| 10-13 | 4 | 左臂 Z | float32 LE | |
+| 14-17 | 4 | 右臂 X | float32 LE | |
+| 18-21 | 4 | 右臂 Y | float32 LE | |
+| 22-25 | 4 | 右臂 Z | float32 LE | |
+| 26 | 1 | `0xFF` | | |
+| 27 | 1 | `0xEE` | | |
+| 28 | 1 | CRC8 | | 覆盖 [0]~[27] |
+
+---
+
+#### BB 22 — 双臂放回背部（5 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x22` | | |
+| 2 | 1 | `0xFF` | | |
+| 3 | 1 | `0xEE` | | |
+| 4 | 1 | CRC8 | | 覆盖 [0]~[3] |
+
+---
+
+#### BB 23 — 双臂放块（29 字节）
+
+格式同 BB 21，命令字为 `0x23`。XYZ 单位 **米**。
+
+---
+
+#### BB 24 — 双臂从背部取块（5 字节）
+
+格式同 BB 22，命令字为 `0x24`。
+
+---
+
+#### BB 99 — 带初始偏移启动（17 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xBB` | | |
+| 1 | 1 | `0x99` | | |
+| 2-5 | 4 | offsetX | float32 LE | **单位：毫米（mm）** |
+| 6-9 | 4 | offsetY | float32 LE | **单位：毫米（mm）** |
+| 10-13 | 4 | offsetZ | float32 LE | **单位：毫米（mm）** |
+| 14 | 1 | `0xFF` | | |
+| 15 | 1 | `0xEE` | | |
+| 16 | 1 | CRC8 | | 覆盖 [0]~[15] |
+
+> ⚠️ **注意单位差异**：BB 11/12/21/23 的 XYZ 为 **米**，BB 99 的偏移为 **毫米**。
+
+---
+
+## CC 云台协议
+
+> **帧头**：`0xCC`，帧尾 `FF EE`，CRC8 同 BB 协议（多项式 `0x07`）。多字节数值均为 float32 小端。
+
+### 下行帧（上位机 → STM32）
+
+#### CC 99 — 启动相机云台（5 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xCC` | uint8 | 帧头 |
+| 1 | 1 | `0x99` | uint8 | 命令字：启动云台 |
+| 2 | 1 | `0xFF` | uint8 | 帧尾 A |
+| 3 | 1 | `0xEE` | uint8 | 帧尾 B |
+| 4 | 1 | CRC8 | uint8 | 覆盖 [0]~[3] |
+
+#### CC 01 — 运动云台到目标位置（17 字节）
+
+| 偏移 | 长度 | 字段 | 类型 | 说明 |
+|:---:|:---:|------|------|------|
+| 0 | 1 | `0xCC` | uint8 | 帧头 |
+| 1 | 1 | `0x01` | uint8 | 命令字：运动到目标 |
+| 2-5 | 4 | J1 | float32 LE | **单位：度** |
+| 6-9 | 4 | PITCH | float32 LE | **单位：度** |
+| 10-13 | 4 | YAW | float32 LE | **单位：度** |
+| 14 | 1 | `0xFF` | uint8 | 帧尾 A |
+| 15 | 1 | `0xEE` | uint8 | 帧尾 B |
+| 16 | 1 | CRC8 | uint8 | 覆盖 [0]~[15] |
+
+### 文本命令
+
+| 命令 | 对应帧 | 说明 |
+| --- | --- | --- |
+| `CAM_START` / `GIMBAL_START` / `云台启动` | `CC 99 FF EE CRC8` | 启动相机云台 |
+| `CAM_MOVE,j1,pitch,yaw` / `GIMBAL_MOVE,...` / `云台运动,...` | `CC 01 j1 pitch yaw FF EE CRC8` | 运动到目标角度 |
+
+---
+
+## 节点与话题
+
+| 节点 | 作用 |
+| --- | --- |
+| `arm_internation_node` | 连接 STM32 串口，解析 BB/CC 帧，发布状态与完成事件 |
+| `arm_mission_node` | 单任务等待模型：接收高层任务，转为低层命令，等待 DONE 后反馈 |
+| `arm_cmd_terminal_node` | 终端输入路由。无前缀发高层任务，`$` 前缀直发低层命令 |
+
+| 话题 | 类型 | 方向 | 说明 |
+| --- | --- | --- | --- |
+| `/arm_internation/cmd` | `std_msgs/msg/String` | 输入 | 低层文本命令 |
+| `/arm_internation/data` | `std_msgs/msg/String` | 输出 | 格式 `MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n` |
+| `/arm_internation/state` | `std_msgs/msg/String` | 输出 | 收到 BB CC 时发布 `DONE` |
+| `/arm/mission_cmd` | `std_msgs/msg/String` | 输入/反馈 | 高层任务入口；完成后同话题发布 `FEEDBACK:DONE`，忙时 `FEEDBACK:BUSY` |
+| `/ocr/answer` | `std_msgs/msg/UInt8` | 输入 | 发送 `BB 05` 答案字段 |
+
+---
+
+## 测试接口
+
+### 终端命令测试
+
+使用 `arm_cmd_terminal_node` 可在终端直接测试所有命令。启动方式：
 
 ```bash
+ros2 launch dogvision_arm arm_test.launch
+```
+
+#### 高层任务命令（无前缀，发往 `/arm/mission_cmd`）
+
+这些命令经过 `arm_mission_node` 的任务队列，单任务串行执行，完成后反馈 `FEEDBACK:DONE`。
+
+| 命令 | 对应 BB 帧 | 说明 |
+| --- | --- | --- |
+| `PICK,ID,x,y,z` | `BB 11 arm_id x y z FF EE CRC8` | 单臂到目标取块 |
+| `PLACE,ID,x,y,z` | `BB 12 arm_id x y z FF EE CRC8` | 单臂到目标放块 |
+| `PUTBACK,ID` | `BB 14 arm_id FF EE CRC8` | 单臂放回背部 |
+| `GETBACK,ID` | `BB 15 arm_id FF EE CRC8` | 单臂从背部取块 |
+| `PICKALL,lx,ly,lz,rx,ry,rz` | `BB 21 Lx Ly Lz Rx Ry Rz FF EE CRC8` | 双臂取块 |
+| `PLACEALL,lx,ly,lz,rx,ry,rz` | `BB 23 Lx Ly Lz Rx Ry Rz FF EE CRC8` | 双臂放块 |
+| `PUTBACKALL` | `BB 22 FF EE CRC8` | 双臂放回背部 |
+| `GETBACKALL` | `BB 24 FF EE CRC8` | 双臂从背部取块 |
+
+`ID` 支持：`0` / `L` / `LEFT` / `左` 表示左臂；`1` / `R` / `RIGHT` / `右` 表示右臂。坐标单位为米。
+
+`arm_mission_node` 是单任务等待模型：执行中收到新任务会拒绝并反馈 `FEEDBACK:BUSY`。默认超时 3 秒后若仍未收到 STM32 的 `BB CC` 完成帧，自动解除 busy 并反馈 `FEEDBACK:DONE`（日志标为 TIMEOUT）。
+
+#### 低层调试命令（`$` 前缀，直发 `/arm_internation/cmd`）
+
+这些命令直接打包为 BB 帧发送，不经过任务队列，适合调试和手动控制。
+
+```bash
+# === 位姿控制（BB 02）===
+$4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
+$4POSE,R,0.1,0.2,0.3,0.4
+
+# === 预设动作（BB 03）===
+$4ACT,1          # 触发预设动作 1
+$4ACT,0          # 中止当前动作
+
+# === 单臂取放（BB 11/12）===
+$PICK,L,0.45,0.42,-0.21
+$PLACE,R,0.45,-0.40,-0.21
+
+# === 单臂背部动作（BB 14/15）===
+$PUTBACK,L
+$GETBACK,R
+
+# === 双臂取放（BB 21/23）===
+$PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21
+$PLACEALL,0.45,0.42,-0.21,0.45,-0.42,-0.21
+
+# === 双臂背部动作（BB 22/24）===
+$PUTBACKALL
+$GETBACKALL
+
+# === 启动（BB 99，偏移单位 mm）===
+$START,0,0,0
+
+# === 电磁阀（BB 04）===
+$V,1              # 翻转电磁阀 1
+$V,1,ON           # 打开电磁阀 1
+$V,ALL,ON         # 全部打开
+
+# === 气泵（BB 06）===
+$P,ON,2500        # 开泵，速度 2500
+$P,OFF            # 关泵
+
+# === 云台（CC 99/01）===
+$CAM_START        # 启动相机云台
+$CAM_MOVE,90,-30,45  # 运动到 J1=90° PITCH=-30° YAW=45°
+```
+
+---
+
+### C++ 单元测试
+
+```bash
+colcon build --packages-select dogvision_arm
+ctest --test-dir build/dogvision_arm --output-on-failure
+```
+
+测试文件及覆盖范围：
+
+| 测试文件 | 覆盖内容 |
+| --- | --- |
+| `test/answer_frame_test.cpp` | 使用伪终端（pty）验证 BB 11/12/14/15/21/22/23/24 帧打包正确性，逐字节校验帧头、命令字、arm_id、坐标值、尾部和 CRC |
+| `test/mission_command_test.cpp` | 验证 `ArmMissionController` 状态机：命令解析、busy 拒绝、DONE 完成流转、中文别名 |
+
+---
+
+### 手动发送话题测试
+
+在不启动 `arm_cmd_terminal_node` 的情况下，可直接用 `ros2 topic pub` 向话题发送命令进行调试。
+
+#### 高层任务（`/arm/mission_cmd`）
+
+```bash
+# 单臂取块
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'PICK,L,0.45,0.42,-0.21'"
+
+# 单臂放块
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'PLACE,R,0.45,-0.40,-0.21'"
+
+# 单臂放回背部
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'PUTBACK,L'"
+
+# 单臂从背部取块
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'GETBACK,R'"
+
+# 双臂取块
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'"
+
+# 双臂放块
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'PLACEALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'"
+
+# 双臂放回背部
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'PUTBACKALL'"
+
+# 双臂从背部取块
+ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'GETBACKALL'"
+```
+
+> **注意**：`arm_mission_node` 是单任务模型，上一个任务未完成（未收到 BB CC）时发送新任务会收到 `FEEDBACK:BUSY`。
+
+#### 低层命令（`/arm_internation/cmd`）
+
+```bash
+# 位姿控制（BB 02）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'"
+
+# 预设动作（BB 03）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: '4ACT,1'"
+
+# 单臂取块（BB 11）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'PICK,L,0.45,0.42,-0.21'"
+
+# 单臂放块（BB 12）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'PLACE,R,0.45,-0.40,-0.21'"
+
+# 单臂背部动作（BB 14/15）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'PUTBACK,L'"
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'GETBACK,R'"
+
+# 双臂取放（BB 21/23）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'"
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'PLACEALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'"
+
+# 双臂背部动作（BB 22/24）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'PUTBACKALL'"
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'GETBACKALL'"
+
+# 启动（BB 99，偏移单位 mm）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'START,0,0,0'"
+
+# 电磁阀（BB 04）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'V,1,ON'"
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'V,ALL,OFF'"
+
+# 气泵（BB 06）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'P,ON,2500'"
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'P,OFF'"
+
+# 云台启动（CC 99）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'CAM_START'"
+
+# 云台运动（CC 01）
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: 'CAM_MOVE,90,-30,45'"
+```
+
+#### 模拟 STM32 完成反馈
+
+如果需要在没有真实 STM32 的情况下测试 `arm_mission_node` 的状态机流转，可以手动发布 DONE 事件：
+
+```bash
+# 模拟 STM32 动作完成，使 arm_mission_node 解除 busy
+ros2 topic pub --once /arm_internation/state std_msgs/msg/String "data: 'DONE'"
+```
+
+#### 监听状态
+
+```bash
+# 监听机械臂实时位姿数据
+ros2 topic echo /arm_internation/data
+
+# 监听完成事件
+ros2 topic echo /arm_internation/state
+
+# 监听任务反馈
+ros2 topic echo /arm/mission_cmd
+```
+
+---
+
+## 启动与参数
+
+```bash
+colcon build --packages-select dogvision_arm
+source install/setup.bash
 ros2 launch dogvision_arm arm_control.launch
 ```
 
-### 编译协议选择
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `hw_id` | `0483:5740` | 自动连接的 USB VID:PID |
+| `baud_rate` | `115200` | 串口波特率 |
+| `port` | 空 | 指定串口路径；留空时按 `hw_id` 自动重连 |
+| `pos_scale` | `0.01` | 兼容 int16 位置视图缩放 |
+| `ocr_answer_topic` | `/ocr/answer` | OCR 答案输入话题 |
+| `timeout_ms` | `3000` | 任务超时（ms），超时后自动解除 busy；设 0 禁用 |
 
-```bash
-# BB/4DOF（默认）
-colcon build --packages-select dogvision_arm \
-  --cmake-args -DDOGVISION_ARM_USE_4DOF=ON
-
-# AA 平面机械臂
-colcon build --packages-select dogvision_arm \
-  --cmake-args -DDOGVISION_ARM_USE_4DOF=OFF
-```
-
-切换协议时应清理该包的 CMake 缓存，或为两种配置使用不同的 `build`、`install` 目录。
-
-### 启动完整调试模式（含终端节点）
+测试启动（带终端）：
 
 ```bash
 ros2 launch dogvision_arm arm_test.launch
 ```
 
-`arm_test.launch` 相比 `arm_control.launch` 额外启动了 `arm_cmd_terminal_node`，适合开发和调试。
-
-### 单独运行终端命令节点
-
-```bash
-ros2 run dogvision_arm arm_cmd_terminal_node
-```
-
-在终端输入 `help` 查看支持的命令。
-
 ---
 
-## 三节点详解
+## 下位机对接要点
 
-### 1. `arm_internation_node` — 串口通信节点
+以下是对接 STM32 固件时需要关注的协议细节：
 
-**职责**：串口连接管理、协议帧收发、断线自动重连、状态发布。
+### 1. 帧同步策略
 
-#### 订阅话题
+上位机使用 **滑动窗口 + 帧头搜索** 方式解析字节流：
+- 在缓冲区中搜索 `0xBB` 帧头
+- 检查第二字节确定帧类型和长度
+- 验证 `FF EE` 尾部和 CRC8
+- 坏帧丢弃当前 `0xBB`，继续搜索下一个
 
-| 话题 | 类型 | QoS | 说明 |
-|------|------|-----|------|
-| `/arm_internation/cmd` | `std_msgs/String` | 20 | 低层协议命令（见下方命令参考） |
-| `/ocr/answer` | `std_msgs/UInt8` | reliable/volatile | OCR 稳定答案 `mod4`（0-3），4DOF 模式下转发为 BB 05 |
+因此 STM32 发送时务必保证：
+- 帧间不加额外填充字节
+- 每帧独立完整，CRC 正确
+- BB 01 周期建议 ≤100Hz，避免上位机缓冲区溢出（缓冲区 512 字节）
 
-#### 发布话题
+### 2. 单位关键差异
 
-| 话题 | 类型 | QoS | 频率 | 说明 |
-|------|------|-----|------|------|
-| `/arm_internation/data` | `std_msgs/String` | 20 | 20Hz (50ms) | 机械臂实时状态（协议相关格式见下方） |
-| `/arm_internation/state` | `std_msgs/String` | 20 | 事件触发 | 下位机动作完成事件，收到 `BB CC FF EE CRC8` 后发布 `DONE` |
+| 帧类型 | 坐标单位 |
+| --- | --- |
+| BB 02 (4POSE) | 未限定，由双方约定 |
+| BB 11/12/21/23 (PICK/PLACE) | **米（m）** |
+| BB 99 (START) | **毫米（mm）** |
 
-#### 参数
+下位机解析 BB 11/12/21/23 时，需将米转为内部单位（如毫米：`×1000`）。
 
-| 参数 | 默认值 | 类型 | 说明 |
-|------|--------|------|------|
-| `hw_id` | `"0483:5740"` | string | USB 硬件 ID (VID:PID)，自动扫描匹配 |
-| `baud_rate` | `115200` | int | 串口波特率 |
-| `port` | `""` | string | 串口设备路径（如 `/dev/ttyUSB0`），留空则按 `hw_id` 自动查找 |
-| `protocol` | `"compiled"` | string | 编译协议校验；`compiled` 自动匹配，也可填写与编译结果一致的 AA/BB 别名 |
-| `pos_scale` | `0.01` | double | 位置解码缩放因子（仅影响 `get_arm_pos()` int16 视图，默认 1cm） |
-| `angle_scale` | `0.01` | double | 角度解码缩放因子（仅影响 `get_gimbal()` int16 视图） |
-| `cmd_topic` | `"/arm_internation/cmd"` | string | 命令订阅话题名 |
-| `data_topic` | `"/arm_internation/data"` | string | 状态发布话题名 |
-| `state_topic` | `"/arm_internation/state"` | string | 一次性事件发布话题名 |
-| `ocr_answer_topic` | `"/ocr/answer"` | string | OCR 稳定答案订阅话题名 |
+### 3. arm_id 约定
 
-#### 自动重连机制
+全部命令中 `arm_id` 字段：**0 = 左臂，1 = 右臂**。
 
-- 支持通过 `hw_id` 自动扫描 `/dev/ttyACM*` 和 `/dev/ttyUSB*` 并匹配 USB VID:PID
-- 使用 **libusb** 辅助掉线检测（亚秒级感知 USB 拔出），不依赖串口驱动超时
-- 断线后自动清空上报缓存（避免读出陈旧数据），按 1 秒间隔重试
-- 支持指定 `port` 直连（跳过 HWID 扫描）
+### 4. 完成反馈必须发送 BB CC
 
----
+所有动作命令（BB 11/12/14/15/21/22/23/24）执行完成后，STM32 **必须** 发送 `BB CC FF EE CRC8`，否则上位机的 `arm_mission_node` 将永远处于 busy 状态，拒绝后续任务。
 
-### 2. `arm_mission_node` — 任务编排节点
+### 5. BB 99 启动时序
 
-**职责**：接收高层语义命令，拆解为多步低层串口指令序列，每条命令完成后发布 `FEEDBACK:DONE`。
+上位机期望的启动流程：
+1. STM32 上电后开始周期性发送 BB 01 反馈帧
+2. 上位机连接串口后发送 `BB 99 offsetX offsetY offsetZ FF EE CRC8`
+3. STM32 收到 BB 99 后初始化机械臂并进入就绪状态
+4. 后续正常收发动作命令
 
-> 该节点的 `STOW/PICK/START/PLACE` 使用 `LF/RF/LB/RB,X,Y` 格式，属于 AA 平面4臂控制。BB/4DOF 模式下这些运动命令会被 `arm_internation_node` 拒绝。`VALVE`、`PUMP` 和 `PLACE_END` 产生的阀/泵命令可在两种协议下使用。
+### 6. 电磁阀状态一致性
 
-#### 订阅话题
+`V,id`（无状态参数）依赖上位机内部的翻转缓存，如果 STM32 端电磁阀状态因外部原因改变（如掉电复位），上位机缓存不会自动同步。建议测试时使用 `V,id,ON` / `V,id,OFF` 显式设置。
 
-| 话题 | 类型 | QoS | 说明 |
-|------|------|-----|------|
-| `/arm/mission_cmd` | `std_msgs/String` | 10 | 高层任务命令 |
+### 7. 串口参数
 
-#### 发布话题
-
-| 话题 | 类型 | QoS | 说明 |
-|------|------|-----|------|
-| `/arm_internation/cmd` | `std_msgs/String` | 10 | 拆解后的低层指令序列 |
-| `/arm/mission_cmd` | `std_msgs/String` | 10 | 任务完成反馈 `FEEDBACK:DONE` |
-
-#### 参数
-
-| 参数 | 默认值 | 类型 | 说明 |
-|------|--------|------|------|
-| `mission_topic` | `"/arm/mission_cmd"` | string | 任务命令订阅话题 |
-| `cmd_topic` | `"/arm_internation/cmd"` | string | 低层命令发布话题 |
-| `start_pos.*` | 见 YAML | double | 各臂启动位置 (x, y) |
-| `stow_pos.*` | 见 YAML | double | 各臂收起位置 (x, y) |
-| `pick_pos.*` | 见 YAML | double | 各臂吸取位置 (x, y) |
-| `place_pos.*` | 见 YAML | double | 各臂放置位置 (x, y) |
-
-位置参数通过 `pos_set.yaml` 配置，支持 `LF`/`RF`/`LB`/`RB` 四个臂别名。
-
-> 当前 `mission_topic` 只改变任务命令的订阅话题；`FEEDBACK:DONE` 仍固定发布到 `/arm/mission_cmd`。若重映射任务入口，反馈监听端仍需订阅默认话题。
-
----
-
-### 3. `arm_cmd_terminal_node` — 终端命令节点
-
-**职责**：提供 stdin 终端交互，根据输入前缀路由到不同话题。
-
-#### 路由规则
-
-| 输入前缀 | 发布话题 | 示例 |
-|----------|----------|------|
-| 无前缀 | `/arm/mission_cmd` | `STOW,ALL` |
-| `$` 开头 | `/arm_internation/cmd` | `$LF,X:10,Y:20` |
-
-#### 发布话题
-
-| 话题 | 类型 | QoS | 说明 |
-|------|------|-----|------|
-| `/arm/mission_cmd` | `std_msgs/String` | 10 | 高层任务命令（无 $ 前缀） |
-| `/arm_internation/cmd` | `std_msgs/String` | 10 | 低层协议命令（带 $ 前缀） |
-
-#### 参数
-
-| 参数 | 默认值 | 类型 | 说明 |
-|------|--------|------|------|
-| `cmd_topic` | `"/arm_internation/cmd"` | string | 低层命令发布话题 |
-| `mission_topic` | `"/arm/mission_cmd"` | string | 高层任务发布话题 |
-
-#### 内置命令
-
-在终端输入：
-- `help` / `h` — 显示帮助信息
-- `quit` / `exit` — 退出终端节点
-
----
-
-## 命令参考
-
-### 低层协议命令（发布到 `/arm_internation/cmd`）
-
-这些命令由 `arm_internation` 类中的 `handle_text_command()` 解析，直接打包为协议帧通过串口发送。
-
-#### AA 平面协议命令
-
-| 命令格式 | 说明 | 示例 |
-|----------|------|------|
-| `<alias>,X:<x>,Y:<y>` | 控制机械臂末端坐标 | `LF,X:10,Y:20` |
-| `<alias>,<x>,<y>` | 简写格式 | `RF,10,20` |
-| `G,<yaw>,<pitch>` | 控制云台角度 | `G,0,0` |
-
-**机械臂别名**：`LF`/`FL`(0), `RF`/`FR`(1), `LB`/`BL`(2), `RB`/`BR`(3)
-
-#### BB 4DOF 协议命令
-
-| 命令格式 | 说明 | 示例 |
-|----------|------|------|
-| `4POSE,<arm>,X:<x>,Y:<y>,Z:<z>,PITCH:<pitch>` | 控制 4DOF 臂位姿（带前缀） | `4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4` |
-| `4POSE,<arm>,<x>,<y>,<z>,<pitch>` | 简写格式 | `4POSE,R,0.1,0.2,0.3,0.4` |
-| `4ACT,<id>` | 触发预设动作（0=中止, 1-N=动作） | `4ACT,1` |
-| `4PICK,  <arm>,<x>,<y>,<z>`   | 发送 `BB 11`，单臂按 PC 目标点取块，xyz 单位 m | `4PICK,L,0.45,0.42,-0.21` |
-| `4PLACE,<arm>,<x>,<y>,<z>`    | 发送 `BB 12`，单臂放块，xyz 单位 m | `4PLACE1,R,0.45,-0.40,-0.21` |
-| `4PUTBACK,<arm>`              | 发送 `BB 14`，单臂放块到背部固定动作 | `4PUTBACK,L` |
-| `4GETBACK,<arm>`              | 发送 `BB 15`，单臂从背部取块固定动作 | `4GETBACK,R` |
-| `4PICKALL,<lx>,<ly>,<lz>,<rx>,<ry>,<rz>` | 发送 `BB 21`，双臂按 PC 目标点取块，xyz 单位 m | `4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21` |
-| `4PUTBACKALL` | 发送 `BB 22`，双臂放块到背部固定动作 | `4PUTBACKALL` |
-| `START,<x>,<y>,<z>` | 发送 `BB 99` 带初始偏移启动，偏移单位 mm | `START,0,0,0` |
-| `START,X:<x>,Y:<y>,Z:<z>` | 带前缀写法，等价于上方简写 | `START,X:0,Y:0,Z:0` |
-
-**4DOF 臂别名**：`L`/`LEFT`/`左`/`0`(左臂), `R`/`RIGHT`/`右`/`1`(右臂)
-
-#### 通用命令（AA 和 BB 均支持）
-
-| 命令格式 | 说明 | 示例 |
-|----------|------|------|
-| `V,<id>,<state>` | 电磁阀控制 | `V,1,ON` / `V,1,OFF` |
-| `V,<id>` | 翻转电磁阀状态 | `V,1` |
-| `P,ON,<speed>` | 开泵并设速度 | `P,ON,2500` |
-| `P,OFF` | 关泵 | `P,OFF` |
-| `A,<answer>` | 手动发送任务赛答案 (0-255)；BB 模式封装为 BB 05 | `A,0` |
-
-**电磁阀 state**：`ON`/`1`/`OPEN`/`TRUE` 表示开，`OFF`/`0`/`CLOSE`/`FALSE` 表示关。
-
----
-
-### 高层任务命令（发布到 `/arm/mission_cmd`）
-
-这些命令由 `arm_mission_node` 接收，拆解为多步低层指令并等待间隔（默认 0.2s/步）。
-
-| 命令 | 别名 | 参数说明 | 示例 |
-|------|------|----------|------|
-| `STOW` | `收起` | `ALL`(所有臂), 或臂别名 | `STOW,ALL` / `STOW,LF` |
-| `PICK` | `吸取` | `ALL`(所有臂), 或臂别名 | `PICK,RF` / `PICK,ALL` |
-| `START` | `启动` | `ALL`(所有臂), 或臂别名 | `START,ALL` / `START,LB` |
-| `PLACE` | `放置` | `ALL`/臂别名, 或 `id,X,Y` | `PLACE,ALL` / `PLACE,0,100,200` |
-| `VALVE` / `V` | `电磁阀` | `id,ON/OFF` 或 `ALL,ON/OFF` | `VALVE,1,ON` / `V,ALL,OFF` |
-| `PUMP` / `P` | `气泵` | `ON[,speed]` 或 `OFF` | `PUMP,ON,2500` / `P,OFF` |
-| `PLACE_END` / `PLACEEND` | `放置结束` | 无额外参数 | `PLACE_END` |
-
-**执行顺序示例**（完整流程）：
-```
-START,ALL         → 各臂到启动位置
-PICK,RF           → 右前臂到吸取位置
-VALVE,1,ON        → 打开电磁阀 1 吸取物块
-PLACE,ALL         → 各臂到放置位置
-VALVE,1,OFF       → 关闭电磁阀 1 放下物块
-STOW,ALL          → 各臂收起
-PLACE_END         → 关闭所有电磁阀 + 气泵
-```
-
-每条高层命令执行完毕后，节点会向 `/arm/mission_cmd` 发布 `FEEDBACK:DONE`。
-
-### 各输入接口的直接使用方法
-
-#### 1. 高层任务话题
-
-适合 AA 平面4臂的预设位置任务，或两种协议通用的阀/泵任务：
-
-```bash
-# AA：四臂移动到收起位置
-ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String \
-  "{data: 'STOW,ALL'}"
-
-# AA：RF 移动到吸取位置
-ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String \
-  "{data: 'PICK,RF'}"
-
-# AA/BB：打开全部电磁阀
-ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String \
-  "{data: 'VALVE,ALL,ON'}"
-
-# AA/BB：开启气泵
-ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String \
-  "{data: 'PUMP,ON,2500'}"
-```
-
-任务执行完后会在同一话题发布 `FEEDBACK:DONE`。订阅该话题的其他节点应区分任务命令和反馈字符串。
-
-#### 2. 低层命令话题
-
-直接进入 `arm_internation::handle_text_command()`，不会经过任务拆解：
-
-```bash
-# AA：LF 末端坐标
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'LF,X:10,Y:20'}"
-
-# BB：左臂位姿
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'}"
-
-# BB：左臂按目标点取块，xyz 单位 m
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PICK,L,0.45,0.42,-0.21'}"
-
-# AA/BB：打开 1 号电磁阀
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'V,1,ON'}"
-```
-
-命令解析失败、协议不匹配或串口发送失败时，`arm_internation_node` 会输出 `invalid cmd` 警告。
-
-#### 3. OCR 自动答案话题
-
-```bash
-ros2 topic pub --once /ocr/answer std_msgs/msg/UInt8 "{data: 2}"
-```
-
-仅在以下条件全部满足时发送 BB 05：
-
-- 当前包以 `DOGVISION_ARM_USE_4DOF=ON` 编译；
-- 串口当前已连接；
-- 数值范围为 0-3；
-- 话题采用 reliable + volatile QoS，不重放旧答案。
-
-手动发送 0-255 的答案字段也可使用低层命令：
-
-```bash
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'A,2'}"
-```
-
-`A,<answer>` 在 AA 和 BB 下均可发送；`/ocr/answer` 则额外限制为 BB 协议和 0-3。
-
-#### 4. 终端输入
-
-```bash
-ros2 launch dogvision_arm arm_test.launch
-```
-
-启动后直接在终端输入：
-
-```text
-PUMP,ON,2500
-$4POSE,L,0.1,0.2,0.3,0.4
-$V,1,ON
-help
-```
-
-- 普通文本发送到 `/arm/mission_cmd`；
-- `$` 前缀会被去除后发送到 `/arm_internation/cmd`；
-- `help`/`h` 显示帮助；
-- `quit`/`exit` 关闭终端节点。
-
-#### 5. STM32 串口输入
-
-该输入由硬件自动产生，不通过 `ros2 topic pub` 控制：
-
-| 串口帧 | 节点处理 | ROS 输出 |
-|---|---|---|
-| `AA 01 ... CRC8` | 更新四个平面臂、云台、阀和微动状态 | `/arm_internation/data` |
-| `BB 01 ... CRC8` | 更新左右 4DOF 位姿、阀和微动状态 | `/arm_internation/data` |
-| `BB CC FF EE CRC8` | 累计一次动作完成事件 | `/arm_internation/state` 发布 `DONE` |
-
-#### 6. 启动参数输入
-
-Launch 文件直接暴露：
-
-```bash
-ros2 launch dogvision_arm arm_control.launch \
-  port:=/dev/ttyACM0 \
-  baud_rate:=115200 \
-  ocr_answer_topic:=/ocr/answer
-```
-
-`protocol` 参数默认是 `compiled`。显式传入 `aa` 或 `4dof` 只进行一致性校验；若与编译协议不一致，节点会在连接串口前以 FATAL 错误退出。
-
-`arm_internation_node` 的 `cmd_topic`、`data_topic`、`state_topic` 等参数未作为当前 launch 参数暴露；单独运行节点时可覆盖：
-
-```bash
-ros2 run dogvision_arm arm_internation_node --ros-args \
-  -p cmd_topic:=/custom/arm_cmd \
-  -p data_topic:=/custom/arm_data
-```
-
-`arm_mission_node` 的预设位置由 `pos_set.yaml` 输入，可通过：
-
-```bash
-ros2 launch dogvision_arm arm_control.launch \
-  mission_config:=/absolute/path/to/pos_set.yaml
-```
-
-#### 7. C++ 核心库接口
-
-其他 C++ 节点也可直接链接 `dogvision_arm_lib`，调用：
-
-```cpp
-arm_internation arm;
-arm.set_protocol_from_string("compiled");
-arm.open("/dev/ttyACM0", 115200);
-arm.send_4dof_pose_cmd(0, 0.1F, 0.2F, 0.3F, 0.4F);
-arm.send_valve_cmd(1, true);
-arm.send_pump_cmd(true, 2500);
-arm.close();
-```
-
-主要发送接口包括：
-
-- AA：`send_arm_cmd()`、`send_gimbal_cmd()`；
-- BB：`send_4dof_pose_cmd()`、`send_4dof_action_cmd()`、`send_4dof_start_cmd()`、各取放块接口；
-- 通用：`send_valve_cmd()`、`send_answer_cmd()`、`send_pump_cmd()`；
-- 统一文本入口：`handle_text_command()`。
-
----
-
-## 位置配置
-
-### `pos_set.yaml`
-
-配置文件安装在 `<pkg-share>/config/pos_set.yaml`，通过 launch 文件的 `mission_config` 参数传入。
-
-```yaml
-arm_mission_node:
-  ros__parameters:
-    start_pos:                          # 启动/初始位置
-      LF: {x: 160.0, y: 220.0}
-      RF: {x: 160.0, y: -220.0}
-      LB: {x: -160.0, y: 220.0}
-      RB: {x: -160.0, y: -220.0}
-    stow_pos:                           # 收起位置（待机）
-      LF: {x: 220.0, y: 380.0}
-      RF: {x: 220.0, y: -380.0}
-      LB: {x: -220.0, y: 380.0}
-      RB: {x: -220.0, y: -380.0}
-    pick_pos:                           # 吸取位置（对准物块）
-      LF: {x: 450.0, y: 450.0}
-      RF: {x: 450.0, y: -450.0}
-      LB: {x: -450.0, y: 450.0}
-      RB: {x: -450.0, y: -450.0}
-    place_pos:                          # 放置位置（目标区域）
-      LF: {x: 90.0, y: 900.0}
-      RF: {x: 90.0, y: -900.0}
-      LB: {x: -90.0, y: 900.0}
-      RB: {x: -90.0, y: -900.0}
-```
-
-4 组位置 × 4 个臂别名 (`LF`/`RF`/`LB`/`RB`)，每组 2 个坐标 (`x`, `y`)。修改后重新启动 launch 即可生效。
-
-**launch 传入自定义配置**：
-```bash
-ros2 launch dogvision_arm arm_control.launch mission_config:=/path/to/my_config.yaml
-```
-
----
-
-## 状态数据格式
-
-节点以 20Hz 向 `/arm_internation/data` 发布状态字符串，格式按编译时协议不同。
-
-### AA 协议
-
-```
-LF:x,y;RF:x,y;LB:x,y;RB:x,y;YAW:yaw;PITCH:pitch;VALVE_BITS:n;MICRO_BITS:n
-```
-
-示例：
-```
-LF:1.234,2.345;RF:3.456,4.567;LB:5.678,6.789;RB:7.890,8.901;YAW:10.5;PITCH:20.3;VALVE_BITS:5;MICRO_BITS:0
-```
-
-### BB 4DOF 协议
-
-```
-MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n
-```
-
-示例：
-```
-MODE:4DOF;L4:0.100,0.200,0.300,0.400;R4:0.150,0.250,0.350,0.450;VALVE_BITS:5;MICRO_BITS:0
-```
-
-**字段说明**：
-
-| 字段 | 含义 |
-|------|------|
-| `VALVE_BITS` | 4 位电磁阀状态位图（bit0=阀0, ..., bit3=阀3），1=开 |
-| `MICRO_BITS` | 4 位微动开关状态位图，1=触发 |
-
----
-
-## 测试与调试
-
-OCR 自动答案链路：
-
-```text
-/ocr/answer (UInt8 mod4) → arm_internation_node → BB 05 answer 00 00 FF EE CRC8
-```
-
-仅当协议为 `4dof`、串口已连接且答案为 0-3 时发送。话题采用 volatile durability，不会在节点重启后重放旧答案。
-
-### 1. 启动完整调试模式
-
-```bash
-ros2 launch dogvision_arm arm_test.launch
-# 等同于 arm_control.launch + arm_cmd_terminal_node
-```
-
-### 2. 查看节点列表
-
-```bash
-ros2 node list
-# 应看到: /arm_internation_node, /arm_mission_node, /arm_cmd_terminal_node
-```
-
-### 3. 查看话题列表
-
-```bash
-ros2 topic list
-# 应看到: /arm_internation/cmd, /arm/mission_cmd, /arm_internation/data,
-#         /arm_internation/state, /ocr/answer
-```
-
-### BB 05 字节测试
-
-```bash
-ctest --test-dir build/dogvision_arm -R answer_frame_test --output-on-failure
-```
-
-```bash
-ros2 topic pub --once /ocr/answer std_msgs/msg/UInt8 "{data: 2}"
-```
-
-测试使用伪终端校验答案 0-3 的 8 字节帧、帧尾及 CRC8-0x07。
-
-### 4. 监听状态数据
-
-```bash
-ros2 topic echo /arm_internation/data
-
-# 动作完成事件会在这里看到 DONE
-ros2 topic echo /arm_internation/state
-```
-
----
-
-### 5. 4DOF 双臂操作测试（仅 BB/4DOF 协议）
-
-> 以下所有命令需确保包以 `DOGVISION_ARM_USE_4DOF=ON` 编译，且 `arm_internation_node` 已连接串口。
-
-#### 5.1 位姿控制（4POSE）
-
-**左臂位姿（带前缀格式）**：
-
-```bash
-# 左臂移动到绝对坐标 (x=0.1, y=0.2, z=0.3, pitch=0.4)，单位 m
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'}"
-```
-
-**右臂位姿（简写格式）**：
-
-```bash
-# 右臂：简写逗号分隔，顺序 x,y,z,pitch
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4POSE,R,0.1,0.2,0.3,0.4'}"
-```
-
-**终端交互方式**：
-
-```bash
-ros2 launch dogvision_arm arm_test.launch
-# 终端输入：
-$4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4
-$4POSE,R,0.15,0.25,0.35,0.45
-```
-
-**臂别名**：左臂：`L` / `LEFT` / `左` / `0`；右臂：`R` / `RIGHT` / `右` / `1`。
-
-#### 5.2 单臂取块（4PICK）
-
-发送 `BB 11` 帧，单臂按 PC 目标点执行取块动作，xyz 单位 m。
-
-```bash
-# 左臂取块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PICK,L,0.45,0.42,-0.21'}"
-
-# 右臂取块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PICK,R,0.45,-0.40,-0.21'}"
-```
-
-**验证**：等待 STM32 返回 `BB CC FF EE CRC8`，`/arm_internation/state` 会发布 `DONE`。
-
-```bash
-# 另开终端监听动作完成
-ros2 topic echo /arm_internation/state
-```
-
-#### 5.3 单臂放块（4PLACE）
-
-发送 `BB 12` 帧，单臂执行放块动作。
-
-```bash
-# 左臂放块到目标位置
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PLACE,L,0.45,0.42,-0.21'}"
-
-# 右臂放块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PLACE,R,0.45,-0.40,-0.21'}"
-```
-
-#### 5.4 单臂背部放块（4PUTBACK）
-
-发送 `BB 14` 帧，单臂执行放块到背部的固定动作，无需坐标参数。
-
-```bash
-# 左臂放块到背部
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PUTBACK,L'}"
-
-# 右臂放块到背部
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PUTBACK,R'}"
-```
-
-#### 5.5 单臂背部取块（4GETBACK）
-
-发送 `BB 15` 帧，单臂从背部取块的固定动作。
-
-```bash
-# 左臂从背部取块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4GETBACK,L'}"
-
-# 右臂从背部取块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4GETBACK,R'}"
-```
-
-#### 5.6 双臂同时取块（4PICKALL）
-
-发送 `BB 21` 帧，双臂按各自 PC 目标点同时取块，xyz 单位 m。参数顺序：`lx,ly,lz,rx,ry,rz`。
-
-```bash
-# 双臂同时取块：左(x,y,z) 右(x,y,z)
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'}"
-```
-
-#### 5.7 双臂同时背部放块（4PUTBACKALL）
-
-发送 `BB 22` 帧，双臂同时放块到背部的固定动作，无参数。
-
-```bash
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PUTBACKALL'}"
-```
-
-#### 5.8 预设动作（4ACT）
-
-发送 BB 预设动作帧。`id=0` 中止当前动作，`id=1-N` 触发对应预设动作。
-
-```bash
-# 触发 1 号预设动作
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4ACT,1'}"
-
-# 中止当前动作
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4ACT,0'}"
-```
-
-#### 5.9 启动初始化（START）
-
-发送 `BB 99` 帧，带初始偏移启动机械臂系统。偏移单位 mm。
-
-```bash
-# 零偏移启动
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'START,0,0,0'}"
-
-# 带 X 偏移 50mm 启动
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'START,50,0,0'}"
-
-# 带前缀格式
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'START,X:0,Y:0,Z:0'}"
-```
-
-#### 5.10 OCR 答案测试
-
-**自动答案链路**（仅 BB 协议，仅 0-3）：
-
-```bash
-# 发送 OCR 答案 2 → arm_internation_node 自动封装为 BB 05 帧
-ros2 topic pub --once /ocr/answer std_msgs/msg/UInt8 "{data: 2}"
-
-# 终端方式手动发送（支持 0-255）
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'A,2'}"
-```
-
-**C++ 单元测试**：
-
-```bash
-ctest --test-dir build/dogvision_arm -R answer_frame_test --output-on-failure
-```
-
-#### 5.11 阀/泵通用操作
-
-4DOF 协议下电磁阀和气泵命令与 AA 通用：
-
-```bash
-# 打开 1 号电磁阀
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'V,1,ON'}"
-
-# 关闭所有电磁阀
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'V,ALL,OFF'}"
-
-# 开泵（速度 2500）
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'P,ON,2500'}"
-
-# 关泵
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: 'P,OFF'}"
-
-# 终端交互方式
-$V,1,ON
-$P,ON,2500
-```
-
-#### 5.12 4DOF 状态数据监听
-
-4DOF 协议下 `/arm_internation/data` 格式：
-
-```
-MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n
-```
-
-```bash
-# 实时监听双臂位姿和传感器状态
-ros2 topic echo /arm_internation/data
-
-# 监听动作完成事件（目标 BB CC FF EE）
-ros2 topic echo /arm_internation/state
-```
-
-#### 5.13 完整双臂取放工作流测试
-
-完整端到端测试流程（终端交互方式）：
-
-```bash
-ros2 launch dogvision_arm arm_test.launch
-```
-
-在终端依次输入：
-
-```text
-# 1. 启动系统（零偏移）
-$START,0,0,0
-
-# 2. 开泵
-$P,ON,2500
-
-# 3. 左臂取块（在 (0.45,0.42,-0.21) 位置）
-$4PICK,L,0.45,0.42,-0.21
-
-# 4. 等待 DONE（监听 /arm_internation/state）
-# 5. 左臂放块到目标
-$4PLACE,L,0.45,0.42,-0.21
-
-# 6. 右臂取块
-$4PICK,R,0.45,-0.42,-0.21
-
-# 7. 等待 DONE
-# 8. 右臂放块
-$4PLACE,R,0.45,-0.42,-0.21
-
-# 9. 双臂同时背部取块
-$4GETBACK,L
-$4GETBACK,R
-
-# 10. 双臂同时背部放块
-$4PUTBACKALL
-
-# 11. 关泵
-$P,OFF
-```
-
-**话题方式批量测试**：
-
-```bash
-# 启动
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "{data: 'START,0,0,0'}"
-sleep 1
-
-# 开泵
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "{data: 'P,ON,2500'}"
-sleep 0.5
-
-# 双臂同时取块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21'}"
-# 等待动作完成（监听 /arm_internation/state 的 DONE）
-
-# 双臂背部放块
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String \
-  "{data: '4PUTBACKALL'}"
-
-# 关泵
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "{data: 'P,OFF'}"
-```
-
----
-
-### 6. 手动发布低层命令（无需终端节点）
-
-```bash
-# AA 协议：控制 LF 臂到 (10, 20)
-ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'LF,X:10,Y:20'" --once
-
-# BB 4DOF 协议：左臂位姿
-ros2 topic pub /arm_internation/cmd std_msgs/String "data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'" --once
-
-# BB 4DOF 协议：带初始偏移启动，xyz 单位 mm
-ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'START,0,0,0'" --once
-
-# 电磁阀打开
-ros2 topic pub /arm_internation/cmd std_msgs/String "data: 'V,1,ON'" --once
-```
-
-### 7. 手动发布高层任务命令
-
-```bash
-ros2 topic pub /arm/mission_cmd std_msgs/String "data: 'STOW,ALL'" --once
-ros2 topic pub /arm/mission_cmd std_msgs/String "data: 'PICK,RF'" --once
-```
-
-### 8. 单独运行各节点
-
-```bash
-# 只运行串口通信节点（需要先有串口设备）
-ros2 run dogvision_arm arm_internation_node
-
-# 只运行任务编排节点（配合其他节点使用）
-ros2 run dogvision_arm arm_mission_node
-
-# 只运行终端命令节点
-ros2 run dogvision_arm arm_cmd_terminal_node
-```
-
-### 9. 查看节点参数
-
-```bash
-ros2 param dump /arm_internation_node
-ros2 param dump /arm_mission_node
-ros2 param dump /arm_cmd_terminal_node
-```
-
-### 10. 指定串口直连（跳过 HWID 扫描）
-
-```bash
-# 启动时指定串口路径
-ros2 launch dogvision_arm arm_control.launch port:=/dev/ttyUSB0
-```
-
-### 11. 修改波特率
-
-```bash
-ros2 launch dogvision_arm arm_control.launch baud_rate:=9600
-```
-
----
-
-## 构建
-
-```bash
-cd <workspace>
-
-# 默认：BB/4DOF
-colcon build --packages-select dogvision_arm \
-  --cmake-args -DDOGVISION_ARM_USE_4DOF=ON
-
-# 或：AA 平面机械臂
-colcon build --packages-select dogvision_arm \
-  --cmake-args -DDOGVISION_ARM_USE_4DOF=OFF
-
-source install/setup.bash
-```
-
-`DOGVISION_ARM_USE_4DOF` 会生成公开头文件 `dogvision_arm/protocol_config.hpp`，其中宏值为 `1`（BB）或 `0`（AA）。切换选项后必须重新构建；建议使用独立构建目录，或删除该包旧的 CMake 缓存。
-
-依赖项：`rclcpp`, `std_msgs`, `libusb-1.0`（用于 USB 掉线检测）。
+上位机固定配置为 **8N1 原始模式**（8 数据位、无校验、1 停止位、无流控），波特率默认 115200。STM32 端需保持一致。

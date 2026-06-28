@@ -9,8 +9,6 @@
 #include <atomic>
 #include <vector>
 
-#include <dogvision_arm/protocol_config.hpp>
-
 // ============================================================
 //  协议数据结构
 // ============================================================
@@ -35,18 +33,6 @@ struct Arm4DofPoseFloat {
     float pitch = 0.0f;
 };
 
-/// 云台当前姿态角（int16，单位由下位机协议确定）
-struct GimbalAngle {
-    int16_t yaw   = 0;
-    int16_t pitch = 0;
-};
-
-/// 云台姿态角（float，已由原始编码值还原）
-struct GimbalAngleFloat {
-    float yaw   = 0.0f;
-    float pitch = 0.0f;
-};
-
 /// 电磁阀与微动开关的实时状态（4 路各自独立）
 struct SensorStatus {
     std::array<bool, 4> valve       = {};  ///< 电磁阀 0-3：true = 开
@@ -58,9 +44,21 @@ struct PumpStatus {
         float speed = 0.0f;   ///< 泵速（单位由下位机协议确定）
 };
 
+/// 4DOF 诊断事件（BB 08），用于暴露 STM32 拒绝 PC 动作或关节裁剪原因。
+struct Arm4DofDiagnostic {
+    uint8_t arm_id = 0;
+    uint8_t mode = 0;
+    uint8_t reason = 0;
+    uint8_t joint_mask = 0;
+    Arm4DofPoseFloat requested_pose = {};
+    std::array<float, 4> requested_joints = {};
+    std::array<float, 4> limited_joints = {};
+    Arm4DofPoseFloat limited_pose = {};
+    std::array<int16_t, 4> target_servo_pos = {};
+};
+
 /// 当前串口协议类型。
 enum class ArmProtocol {
-    PlaneAA, ///< 0xAA 包头：旧平面机械臂协议，兼容原有接口。
     Dof4BB,  ///< 0xBB 包头：4DOF 双臂协议，匹配 STM32 command_decode_4dof。
 };
 
@@ -82,7 +80,7 @@ enum class ArmProtocol {
 //     - 将上层字符串命令适配为具体协议指令
 //
 //  【线程安全模型】
-//  - state_mutex_: 保护所有上报状态缓存（arm_pos_float_/dof4_pose_float_/gimbal_float_/sensor_）
+//  - state_mutex_: 保护所有上报状态缓存（arm_pos_float_/dof4_pose_float_/sensor_）
 //  - send_mutex_: 保证多线程写串口时不发生字节交叉
 //  - valve_cmd_mutex_: 保护电磁阀命令翻转缓存（仅用于 V,id 无状态参数场景）
 //  - reconnect_mutex_: 保护自动重连配置与 fd_ 的竞态访问
@@ -107,13 +105,6 @@ enum class ArmProtocol {
 //  libusb 可以直接查询 USB 总线设备列表，实现亚秒级掉线感知。
 //
 //  协议帧说明（完整字节表见 arm_internation.cpp 顶部注释）：
-//    AA 01  ← 下位机反馈（100 Hz）
-//    AA 02  → 机械臂末端控制
-//    AA 03  → 云台角度控制
-//    AA 04  → 电磁阀控制
-//    AA 06  → 泵控制
-//    AA 05  → 任务赛答案控制
-//
 //    BB 01  ← 4DOF 双臂反馈
 //    BB 02  → 4DOF 单臂位姿控制（arm_id + x/y/z/pitch）
 //    BB 03  → 4DOF 预设动作触发
@@ -121,38 +112,35 @@ enum class ArmProtocol {
 //    BB 05  → 4DOF 语音应答/答案控制（下位机预留）
 //    BB 06  → 4DOF 气泵控制
 //    BB 11  → 4DOF 单臂取块动作（arm_id + x/y/z，单位 m）
-//    BB 12  → 4DOF 单臂放块第一层动作（arm_id + x/y/z，单位 m）
-//    BB 13  → 4DOF 单臂放块第二层动作（arm_id + x/y/z，单位 m）
+//    BB 12  → 4DOF 单臂放块动作（arm_id + x/y/z，单位 m）
 //    BB 14  → 4DOF 单臂放块到背部固定动作（arm_id）
 //    BB 15  → 4DOF 单臂从背部取块固定动作（arm_id）
 //    BB 21  → 4DOF 双臂取块动作（left xyz + right xyz，单位 m）
 //    BB 22  → 4DOF 双臂放块到背部固定动作
+//    BB 23  → 4DOF 双臂放块动作（left xyz + right xyz，单位 m）
+//    BB 24  → 4DOF 双臂从背部取块固定动作
 //    BB 99  → 4DOF 带初始偏移启动（offsetX/Y/Z，float32 小端，单位 mm）
 //    BB CC  ← 4DOF 当前动作完成事件；ROS 节点会转发为 /arm_internation/state = "DONE"
 
 //  用法（典型）：
 //    arm_internation comm;
-//    comm.set_protocol_from_string("compiled");  // 可选；仅校验编译时锁定的协议
 //    comm.open("/dev/ttyUSB0", 115200);
 //    // 接收线程：while(running) comm.receive_once();
-//    comm.send_arm_cmd(0, 100, 200);
 //    comm.send_4dof_pose_cmd(0, 0.1f, 0.2f, 0.3f, 0.4f);
 //    comm.send_4dof_start_cmd(0.0f, 0.0f, 0.0f);  // 带初始偏移启动
-//    ArmEndPos pos = comm.get_arm_pos(0);
 //
 //  文本命令示例（通常由 ROS 字符串话题传入）：
-//    RL,X:10,Y:10      -> 控制机械臂（别名映射见 parse_arm_alias）
 //    4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4 -> 4DOF 左臂位姿
 //    4ACT,1            -> 4DOF 触发预设动作 1；4ACT,0 表示中止
-//    4PICK,L,0.45,0.42,-0.21       -> 4DOF 左臂按 PC 目标点取块
-//    4PLACE1,R,0.45,-0.40,-0.21    -> 4DOF 右臂放块第一层
-//    4PLACE2,L,X:0.45,Y:0.40,Z:0.04 -> 4DOF 左臂放块第二层
-//    4PUTBACK,L        -> 4DOF 左臂放块到背部
-//    4GETBACK,R        -> 4DOF 右臂从背部取块
-//    4PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21 -> 4DOF 双臂取块
-//    4PUTBACKALL       -> 4DOF 双臂放块到背部
+//    PICK,L,0.45,0.42,-0.21        -> 4DOF 左臂按 PC 目标点取块
+//    PLACE,R,0.45,-0.40,-0.21      -> 4DOF 右臂按 PC 目标点放块
+//    PUTBACK,L                     -> 4DOF 左臂放块到背部
+//    GETBACK,R                     -> 4DOF 右臂从背部取块
+//    PICKALL,0.45,0.42,-0.21,0.45,-0.42,-0.21  -> 4DOF 双臂取块
+//    PLACEALL,0.45,0.42,-0.21,0.45,-0.42,-0.21 -> 4DOF 双臂放块
+//    PUTBACKALL                    -> 4DOF 双臂放块到背部
+//    GETBACKALL                    -> 4DOF 双臂从背部取块
 //    START,0,0,0        -> 4DOF 带 X/Y/Z 初始偏移启动（单位 mm）
-//    G,0,0             -> 控制云台 yaw/pitch
 //    V,1               -> 翻转电磁阀 1 的状态
 //    V,1,ON            -> 显式打开电磁阀 1
 //    P,ON,2000           -> 打开/关闭泵,并设置泵速（示例：P,ON,2000 打开泵并设置速度为 2000）
@@ -213,17 +201,17 @@ public:
     bool try_reconnect_once();
 
     // ---- 协议模式 ------------------------------------------------
-    /// @brief 校验协议名称是否与编译时锁定的协议一致。
-    /// @param protocol_name "compiled"，或当前编译协议对应的 AA/BB 别名
+    /// @brief 校验协议名称是否为 4DOF 协议。
+    /// @param protocol_name "compiled"，或 4DOF/BB 别名
     /// @retval true 参数与编译协议一致
     /// @retval false 参数非法或请求了另一种协议
     /// @note 该接口为源码兼容而保留，不再切换协议。
     bool set_protocol_from_string(const std::string& protocol_name);
 
-    /// @brief 获取编译时锁定的协议枚举值。
+    /// @brief 获取协议枚举值，固定为 ArmProtocol::Dof4BB。
     ArmProtocol protocol() const;
 
-    /// @brief 获取编译时锁定的协议名称字符串（"aa" 或 "4dof"）。
+    /// @brief 获取协议名称字符串，固定为 "4dof"。
     const char* protocol_name() const;
 
     // ---- 接收 & 解析 --------------------------------------------
@@ -238,15 +226,12 @@ public:
     bool receive_once();
 
     // ---- 状态读取（线程安全）-------------------------------------
-    /// @brief 以 int16 定标视图读取机械臂末端坐标。
-    /// @param arm_id 机械臂编号：0=LF 1=RF 2=LB 3=RB
+    /// @brief 以 int16 定标视图读取双臂末端 x/y 坐标。
+    /// @param arm_id 机械臂编号：0=左臂 1=右臂
     /// @retval ArmEndPos 坐标（float 内部值 / pos_scale_ 后取整）
     /// @note 内部状态始终保存为 float；int16 视图仅为兼容旧代码。
     ///       越界 arm_id 返回零值。
     ArmEndPos    get_arm_pos(int arm_id) const;
-
-    /// @brief 以 int16 定标视图读取云台角度。
-    GimbalAngle  get_gimbal()            const;
 
     /// @brief 读取电磁阀与微动开关的实时状态位。
     /// @retval SensorStatus 4 路各自独立的布尔状态
@@ -254,9 +239,6 @@ public:
 
     /// @brief 获取 float 精度机械臂坐标（未经定标换算）。
     ArmEndPosFloat   get_arm_pos_float(int arm_id) const;
-
-    /// @brief 获取 float 精度云台角度。
-    GimbalAngleFloat get_gimbal_float()             const;
 
     /// @brief 获取 4DOF 双臂位姿（仅 BB 协议有效）。
     /// @param arm_id 0=左臂, 1=右臂
@@ -268,31 +250,19 @@ public:
     /// @note BB CC 是一次性事件，不属于连续位姿状态；ROS 节点用它逐条发布 DONE。
     size_t consume_done_feedback_count();
 
+    /// @brief 读取最近一次 4DOF 诊断事件。
+    Arm4DofDiagnostic get_last_diagnostic() const;
+
+    /// @brief 取出并清零 4DOF 诊断事件数量。
+    size_t consume_diagnostic_feedback_count();
+
     /// @brief 配置 int16 视图的换算比例。
     /// @param pos_scale 位置缩放因子（仅正值生效）
-    /// @param angle_scale 角度缩放因子（仅正值生效）
-    /// @note 不影响内部 float 缓存，仅影响 get_arm_pos/get_gimbal 的返回值。
-    void set_decode_scale(float pos_scale, float angle_scale);
+    /// @note 不影响内部 float 缓存，仅影响 get_arm_pos 的返回值。
+    void set_decode_scale(float pos_scale);
 
     // ---- 发送命令 ------------------------------------------------
-    /// @brief 发送 AA 协议机械臂末端控制命令。
-    /// @param arm_id 机械臂编号 [0,3]
-    /// @param x 目标 X 坐标（float，单位由下位机定义）
-    /// @param y 目标 Y 坐标（float，单位由下位机定义）
-    /// @retval true 发送成功
-    /// @retval false 发送失败（串口断开/协议不匹配）
-    /// @note BB 协议下返回 false；4DOF 模式应使用 send_4dof_pose_cmd()。
-    bool send_arm_cmd(int arm_id, float x, float y);
-
-    /// @brief 发送 AA 协议云台角度控制命令。
-    /// @param gimbal_id 云台编号（当前仅支持 0）
-    /// @param yaw 偏航角（float）
-    /// @param pitch 俯仰角（float）
-    /// @retval true 发送成功
-    /// @retval false BB 协议下返回 false（4DOF 无云台命令）
-    bool send_gimbal_cmd(int gimbal_id, float yaw, float pitch);
-
-    /// @brief 发送电磁阀控制命令（AA 和 BB 通用）。
+    /// @brief 发送电磁阀控制命令。
     /// @param valve_id 电磁阀编号 [0,3]
     /// @param state true=开 / false=关
     /// @retval true 发送成功
@@ -304,13 +274,13 @@ public:
     /// @retval true 发送成功
     bool send_answer_cmd(uint8_t answer);
 
-    /// @brief 发送气泵控制命令（AA 和 BB 通用）。
+    /// @brief 发送气泵控制命令。
     /// @param on true=开泵并设速度，false=关泵
     /// @param speed 泵速（int，单位由下位机定义，on=false 时忽略）
     /// @retval true 发送成功
     bool send_pump_cmd(bool on, int speed);
 
-    /// @brief 发送 4DOF 单臂位姿控制命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 单臂位姿控制命令。
     /// @param arm_id 0=左臂, 1=右臂
     /// @param x X 坐标（float）
     /// @param y Y 坐标（float）
@@ -320,13 +290,13 @@ public:
     /// @retval false 非 BB 协议或 arm_id 越界
     bool send_4dof_pose_cmd(int arm_id, float x, float y, float z, float pitch);
 
-    /// @brief 发送 4DOF 预设动作触发命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 预设动作触发命令。
     /// @param action_id 动作编号：0=中止当前动作，1..N=触发对应预设动作
     /// @retval true 发送成功
     /// @retval false 非 BB 协议
     bool send_4dof_action_cmd(uint8_t action_id);
 
-    /// @brief 发送 4DOF 带初始偏移启动命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 带初始偏移启动命令。
     /// @param offset_x X 方向初始偏移，单位 mm，按 float32 小端直接发送
     /// @param offset_y Y 方向初始偏移，单位 mm，按 float32 小端直接发送
     /// @param offset_z Z 方向初始偏移，单位 mm，按 float32 小端直接发送
@@ -335,7 +305,7 @@ public:
     /// @note 帧格式：BB 99 offsetX offsetY offsetZ FF EE CRC8，CRC 覆盖 CRC 前所有字节。
     bool send_4dof_start_cmd(float offset_x, float offset_y, float offset_z);
 
-    /// @brief 发送 4DOF 单臂取块动作命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 单臂取块动作命令。
     /// @param arm_id 0=左臂, 1=右臂
     /// @param x 取块目标 X，单位 m，按 float32 小端直接发送
     /// @param y 取块目标 Y，单位 m，按 float32 小端直接发送
@@ -345,25 +315,21 @@ public:
     /// @note 帧格式：BB 11 arm_id x y z FF EE CRC8，CRC 覆盖 CRC 前所有字节。
     bool send_4dof_pick_cmd(int arm_id, float x, float y, float z);
 
-    /// @brief 发送 4DOF 单臂放块第一层动作命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 单臂放块动作命令。
     /// @note 帧格式：BB 12 arm_id x y z FF EE CRC8，xyz 单位 m，不做 mm/m 换算。
-    bool send_4dof_place_1f_cmd(int arm_id, float x, float y, float z);
+    bool send_4dof_place_cmd(int arm_id, float x, float y, float z);
 
-    /// @brief 发送 4DOF 单臂放块第二层动作命令（仅 BB 协议）。
-    /// @note 帧格式：BB 13 arm_id x y z FF EE CRC8，xyz 单位 m，不做 mm/m 换算。
-    bool send_4dof_place_2f_cmd(int arm_id, float x, float y, float z);
-
-    /// @brief 发送 4DOF 单臂放块到背部固定动作命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 单臂放块到背部固定动作命令。
     /// @param arm_id 0=左臂, 1=右臂
     /// @note 帧格式：BB 14 arm_id FF EE CRC8。该动作不带 xyz，目标由下位机模板决定。
     bool send_4dof_put_block_back_cmd(int arm_id);
 
-    /// @brief 发送 4DOF 单臂从背部取块固定动作命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 单臂从背部取块固定动作命令。
     /// @param arm_id 0=左臂, 1=右臂
     /// @note 帧格式：BB 15 arm_id FF EE CRC8。该动作不带 xyz，目标由下位机模板决定。
     bool send_4dof_get_block_back_cmd(int arm_id);
 
-    /// @brief 发送 4DOF 双臂取块动作命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 双臂取块动作命令。
     /// @param lx 左臂目标 X，单位 m
     /// @param ly 左臂目标 Y，单位 m
     /// @param lz 左臂目标 Z，单位 m
@@ -373,21 +339,38 @@ public:
     /// @note 帧格式：BB 21 left_x left_y left_z right_x right_y right_z FF EE CRC8。
     bool send_4dof_pick_all_cmd(float lx, float ly, float lz, float rx, float ry, float rz);
 
-    /// @brief 发送 4DOF 双臂放块到背部固定动作命令（仅 BB 协议）。
+    /// @brief 发送 4DOF 双臂放块到背部固定动作命令。
     /// @note 帧格式：BB 22 FF EE CRC8。无 DATA 段，双臂目标由下位机动作模板决定。
     bool send_4dof_put_block_back_all_cmd();
+
+    /// @brief 发送 4DOF 双臂放块动作命令。
+    /// @note 帧格式：BB 23 left_x left_y left_z right_x right_y right_z FF EE CRC8。
+    bool send_4dof_place_all_cmd(float lx, float ly, float lz, float rx, float ry, float rz);
+
+    /// @brief 发送 4DOF 双臂从背部取块固定动作命令。
+    /// @note 帧格式：BB 24 FF EE CRC8。无 DATA 段，双臂目标由下位机动作模板决定。
+    bool send_4dof_get_block_back_all_cmd();
+
+    // ---- CC 云台协议发送命令 ------------------------------------
+    /// @brief 发送 CC 99 启动相机云台命令（5 字节，无 DATA 段）。
+    bool send_cc_gimbal_start_cmd();
+
+    /// @brief 发送 CC 01 运动云台到目标位置命令。
+    /// @param j1    J1 关节角度（度）
+    /// @param pitch 俯仰角（度）
+    /// @param yaw   偏航角（度）
+    /// @note 帧格式：CC 01 j1 pitch yaw FF EE CRC8（17 字节），float32 小端。
+    bool send_cc_gimbal_move_cmd(float j1, float pitch, float yaw);
 
     /// @brief 解析并执行文本命令（统一命令入口）。
     /// @param command_text 原始命令字符串，支持中英文标点容错
     /// @retval true 命令解析成功并已发送
     /// @retval false 格式错误或发送失败
     /// @note 命令格式：
-    ///   - AA 机械臂: "LF,X:10,Y:20" / "RF,10,20"
     ///   - BB 4DOF:   "4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4"
     ///   - BB 动作:   "4ACT,1" / "4ACT,0"（中止）
-    ///   - BB 新动作: "4PICK,L,0.45,0.42,-0.21" / "4PUTBACKALL"
+    ///   - BB 新动作: "PICK,L,0.45,0.42,-0.21" / "PUTBACKALL"
     ///   - BB 启动:   "START,0,0,0" / "START,X:0,Y:0,Z:0"（偏移单位 mm）
-    ///   - 云台:      "G,0,0"
     ///   - 电磁阀:    "V,1"（翻转）/ "V,1,ON"（显式）/ "V,ALL,ON"
     ///   - 气泵:      "P,ON,2500" / "P,OFF"
     ///   - 答案:      "A,0"
@@ -395,56 +378,36 @@ public:
 
 private:
     // ---- 协议常量 -----------------------------------------------
-    static constexpr uint8_t kHeadA   = 0xAAu;  ///< 帧头第一字节
     static constexpr uint8_t kHeadB   = 0xBBu;  ///< 4DOF 帧头
     static constexpr uint8_t kCmdFb   = 0x01u;  ///< 命令字：下位机反馈
     static constexpr uint8_t kCmdArm  = 0x02u;  ///< 命令字：机械臂控制
-    static constexpr uint8_t kCmdGim  = 0x03u;  ///< 命令字：云台控制
+    static constexpr uint8_t kCmdAction = 0x03u;  ///< 命令字：4DOF 预设动作控制
     static constexpr uint8_t kCmdValv = 0x04u;  ///< 命令字：电磁阀控制
     static constexpr uint8_t kCmdAns  = 0x05u;  ///< 命令字：任务赛答案
     static constexpr uint8_t kCmdPump = 0x06u;  ///< 命令字：气泵控制（on/off + 速度）
+    static constexpr uint8_t kCmd4DofDiagnostic = 0x08u; ///< BB 事件字：动作拒绝/裁剪诊断
 
     static constexpr uint8_t kCmd4DofPICK = 0x11u;                ///< BB 命令字：4DOF 单臂取块位姿控制，可控制末端点
-    static constexpr uint8_t kCmd4DofPLACE_1F = 0x12u;            ///< BB 命令字：4DOF 单臂放块第一层位姿控制，可控制末端点
-    static constexpr uint8_t kCmd4DofPLACE_2F = 0x13u;            ///< BB 命令字：4DOF 单臂放块第二层位姿控制，可控制末端点
+    static constexpr uint8_t kCmd4DofPLACE = 0x12u;               ///< BB 命令字：4DOF 单臂放块位姿控制，可控制末端点
     static constexpr uint8_t kCmd4DofPUT_BLOCK_BACK = 0x14u;      ///< BB 命令字：4DOF 单臂放块到背部，不可控末端点
     static constexpr uint8_t kCmd4DofGET_BLOCK_BACK = 0x15u;      ///< BB 命令字：4DOF 单臂背部取块，不可控末端点
 
     static constexpr uint8_t kCmd4DofPICK_ALL = 0x21u;            ///< BB 命令字：4DOF 双臂取块位姿控制，可控制左右臂末端点
     static constexpr uint8_t kCmd4DofPUT_BLOCK_BACK_ALL = 0x22u;  ///< BB 命令字：4DOF 双臂放块到背部，不可控制左右臂末端点
+    static constexpr uint8_t kCmd4DofPLACE_ALL = 0x23u;           ///< BB 命令字：4DOF 双臂放块位姿控制，可控制左右臂末端点
+    static constexpr uint8_t kCmd4DofGET_BLOCK_BACK_ALL = 0x24u;  ///< BB 命令字：4DOF 双臂从背部取块，不可控制左右臂末端点
 
     static constexpr uint8_t kCmd4DofStart = 0x99u; ///< BB 命令字：带初始偏移启动
     static constexpr uint8_t kCmd4DofDone  = 0xCCu; ///< BB 事件字：当前动作完成反馈
     static constexpr uint8_t kTailA   = 0xFFu;  ///< 帧尾第一字节
     static constexpr uint8_t kTailB   = 0xEEu;  ///< 帧尾第二字节
 
-
-    //收放位置
-    static constexpr float aimPos_start_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
-    static constexpr float aimPos_start_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
-
-    //放置物块位置
-    static constexpr float aimPos_place_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
-    static constexpr float aimPos_place_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
-
-    //取物块位置设定
-    static constexpr float aimPos_block_get_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
-    static constexpr float aimPos_block_get_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
-
-    // 任务赛特定：交接物块
-    static constexpr float aimPos_block_transfer_X[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 X 坐标（示例值）
-    static constexpr float aimPos_block_transfer_Y[4] = {10.0f, 10.0f, 10.0f, 10.0f}; ///< 目标 Y 坐标（示例值）
-
-
-
-    /// AA 01 帧总字节数：2(头) + 44(净荷) + 2(尾) + 1(CRC) = 49
-    static constexpr int kFbFrameLen  = 49;
-    /// AA 01 净荷字节数：4臂*8(float x/y) + 2云台*4(float) + 4传感器 = 44
-    static constexpr int kFbPayloadLen = 44;
     /// BB 01 帧总字节数：2(头/命令) + 41(DATA) + 2(尾) + 1(CRC) = 46
     static constexpr int k4DofFbFrameLen = 46;
     /// BB CC 完成事件帧总字节数：BB + CC + FF + EE + CRC = 5
     static constexpr int k4DofDoneFrameLen = 5;
+    /// BB 08 诊断事件帧总字节数。
+    static constexpr int k4DofDiagnosticFrameLen = 81;
 
     // ---- CRC-8/SMBUS（多项式 0x07）------------------------------
     /// 对 data[0..len-1] 计算 CRC-8。
@@ -457,19 +420,8 @@ private:
     /// @note 内部可能消耗部分 rx_buf_ 字节（找到帧头但数据不足时保留帧头）。
     bool parse_feedback_frame();
 
-    /// @brief AA 协议反馈帧解析状态机。
-    /// @details 核心同步策略：
-    ///   1) 滑动窗口搜索 0xAA 0x01 帧头
-    ///   2) 对候选位置同时校验 49B（V1）和 53B（V2）两种帧长
-    ///   3) 验证 tail（0xFF 0xEE）+ CRC8 完整性
-    ///   4) 数据不足时保留帧头等待拼接；校验失败时丢弃一字节重同步
-    /// @retval true 成功解析并更新 arm_pos_float_/gimbal_float_/sensor_
-    /// @retval false 无完整有效帧
-    bool parse_plane_feedback_frame();
-
     /// @brief BB 协议反馈帧解析。
-    /// @details 固定 46 字节帧，同步策略与 AA 类似但帧长单一。
-    ///   额外将 4DOF 左/右臂 x/y 投影到 AA 兼容字段 arm_pos_float_[0]/[1]。
+    /// @details 固定 46 字节帧，并将 4DOF 左/右臂 x/y 保留到兼容读取视图。
     /// @retval true 成功解析并更新 dof4_pose_float_/arm_pos_float_/sensor_
     /// @retval false 无完整有效帧
     bool parse_4dof_feedback_frame();
@@ -488,16 +440,30 @@ private:
     bool open_matching_tty_once(const std::string& hw_id, int baud_rate, const char* log_context);
     /// 规范化文本命令：处理中英文标点、空格和分隔符。
     static std::string normalize_cmd_text(std::string text);
-    /// 从类似 X:10 / Y=20 的 token 中提取整数值（用于旧命令分支）。
-    static bool parse_int_after_prefix(const std::string& token, const std::string& prefix, int& value);
     /// 从字符串 token 提取浮点数。
     static bool parse_float_token(const std::string& token, float& value);
     /// 从类似 X:10.5 / Y=20 的 token 中提取浮点值。
     static bool parse_float_after_prefix(const std::string& token, const std::string& prefix, float& value);
-    /// 机械臂名称别名映射：LF/RF/LB/RB（兼容 RL 等历史写法）。
-    bool parse_arm_alias(const std::string& alias, int& arm_id) const;
     /// 4DOF 双臂别名映射：L/LEFT/0 与 R/RIGHT/1。
     static bool parse_4dof_arm_alias(const std::string& alias, int& arm_id);
+
+    /// @brief BB/4DOF 协议文本命令解析（由 handle_text_command 调用）。
+    bool handle_text_command_bb(const std::vector<std::string>& tokens);
+
+    /// @brief CC 云台协议文本命令解析（由 handle_text_command 调用）。
+    bool handle_text_command_cc(const std::vector<std::string>& tokens);
+
+    /// @brief 字符串转大写（静态辅助，供多文件共享）。
+    static std::string to_upper_copy(std::string s);
+
+    /// @brief 严格解析整数 token（静态辅助，供多文件共享）。
+    static bool parse_int_token(const std::string& token, int& value);
+
+    /// @brief float32 小端编码（静态辅助，供多文件共享）。
+    static void encode_float_le(float value, uint8_t* dst);
+
+    /// @brief float32 小端解码（静态辅助，供多文件共享）。
+    static float decode_float_le(const uint8_t* src);
 
     /// @brief 断开后自动重连（内部调用，由 receive_once/write_bytes 级联触发）。
     /// @retval true 重连成功
@@ -513,7 +479,7 @@ private:
     bool is_bound_hwid_online_libusb() const;
 
     /// @brief 断线期间清空所有内部上报缓存。
-    /// @note 将 arm_pos_float_/dof4_pose_float_/gimbal_float_/sensor_ 全部归零，
+    /// @note 将 arm_pos_float_/dof4_pose_float_/sensor_ 全部归零，
     ///       同时清空接收缓冲区 rx_len_，避免上层读取陈旧/无效数据。
     void clear_report_state();
 
@@ -536,20 +502,19 @@ private:
     ///          写入发生在 parse_*_feedback_frame() 校验通过后。
     /// @{
     mutable std::mutex state_mutex_;             ///< 状态读写互斥锁
-    ArmEndPosFloat     arm_pos_float_[4] = {};   ///< AA 协议：4 臂末端 float 坐标
+    ArmEndPosFloat     arm_pos_float_[4] = {};   ///< 左右臂 x/y 兼容读取视图
     Arm4DofPoseFloat   dof4_pose_float_[2] = {}; ///< BB 协议：左/右臂 4DOF 位姿
-    GimbalAngleFloat   gimbal_float_     = {};   ///< AA 协议：云台角度
     SensorStatus       sensor_     = {};         ///< 电磁阀 + 微动开关状态
+    Arm4DofDiagnostic  last_diagnostic_ = {};    ///< 最近一次 BB 08 诊断事件
     size_t             pending_done_feedback_count_ = 0; ///< 待 ROS 节点发布的 BB CC 完成事件数量
+    size_t             pending_diagnostic_feedback_count_ = 0; ///< 待 ROS 节点发布的 BB 08 诊断事件数量
     /// @}
 
-    // ---- 解码比例（raw int16 -> float）--------------------------
+    // ---- 解码比例（float -> int16 兼容视图）---------------------
     /// @name int16 视图换算比例
-    /// @details 仅影响 get_arm_pos/get_gimbal 的 int16 返回值，
-    ///          内部 float 缓存始终按原始编码存储。
+    /// @details 仅影响 get_arm_pos 的 int16 返回值，内部 float 缓存始终按原始编码存储。
     /// @{
     float pos_scale_ = 0.01f;    ///< 位置缩放（如 0.01 表示厘米单位）
-    float angle_scale_ = 0.01f;  ///< 角度缩放（如 0.01 表示百分之一度）
     /// @}
 
     // ---- 发送互斥锁（防止多线程同时写串口）----------------------

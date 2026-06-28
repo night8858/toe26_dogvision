@@ -5,17 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(DOGVISION_ARM_USE_4DOF "Build dogvision_arm for the BB/4DOF protocol" ON)
-configure_file(
-  include/dogvision_arm/protocol_config.hpp.in
-  ${CMAKE_CURRENT_BINARY_DIR}/include/dogvision_arm/protocol_config.hpp
-)
-
-if(DOGVISION_ARM_USE_4DOF)
-  message(STATUS "dogvision_arm: compile-time protocol = BB/4DOF")
-else()
-  message(STATUS "dogvision_arm: compile-time protocol = AA/plane")
-endif()
+message(STATUS "dogvision_arm: protocol = BB/4DOF")
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -26,11 +16,12 @@ pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
 add_library(dogvision_arm_lib
   src/arm_internation.cpp
+  src/arm_internation_bb.cpp
+  src/arm_internation_cc.cpp
 )
 target_compile_features(dogvision_arm_lib PUBLIC cxx_std_17)
 target_include_directories(dogvision_arm_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
   $<INSTALL_INTERFACE:include>
   ${LIBUSB_INCLUDE_DIRS}
 )
@@ -54,6 +45,9 @@ ament_target_dependencies(arm_cmd_terminal_node rclcpp std_msgs)
 add_executable(arm_mission_node
   src/arm_mission_node.cpp
 )
+target_include_directories(arm_mission_node PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 target_link_libraries(arm_mission_node Threads::Threads)
 ament_target_dependencies(arm_mission_node rclcpp std_msgs)
 
@@ -64,6 +58,14 @@ if(BUILD_TESTING)
   )
   target_link_libraries(answer_frame_test dogvision_arm_lib Threads::Threads)
   add_test(NAME answer_frame_test COMMAND answer_frame_test)
+
+  add_executable(mission_command_test
+    test/mission_command_test.cpp
+  )
+  target_include_directories(mission_command_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  add_test(NAME mission_command_test COMMAND mission_command_test)
 endif()
 
 install(TARGETS
@@ -80,16 +82,9 @@ install(DIRECTORY include/
   DESTINATION include
   PATTERN "*.in" EXCLUDE
 )
-install(FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/include/dogvision_arm/protocol_config.hpp
-  DESTINATION include/dogvision_arm
-)
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.launch"
-)
-install(FILES pos_set.yaml
-  DESTINATION share/${PROJECT_NAME}/config
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
