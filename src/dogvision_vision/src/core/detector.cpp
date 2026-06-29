@@ -117,6 +117,30 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             throw std::invalid_argument(
                 "ocr_math_filter.white_v_min must be in [0, 255]");
 
+        // ── YOLO 图像增强参数 ──
+        const Json::Value& yolo_enh = value["yolo_enhance"];
+        if (!yolo_enh.isNull())
+        {
+            config.detect_config.yolo_enhance_enabled =
+                yolo_enh.get("enabled", true).asBool();
+            config.detect_config.yolo_enhance_clahe_clip_limit =
+                yolo_enh.get("clahe_clip_limit", 2.0).asFloat();
+            config.detect_config.yolo_enhance_clahe_tile_grid_size =
+                yolo_enh.get("clahe_tile_grid_size", 8).asInt();
+            config.detect_config.yolo_enhance_saturation_scale =
+                yolo_enh.get("saturation_scale", 1.3).asFloat();
+        }
+        if (config.detect_config.yolo_enhance_clahe_clip_limit <= 0.0f)
+            throw std::invalid_argument(
+                "yolo_enhance.clahe_clip_limit must be > 0");
+        if (config.detect_config.yolo_enhance_clahe_tile_grid_size < 1 ||
+            config.detect_config.yolo_enhance_clahe_tile_grid_size > 32)
+            throw std::invalid_argument(
+                "yolo_enhance.clahe_tile_grid_size must be in [1, 32]");
+        if (config.detect_config.yolo_enhance_saturation_scale <= 0.0f)
+            throw std::invalid_argument(
+                "yolo_enhance.saturation_scale must be > 0");
+
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();
         config.detect_config.w = value["NCHW"]["W"].asInt();
@@ -279,6 +303,12 @@ detector::detector(Appconfig *config)
     detect_config_.class1 = config->detect_config.class1;
     detect_config_.class2 = config->detect_config.class2;
     detect_config_.class3 = config->detect_config.class3;
+
+    // ── 复制 YOLO 图像增强参数 ──
+    detect_config_.yolo_enhance_enabled = config->detect_config.yolo_enhance_enabled;
+    detect_config_.yolo_enhance_clahe_clip_limit = config->detect_config.yolo_enhance_clahe_clip_limit;
+    detect_config_.yolo_enhance_clahe_tile_grid_size = config->detect_config.yolo_enhance_clahe_tile_grid_size;
+    detect_config_.yolo_enhance_saturation_scale = config->detect_config.yolo_enhance_saturation_scale;
 }
 
 detector::~detector()

@@ -107,6 +107,12 @@ typedef struct
     std::string class2; ///< 第 2 类名称
     std::string class3; ///< 第 3 类名称
 
+    // ── YOLO 图像增强参数 ──
+    bool yolo_enhance_enabled = true;             ///< 是否启用 YOLO 输入图像增强
+    float yolo_enhance_clahe_clip_limit = 2.0f;   ///< CLAHE 对比度限幅
+    int yolo_enhance_clahe_tile_grid_size = 8;    ///< CLAHE 网格尺寸（像素块边长）
+    float yolo_enhance_saturation_scale = 1.3f;   ///< 饱和度缩放系数
+
     float D_matrix[4]; ///< 鱼眼畸变参数 D 矩阵（4×1）
     
 }s_detector_params;

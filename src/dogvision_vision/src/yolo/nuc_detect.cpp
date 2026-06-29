@@ -11,7 +11,7 @@
  *   - 多精度（FP32/FP16/U8/I8）的 HWC→CHW 转换与归一化
  *   - OpenVINO 同步推理
  *   - YOLOv8 输出解码（cxcywh → xywh + 逆 letterbox）
- *   - 按类别的贪心 NMS
+ *   - 跨类别贪心 NMS（同一位置只保留置信度最高的框）
  */
 
 namespace {
@@ -202,6 +202,41 @@ void detect_oponvino::preprocess(cv::Mat &input_img)
         return;
     }
 
+    // 0. 图像增强：CLAHE（LAB-L 通道）+ 饱和度（HSV-S 通道）
+    //    提升对比度和颜色饱和度，改善蓝色/灰色等低饱和度类别的区分度
+    if (detect_config_.yolo_enhance_enabled)
+    {
+        // 0a. CLAHE 作用于 LAB-L 通道（局部对比度增强）
+        cv::Mat lab;
+        cv::cvtColor(input_img, lab, cv::COLOR_BGR2Lab);
+        std::vector<cv::Mat> lab_channels(3);
+        cv::split(lab, lab_channels);
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(
+            detect_config_.yolo_enhance_clahe_clip_limit,
+            cv::Size(detect_config_.yolo_enhance_clahe_tile_grid_size,
+                     detect_config_.yolo_enhance_clahe_tile_grid_size));
+        clahe->apply(lab_channels[0], lab_channels[0]);
+        cv::merge(lab_channels, lab);
+        cv::cvtColor(lab, input_img, cv::COLOR_Lab2BGR);
+
+        // 0b. 饱和度增强（HSV-S 通道缩放）
+        const float sat_scale = detect_config_.yolo_enhance_saturation_scale;
+        if (std::fabs(sat_scale - 1.0f) > 1e-6f)
+        {
+            cv::Mat hsv;
+            cv::cvtColor(input_img, hsv, cv::COLOR_BGR2HSV);
+            std::vector<cv::Mat> hsv_channels(3);
+            cv::split(hsv, hsv_channels);
+            // S 通道乘以缩放系数，clamp 到 [0, 255]
+            hsv_channels[1].forEach<uchar>([sat_scale](uchar &p, const int*) {
+                int val = static_cast<int>(p * sat_scale);
+                p = static_cast<uchar>(std::min(255, std::max(0, val)));
+            });
+            cv::merge(hsv_channels, hsv);
+            cv::cvtColor(hsv, input_img, cv::COLOR_HSV2BGR);
+        }
+    }
+
     // 1. Letterbox 缩放+填充
     cv::Mat letterboxed = letterbox(input_img, input_width_, input_height_);
     
@@ -376,12 +411,14 @@ void detect_oponvino::decode_output(void)
 
 
 /**
- * @brief 按类别的贪心非极大值抑制（NMS）
+ * @brief 跨类别贪心非极大值抑制（NMS）
+ *
+ * 同一位置只保留置信度最高的一个框，不区分类别。
  *
  * 算法：
- *   1. 按类别分组，同一类别的候选框集合内执行 NMS
- *   2. 对每个类别，按置信度降序排列
- *   3. 贪心保留置信度最高的框，抑制与其 IoU 超过 nms_thresh 的其他框
+ *   1. 所有候选框（不限类别）按置信度降序排列
+ *   2. 贪心保留置信度最高的框
+ *   3. 抑制与其 IoU 超过 nms_thresh 的所有其他框（不限类别）
  *   4. 将保留的框存入 nms_results_
  *
  * @param 无
@@ -389,50 +426,41 @@ void detect_oponvino::decode_output(void)
 void detect_oponvino::nms(void)
 {
     nms_results_.clear();
-    if (boxes_raw_.empty() || out_num_classes_ <= 0) {
+    const size_t N = boxes_raw_.size();
+    if (N == 0 || out_num_classes_ <= 0) {
         return;
     }
 
     const float iou_thresh = detect_config_.nms_thresh;
 
-    for (int cls = 0; cls < out_num_classes_; ++cls) {
-        // 收集属于该类别的候选框索引
-        std::vector<int> indices;
-        indices.reserve(class_ids_raw_.size());
-        for (size_t i = 0; i < class_ids_raw_.size(); ++i) {
-            if (class_ids_raw_[i] == cls) {
-                indices.push_back(static_cast<int>(i));
-            }
-        }
-        if (indices.empty()) continue;
+    // 所有候选框按置信度降序排列（跨类别）
+    std::vector<size_t> indices(N);
+    for (size_t i = 0; i < N; ++i) indices[i] = i;
+    std::sort(indices.begin(), indices.end(), [this](size_t a, size_t b) {
+        return scores_raw_[a] > scores_raw_[b];
+    });
 
-        // 按置信度降序排列
-        std::sort(indices.begin(), indices.end(), [this](int a, int b) {
-            return scores_raw_[a] > scores_raw_[b];
-        });
+    std::vector<bool> suppressed(N, false);
+    for (size_t i = 0; i < N; ++i) {
+        const size_t keep = indices[i];
+        if (suppressed[keep]) continue;
 
-        std::vector<bool> suppressed(indices.size(), false);
-        for (size_t i = 0; i < indices.size(); ++i) {
-            if (suppressed[i]) continue;
+        Detection det;
+        const cv::Rect2f& r = boxes_raw_[keep];
+        det.bbox[0]  = r.x;
+        det.bbox[1]  = r.y;
+        det.bbox[2]  = r.width;
+        det.bbox[3]  = r.height;
+        det.conf     = scores_raw_[keep];
+        det.class_id = static_cast<float>(class_ids_raw_[keep]);
+        nms_results_.push_back(det);
 
-            const int keep = indices[i];
-            Detection det;
-            const cv::Rect2f& r = boxes_raw_[static_cast<size_t>(keep)];
-            det.bbox[0]  = r.x;
-            det.bbox[1]  = r.y;
-            det.bbox[2]  = r.width;
-            det.bbox[3]  = r.height;
-            det.conf     = scores_raw_[static_cast<size_t>(keep)];
-            det.class_id = static_cast<float>(cls);
-            nms_results_.push_back(det);
-
-            // 抑制与 keep 框 IoU 超过阈值的后续候选框
-            for (size_t j = i + 1; j < indices.size(); ++j) {
-                if (suppressed[j]) continue;
-                if (calc_iou(boxes_raw_[static_cast<size_t>(keep)],
-                             boxes_raw_[static_cast<size_t>(indices[j])]) > iou_thresh) {
-                    suppressed[j] = true;
-                }
+        // 跨类别抑制：与 keep 框 IoU 超过阈值的所有后续框
+        for (size_t j = i + 1; j < N; ++j) {
+            const size_t other = indices[j];
+            if (suppressed[other]) continue;
+            if (calc_iou(boxes_raw_[keep], boxes_raw_[other]) > iou_thresh) {
+                suppressed[other] = true;
             }
         }
     }

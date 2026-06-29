@@ -183,7 +183,8 @@ source install/setup.bash
     "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
     "ppocr_cls_model_path": "",                          // 文字方向分类（暂未使用）
     "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt",
-    "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
+    "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt",
+    "yolo_device": "CPU"                        // YOLO 推理设备：CPU / GPU / AUTO:GPU,CPU
   },
 
   // OCR 数学题后置筛选
@@ -201,12 +202,20 @@ source install/setup.bash
   // 图像信息（用于配置输入类型）
   "img": { "type": 0 /* 0=RGB 1=BGR */, "width": 1920, "height": 1080 },
 
-  // 阈值
+  // 阈值（NMS 已改为跨类别：同一位置只保留置信度最高的框）
   "thresh": {
     "nms_thresh": 0.6,         // NMS IoU 阈值
     "bbox_conf_thresh": 0.6,   // 边界框置信度阈值
     "merge_thresh": 0.8,       // 多帧合并阈值
     "max_wellid_distance": 8
+  },
+
+  // YOLO 图像增强（CLAHE + 饱和度），改善低饱和度类别的区分度
+  "yolo_enhance": {
+    "enabled": true,              // 是否启用图像增强
+    "clahe_clip_limit": 2.0,      // CLAHE 对比度限幅（推荐 1.5~4.0）
+    "clahe_tile_grid_size": 8,    // CLAHE 网格尺寸（推荐 4~16）
+    "saturation_scale": 1.3       // 饱和度缩放系数（1.0=不变，推荐 1.1~1.5）
   },
 
   // 类别数量与名称（最多 4 类）
@@ -230,6 +239,21 @@ OCR 数学题筛选参数：
 | `white_s_max` | `110` | HSV 白色判定的 S 通道上限，范围 `[0,255]` |
 | `white_v_min` | `50` | HSV 白色判定的 V 通道下限，范围 `[0,255]` |
 
+YOLO 推理设备：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `yolo_device` | `"CPU"` | 推理设备：`"CPU"` / `"GPU"` / `"AUTO:GPU,CPU"`（GPU 不可用时自动回退 CPU） |
+
+YOLO 图像增强参数（`yolo_enhance` 节）：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `enabled` | `true` | 是否启用 CLAHE + 饱和度增强 |
+| `clahe_clip_limit` | `2.0` | CLAHE 对比度限幅，越大对比度越强，范围 `(0, ∞)` |
+| `clahe_tile_grid_size` | `8` | CLAHE 网格像素块边长，范围 `[1, 32]` |
+| `saturation_scale` | `1.3` | HSV-S 通道缩放系数，`1.0`=不变，范围 `(0, ∞)` |
+
 `ppocr_keys_v1.txt` 必须保留为官方完整字典，不能直接裁剪或重排，否则会破坏识别模型的类别索引。`math_chars.txt` 是解码白名单，当前允许：
 
 ```text
@@ -249,7 +273,7 @@ OCR 数学题筛选参数：
 **工作流程**：
 1. 加载配置文件，初始化 YOLO OpenVINO 模型和海康相机。
 2. 等待触发信号（话题 `/yolo/trigger` 收到 `"start_infer"` 或终端按 Enter）。
-3. 触发后抓取一帧 → 可选鱼眼去畸变 → YOLO 推理 → NMS → 检测结果光栅排序 → 2×4 网格 K-means 分配。
+3. 触发后抓取一帧 → 可选鱼眼去畸变 → 可选图像增强（CLAHE + 饱和度）→ YOLO 推理 → 跨类别 NMS（同一位置只保留置信度最高的框）→ 检测结果光栅排序 → 2×4 网格 K-means 分配。
 4. 发布 JSON 结果到 `/yolo/result` 和 `/yolo/block_grid`。
 5. 可选保存带标注的结果图（.jpg）到指定目录。
 6. 可选打开 OpenCV 窗口显示结果。
@@ -533,6 +557,7 @@ public:
 ```
 
 内部使用 letterbox 预处理（保持宽高比填充），支持 FP32/FP16/INT8 精度模型。
+支持通过 `yolo_device` 配置切换 CPU / GPU 推理设备，GPU 模式下自动启用低延迟优化。
 
 ### 6.4 PP-OCR 系列 (`ocr_detect.hpp`)
 
@@ -592,7 +617,7 @@ public:
 | `reset_grid(GridBlock&)` | 将 2×4 网格所有单元重置为 `"null"` |
 | `class_name_of(int, vector<string>)` | 类别编号转名称 |
 | `load_class_names(Appconfig)` | 从配置加载类别名称列表 |
-| `cross_frame_nms(all_dets, iou_thresh, num_classes)` | 跨帧按类别 NMS 合并检测结果 |
+| `cross_frame_nms(all_dets, iou_thresh, num_classes)` | 跨帧跨类别 NMS 合并检测结果（同一位置只保留一个框） |
 | `sort_raster(dets&)` | 光栅顺序排序（从上到下，从左到右） |
 | `assign_grid_kmeans(dets, class_names, block&)` | K-means 按行聚类后分配到 2×4 网格 |
 | `build_result_json(dets, class_names)` | 检测结果序列化为 JSON |
@@ -935,3 +960,12 @@ A: 检查相机物理连接，确认设备号与配置一致。PPOCR 节点有�
 
 **Q: 鱼眼去畸变无效？**
 A: 确认 `src/core/detector.cpp` 中 `ENABLE_FISHEYE_UNDISTORT` 宏已定义（默认启用），且 K/D 矩阵与标定结果一致。
+
+**Q: 如何启用 GPU 推理？**
+A: 在 `settings.json` 的 `path` 节中将 `yolo_device` 设为 `"GPU"` 或 `"AUTO:GPU,CPU"`。需确保系统安装了 Intel GPU 驱动（`intel-opencl-icd`）且 OpenVINO GPU 插件可用。推荐配合 FP16 精度模型获得最佳性能。
+
+**Q: 如何关闭图像增强？**
+A: 在 `settings.json` 的 `yolo_enhance` 节中将 `enabled` 设为 `false` 即可完全回退到原始图像输入，无需重新编译。
+
+**Q: 如何调整 NMS 行为？**
+A: NMS 已改为跨类别模式（同一位置只保留置信度最高的框）。可通过 `thresh.nms_thresh` 调整 IoU 阈值（默认 0.6，越低越激进地合并重叠框）。

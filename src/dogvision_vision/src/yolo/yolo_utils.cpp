@@ -46,7 +46,7 @@ std::vector<std::string> load_class_names(const Appconfig& config)
 std::vector<Detection> cross_frame_nms(
     const std::vector<Detection>& all_dets,
     float iou_thresh,
-    int num_classes)
+    int /*num_classes*/)
 {
     auto iou = [](const Detection& a, const Detection& b) -> float {
         float ax2 = a.bbox[0] + a.bbox[2], ay2 = a.bbox[1] + a.bbox[3];
@@ -58,24 +58,29 @@ std::vector<Detection> cross_frame_nms(
         return denom > 1e-6f ? inter / denom : 0.f;
     };
 
+    const size_t N = all_dets.size();
+    if (N == 0) return {};
+
+    // 所有候选框按置信度降序排列（跨类别）
+    std::vector<size_t> idx(N);
+    for (size_t i = 0; i < N; ++i) idx[i] = i;
+    std::sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+        return all_dets[a].conf > all_dets[b].conf;
+    });
+
     std::vector<Detection> result;
-    for (int cls = 0; cls < num_classes; ++cls) {
-        std::vector<int> idx;
-        for (int i = 0; i < (int)all_dets.size(); ++i)
-            if ((int)all_dets[i].class_id == cls) idx.push_back(i);
-        if (idx.empty()) continue;
-
-        std::sort(idx.begin(), idx.end(), [&](int a, int b) {
-            return all_dets[a].conf > all_dets[b].conf;
-        });
-
-        std::vector<bool> suppressed(idx.size(), false);
-        for (size_t i = 0; i < idx.size(); ++i) {
-            if (suppressed[i]) continue;
-            result.push_back(all_dets[idx[i]]);
-            for (size_t j = i + 1; j < idx.size(); ++j)
-                if (!suppressed[j] && iou(all_dets[idx[i]], all_dets[idx[j]]) > iou_thresh)
-                    suppressed[j] = true;
+    std::vector<bool> suppressed(N, false);
+    for (size_t i = 0; i < N; ++i) {
+        const size_t keep = idx[i];
+        if (suppressed[keep]) continue;
+        result.push_back(all_dets[keep]);
+        // 跨类别抑制：与 keep 框 IoU 超过阈值的所有后续框
+        for (size_t j = i + 1; j < N; ++j) {
+            const size_t other = idx[j];
+            if (suppressed[other]) continue;
+            if (iou(all_dets[keep], all_dets[other]) > iou_thresh) {
+                suppressed[other] = true;
+            }
         }
     }
     return result;

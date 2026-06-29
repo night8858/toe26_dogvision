@@ -51,8 +51,8 @@
     // ── OpenVINO 模型路径和 PPOCR 模型路径 ──
     "path":
     {
-      "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolo/SENetV2_1_ov_FP16/best.bin",
-      "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolo/SENetV2_1_ov_FP16/best.xml",
+      "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
+      "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
 
       // "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolo/m26325.bin",
       // "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolo/m26325.xml",
@@ -102,6 +102,15 @@
         "bbox_conf_thresh": 0.6,    // 边界框置信度阈值
         "merge_thresh": 0.8,        // 多帧融合阈值
         "max_wellid_distance": 8    // 最大焊点距离
+    },
+
+    // ── YOLO 图像增强参数 ──
+    "yolo_enhance":
+    {
+      "enabled": false,              // 是否启用图像增强（CLAHE + 饱和度）
+      "clahe_clip_limit": 3.2,      // CLAHE 对比度限幅，越大对比度越强（推荐 1.5~4.0）
+      "clahe_tile_grid_size": 8,    // CLAHE 网格尺寸（像素块边长，推荐 4~16）
+      "saturation_scale": 1.2       // 饱和度缩放系数（1.0=不变，推荐 1.1~1.5）
     },
 
     // ── 类别名称设置 ──
