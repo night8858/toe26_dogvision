@@ -4,7 +4,7 @@
   <arg name="port" default=""/>
   <arg name="pos_scale" default="0.01"/>
   <arg name="ocr_answer_topic" default="/ocr/answer"/>
-  <arg name="timeout_ms" default="3000"/>
+  <arg name="timeout_ms" default="15000"/>
 
   <node pkg="dogvision_arm" exec="arm_internation_node" name="arm_internation_node" output="screen">
     <param name="hw_id" value="$(var hw_id)" type="str"/>

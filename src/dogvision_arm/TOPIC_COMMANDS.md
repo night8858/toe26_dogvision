@@ -95,11 +95,12 @@ ros2 topic echo /arm/mission_cmd
 
 | 反馈 data | 含义 |
 | --- | --- |
-| `FEEDBACK:DONE` | 当前任务完成，或上位机等待超时后自动释放 busy。 |
+| `FEEDBACK:DONE` | 当前任务收到 STM32 完成事件；也可能是超时后、下一条新任务开始前迟到的 DONE 补发。 |
+| `FEEDBACK:TIMEOUT` | 上位机等待 DONE/DIAG 超时，已自动释放 busy。 |
 | `FEEDBACK:BUSY` | 上一个任务还在执行，新任务被拒绝。 |
 | `FEEDBACK:REJECTED:<reason>` | STM32 返回诊断拒绝，`reason` 是下位机原因码。 |
 
-注意：如果日志出现 `TIMEOUT for ...`，说明没有收到 STM32 的 DONE 帧；此时 `FEEDBACK:DONE` 只表示上位机释放 busy，不等价于真实动作完成。
+注意：如果日志出现 `TIMEOUT for ...`，说明超时时刻没有收到 STM32 的 DONE 帧；此时 `FEEDBACK:TIMEOUT` 只表示上位机释放 busy，不等价于真实动作完成。若下一条新任务开始前迟到 `DONE`，会再发布 `FEEDBACK:DONE`。
 
 ## 4. 低层调试 `/arm_internation/cmd`
 
@@ -305,7 +306,7 @@ ros2 launch dogvision_arm arm_test.launch
 | `port` | 空 | 指定串口，如 `/dev/ttyACM0`；为空时按 `hw_id` 自动连接。 |
 | `hw_id` | `0483:5740` | 自动连接的 USB VID:PID。 |
 | `baud_rate` | `115200` | 串口波特率。 |
-| `timeout_ms` | `3000` | 高层任务等待 DONE/DIAG 的超时时间；`0` 或负数禁用。 |
+| `timeout_ms` | `15000` | 高层任务等待 DONE/DIAG 的超时时间；`0` 或负数禁用。 |
 | `ocr_answer_topic` | `/ocr/answer` | OCR 答案输入话题。 |
 
 示例：

@@ -279,7 +279,7 @@ struct MissionStateResult
 class ArmMissionController
 {
 public:
-    /// @brief 设置超时时间（毫秒），默认 3000ms。设为 0 或负数则禁用超时。
+    /// @brief 设置超时时间（毫秒），默认 15000ms。设为 0 或负数则禁用超时。
     void set_timeout_ms(int ms)
     {
         timeout_ms_ = ms > 0 ? ms : 0;
@@ -313,6 +313,8 @@ public:
 
         busy_ = true;
         active_command_ = low_level;
+        waiting_late_done_ = false;
+        timed_out_command_.clear();
         command_start_time_ = std::chrono::steady_clock::now();
         result.action = MissionCommandAction::Accept;
         result.low_level = low_level;
@@ -321,20 +323,27 @@ public:
 
     MissionStateResult handle_arm_state(const std::string &state)
     {
-        if (!busy_)
-        {
-            return {};
-        }
-
         if (state == "DONE")
         {
+            if (!busy_ && !waiting_late_done_)
+            {
+                return {};
+            }
+
             MissionStateResult result;
             result.completed = true;
             result.feedback = "FEEDBACK:DONE";
-            result.completed_command = active_command_;
+            result.completed_command = busy_ ? active_command_ : timed_out_command_;
             busy_ = false;
             active_command_.clear();
+            waiting_late_done_ = false;
+            timed_out_command_.clear();
             return result;
+        }
+
+        if (!busy_)
+        {
+            return {};
         }
 
         if (state.rfind("DIAG,", 0) == 0)
@@ -345,13 +354,15 @@ public:
             result.completed_command = active_command_;
             busy_ = false;
             active_command_.clear();
+            waiting_late_done_ = false;
+            timed_out_command_.clear();
             return result;
         }
 
         return {};
     }
 
-    /// @brief 检查是否超时。若 busy 且超时，返回等同于 DONE 的结果并清除 busy。
+    /// @brief 检查是否超时。若 busy 且超时，返回 TIMEOUT 结果并清除 busy，保留一次迟到 DONE 补发机会。
     /// @retval 未超时或未 busy 时 completed=false
     MissionStateResult check_timeout()
     {
@@ -370,8 +381,10 @@ public:
 
         MissionStateResult result;
         result.completed = true;
-        result.feedback = "FEEDBACK:DONE";
+        result.feedback = "FEEDBACK:TIMEOUT";
         result.completed_command = active_command_;
+        timed_out_command_ = active_command_;
+        waiting_late_done_ = true;
         busy_ = false;
         active_command_.clear();
         return result;
@@ -405,7 +418,9 @@ private:
 
     bool busy_ = false;
     std::string active_command_;
-    int timeout_ms_ = 3000;  ///< 默认 3 秒超时
+    std::string timed_out_command_;
+    bool waiting_late_done_ = false;
+    int timeout_ms_ = 15000;  ///< 默认 15 秒超时
     std::chrono::steady_clock::time_point command_start_time_;
 };
 

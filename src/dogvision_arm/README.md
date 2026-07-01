@@ -36,7 +36,7 @@ graph TD
     E -->|状态数据| G[/arm_internation/data]
     E -->|完成事件 DONE| H[/arm_internation/state]
     H -->|监听 DONE| D
-    D -->|FEEDBACK:DONE| B
+    D -->|FEEDBACK:DONE/TIMEOUT| B
 ```
 
 > **代码结构**：`arm_internation.cpp` 负责串口连接/CRC/重连等公共逻辑；`arm_internation_bb.cpp` 实现 BB/4DOF 双臂协议；`arm_internation_cc.cpp` 实现 CC 云台协议。文本命令由 `handle_text_command()` 统一入口按协议分派。
@@ -362,7 +362,7 @@ STM32 应以约 100Hz 周期发送此帧，CRC8 覆盖字节 `[0]~[44]`。
 | `/arm_internation/cmd` | `std_msgs/msg/String` | 输入 | 低层文本命令 |
 | `/arm_internation/data` | `std_msgs/msg/String` | 输出 | 格式 `MODE:4DOF;L4:x,y,z,pitch;R4:x,y,z,pitch;VALVE_BITS:n;MICRO_BITS:n` |
 | `/arm_internation/state` | `std_msgs/msg/String` | 输出 | 收到 BB CC 时发布 `DONE` |
-| `/arm/mission_cmd` | `std_msgs/msg/String` | 输入/反馈 | 高层任务入口；完成后同话题发布 `FEEDBACK:DONE`，忙时 `FEEDBACK:BUSY` |
+| `/arm/mission_cmd` | `std_msgs/msg/String` | 输入/反馈 | 高层任务入口；完成后同话题发布 `FEEDBACK:DONE`，超时发布 `FEEDBACK:TIMEOUT`，忙时 `FEEDBACK:BUSY` |
 | `/ocr/answer` | `std_msgs/msg/UInt8` | 输入 | 发送 `BB 05` 答案字段 |
 
 ---
@@ -394,7 +394,7 @@ ros2 launch dogvision_arm arm_test.launch
 
 `ID` 支持：`0` / `L` / `LEFT` / `左` 表示左臂；`1` / `R` / `RIGHT` / `右` 表示右臂。坐标单位为米。
 
-`arm_mission_node` 是单任务等待模型：执行中收到新任务会拒绝并反馈 `FEEDBACK:BUSY`。默认超时 3 秒后若仍未收到 STM32 的 `BB CC` 完成帧，自动解除 busy 并反馈 `FEEDBACK:DONE`（日志标为 TIMEOUT）。
+`arm_mission_node` 是单任务等待模型：执行中收到新任务会拒绝并反馈 `FEEDBACK:BUSY`。默认超时 15 秒后若仍未收到 STM32 的 `BB CC` 完成帧，自动解除 busy 并反馈 `FEEDBACK:TIMEOUT`（日志标为 TIMEOUT）；若下一条新任务开始前迟到 `DONE`，会补发 `FEEDBACK:DONE`。
 
 #### 低层调试命令（`$` 前缀，直发 `/arm_internation/cmd`）
 
@@ -578,7 +578,7 @@ ros2 launch dogvision_arm arm_control.launch
 | `port` | 空 | 指定串口路径；留空时按 `hw_id` 自动重连 |
 | `pos_scale` | `0.01` | 兼容 int16 位置视图缩放 |
 | `ocr_answer_topic` | `/ocr/answer` | OCR 答案输入话题 |
-| `timeout_ms` | `3000` | 任务超时（ms），超时后自动解除 busy；设 0 禁用 |
+| `timeout_ms` | `15000` | 任务超时（ms），超时后自动解除 busy 并反馈 `FEEDBACK:TIMEOUT`；设 0 禁用 |
 
 测试启动（带终端）：
 
