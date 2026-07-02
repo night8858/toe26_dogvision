@@ -403,11 +403,16 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 | 参数名 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
-| `mode` | string | `"production"` | 运行模式：`"test"` 或 `"production"` |
+| `mode` | string | `"production"` | 运行模式：`"test"`、`"production"` 或 `"visual_test"` |
 | `show_visual` | bool | true | 是否显示 `"Math OCR"` 整帧结果窗口 |
 | `show_ocr_roi` | bool | false | 是否显示当前最优算术候选及筛选状态 |
+| `show_debug_panels` | bool | true | 是否显示 `"Math OCR Debug"` 调试拼图窗口 |
 | `enable_keyboard_trigger` | bool | true | production 模式是否允许 Enter 触发 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | test 模式下 YAML 输出路径 |
+| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
+| `input_path` | string | 空 | visual_test 模式的离线图片或目录；为空时使用相机 |
+| `loop` | bool | false | visual_test 离线目录是否循环播放 |
+| `wait_ms` | int | 1000 | visual_test 离线目录每张图片自动播放间隔 |
 
 **启动方式**：
 
@@ -425,6 +430,13 @@ ros2 launch dogvision_bringup vision.launch \
 
 # 手动启动 production 模式
 ros2 run dogvision_vision ppocr_node --ros-args -p mode:=production
+
+# 6m 屏幕 OCR 可视化调试（相机实时）
+ros2 launch dogvision_vision ppocr_visual_test.launch
+
+# 离线图片回放调试
+ros2 launch dogvision_vision ppocr_visual_test.launch \
+  input_path:=src/dogvision_vision/data/img/image_143643394669487.png
 
 # 触发 OCR 跟踪
 ros2 topic pub --once /ocr/trigger std_msgs/msg/String "{data: start}"
@@ -728,7 +740,9 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false v
 | `config_path` | string | `<share>/config/settings.json` | 视觉配置文件 |
 | `show_visual` | bool | true | 是否显示整帧 OCR 结果窗口 |
 | `show_ocr_roi` | bool | true | 是否显示当前最优算术候选及筛选状态 |
+| `show_debug_panels` | bool | true | 是否显示原图、OCR 输入、白色 mask、ROI 的调试拼图 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | 输出 YAML 路径 |
+| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
 
 ```bash
 ros2 launch dogvision_vision ppocr_test.launch
@@ -737,7 +751,43 @@ ros2 launch dogvision_vision ppocr_test.launch \
   show_visual:=false show_ocr_roi:=true
 ```
 
-### 7.3 `math_generator.launch`
+### 7.3 `ppocr_visual_test.launch`
+
+启动 PPOCR 可视化调试。默认 `input_path` 为空，使用海康相机实时画面；传入图片或目录时进入离线回放。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `input_path` | string | 空 | 单张图片或图片目录；为空时使用相机 |
+| `loop` | bool | false | 离线目录是否循环播放 |
+| `wait_ms` | int | 1000 | 离线目录自动播放间隔 |
+| `show_visual` | bool | true | 显示整帧标注窗口 |
+| `show_ocr_roi` | bool | true | 显示最佳 OCR 候选窗口 |
+| `show_debug_panels` | bool | true | 显示调试拼图窗口 |
+| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 快照保存目录 |
+
+快捷键：
+
+| 按键 | 作用 |
+|---|---|
+| `q` / `ESC` | 退出 |
+| `s` | 保存原图、标注图、OCR 输入、白色 mask、ROI、候选图和 debug 拼图 |
+| `space` | 离线回放暂停/继续 |
+| `n` | 离线回放下一张 |
+
+```bash
+# 相机实时调试 6m 屏幕识别效果
+ros2 launch dogvision_vision ppocr_visual_test.launch
+
+# 单张图片离线调试
+ros2 launch dogvision_vision ppocr_visual_test.launch \
+  input_path:=src/dogvision_vision/data/img/image_143643394669487.png
+
+# 目录离线回放
+ros2 launch dogvision_vision ppocr_visual_test.launch \
+  input_path:=src/dogvision_vision/data/img loop:=true wait_ms:=800
+```
+
+### 7.4 `math_generator.launch`
 
 启动数学题生成节点。
 
@@ -849,6 +899,22 @@ ros2 launch dogvision_vision ppocr_test.launch
 ```
 
 持续运行 OCR 识别并将所有稳定结果变化写入 `data/ocr_output/ocr_results.yaml`。
+
+### 9.4 6m OCR 可视化调试
+
+```bash
+ros2 launch dogvision_vision ppocr_visual_test.launch
+```
+
+观察三个窗口：
+
+| 窗口 | 用途 |
+|---|---|
+| `Math OCR` | 整帧 OCR 框、算术候选框和稳定结果叠加 |
+| `Math OCR Candidate` | 当前最佳算术候选或 ROI 局部放大 |
+| `Math OCR Debug` | 原图、OCR 输入、白色 mask、ROI/候选、候选分数和投票状态 |
+
+6m 屏幕调试时优先看 `Math OCR Debug`：白色 mask 应稳定覆盖屏幕白底区域，ROI 内字符应清晰且高度足够；候选列表里的 `white` 应高于阈值，`score` 过低时优先调整焦距、曝光、屏幕字号或 OCR 阈值。按 `s` 保存快照到 `data/ocr_debug` 便于离线复盘。
 
 ---
 
