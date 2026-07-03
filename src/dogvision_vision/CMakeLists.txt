@@ -56,6 +56,7 @@ endif()
 
 # ── 核心库：包含所有非节点模块 ──
 add_library(dogvision_vision_lib
+  src/camera/camera_source.cpp   # settings.json 驱动的相机适配层
   src/camera/hikvision.cpp       # 海康 MVS 相机封装
   src/camera/usbcam.cpp          # USB 相机封装
   src/core/detector.cpp          # 检测器基类（加载配置、鱼眼去畸变）

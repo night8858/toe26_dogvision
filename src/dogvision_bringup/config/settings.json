@@ -1,4 +1,11 @@
 {
+  //当前使用的相机类型
+    "camera":
+    {
+      "type": "hik",
+      "usb_index": 0
+    },
+
   //摄像头参数设置
     "hikcamera":
     {

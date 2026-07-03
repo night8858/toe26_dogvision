@@ -6,7 +6,7 @@
 
 #include <opencv2/opencv.hpp>
 
-#include <dogvision_vision/camera/hikvision.hpp>
+#include <dogvision_vision/camera/camera_source.hpp>
 #include <dogvision_vision/common_structs.h>
 #include <dogvision_vision/nuc_detect.hpp>
 
@@ -137,8 +137,7 @@ void show_viz_image(
 
 /**
  * @brief 从相机获取一帧图像并执行一次 YOLO 推理。
- * @param hik 海康相机封装对象。
- * @param cam_params 相机参数，包含设备编号。
+ * @param camera settings.json 选择的相机适配对象。
  * @param detector YOLO 检测器实例。
  * @param enable_undistort 是否执行鱼眼去畸变。
  * @param processed_frame 输出推理使用的图像。
@@ -146,8 +145,7 @@ void show_viz_image(
  * @retval bool 成功获取有效图像并完成推理流程时返回 true。
  */
 bool run_single_detection(
-    HikGrab& hik,
-    const s_camera_params& cam_params,
+    CameraSource& camera,
     detect_oponvino& detector,
     bool enable_undistort,
     cv::Mat& processed_frame,
@@ -155,8 +153,7 @@ bool run_single_detection(
 
 /**
  * @brief 在指定时长内连续取帧，并对每帧执行 YOLO 推理。
- * @param hik 海康相机封装对象。
- * @param cam_params 相机参数，包含设备编号。
+ * @param camera settings.json 选择的相机适配对象。
  * @param detector YOLO 检测器实例。
  * @param enable_undistort 是否执行鱼眼去畸变。
  * @param last_frame 输出最后一帧处理过的图像。
@@ -164,8 +161,7 @@ bool run_single_detection(
  * @retval std::vector<Detection> 时间窗口内收集到的所有原始检测结果。
  */
 std::vector<Detection> collect_detections(
-    HikGrab& hik,
-    const s_camera_params& cam_params,
+    CameraSource& camera,
     detect_oponvino& detector,
     bool enable_undistort,
     cv::Mat& last_frame,

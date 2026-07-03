@@ -3,9 +3,12 @@
 #include <openvino/openvino.hpp> // OpenVINO 2025 接口
 #include <vector>
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 #include <dogvision_vision/common_structs.h>
@@ -30,11 +33,118 @@
 // detect_det_ppocr ── 文本检测阶段
 // ─────────────────────────────────────────────────────────────────────────────
 
+namespace
+{
+std::shared_ptr<ov::Model> read_openvino_model(
+    ov::Core& core,
+    const std::string& model_path,
+    const std::string& weights_path)
+{
+    if (model_path.empty())
+        throw std::runtime_error("PP-OCR model path is empty");
+    if (weights_path.empty())
+        return core.read_model(model_path);
+    return core.read_model(model_path, weights_path);
+}
+
+std::string trim_ascii(const std::string& value)
+{
+    const auto begin = value.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos)
+        return "";
+    const auto end = value.find_last_not_of(" \t\r\n");
+    return value.substr(begin, end - begin + 1);
+}
+
+std::string parse_yaml_scalar(std::string value)
+{
+    value = trim_ascii(value);
+    if (value.size() >= 2 && value.front() == '\'' && value.back() == '\'')
+    {
+        std::string unquoted = value.substr(1, value.size() - 2);
+        std::string out;
+        for (size_t i = 0; i < unquoted.size(); ++i)
+        {
+            if (unquoted[i] == '\'' && i + 1 < unquoted.size() &&
+                unquoted[i + 1] == '\'')
+            {
+                out.push_back('\'');
+                ++i;
+            }
+            else
+            {
+                out.push_back(unquoted[i]);
+            }
+        }
+        return out;
+    }
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+    {
+        return value.substr(1, value.size() - 2);
+    }
+    return value;
+}
+
+bool is_yaml_path(const std::string& path)
+{
+    const std::filesystem::path p(path);
+    const std::string ext = p.extension().string();
+    return ext == ".yml" || ext == ".yaml";
+}
+
+std::vector<std::string> load_paddleocr_character_dict(
+    const std::string& yml_path)
+{
+    std::ifstream ifs(yml_path);
+    if (!ifs.is_open())
+        throw std::runtime_error("Failed to open PP-OCR dictionary: " + yml_path);
+
+    std::vector<std::string> chars;
+    bool in_character_dict = false;
+    std::string line;
+    while (std::getline(ifs, line))
+    {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+
+        if (!in_character_dict)
+        {
+            if (trim_ascii(line) == "character_dict:")
+                in_character_dict = true;
+            continue;
+        }
+
+        if (line.rfind("  - ", 0) == 0)
+        {
+            chars.push_back(parse_yaml_scalar(line.substr(4)));
+            continue;
+        }
+
+        if (!trim_ascii(line).empty() && line.front() != ' ')
+            break;
+    }
+
+    if (chars.empty())
+        throw std::runtime_error(
+            "PP-OCR character_dict is empty or missing: " + yml_path);
+    return chars;
+}
+} // namespace
+
 // 加载 det 检测模型并在指定推理设备（CPU/GPU 等）上完成编译
 void detect_det_ppocr::load_model(const std::string& model_path, const std::string& device)
 {
-    // 读取 PaddlePaddle 格式模型（OpenVINO 可直接解析 .pdmodel 文件）
-    std::shared_ptr<ov::Model> model = core_.read_model(model_path);
+    load_model(model_path, "", device);
+}
+
+void detect_det_ppocr::load_model(
+    const std::string& model_path,
+    const std::string& weights_path,
+    const std::string& device)
+{
+    // OpenVINO 可读取单文件模型，也可读取 IR .xml + .bin。
+    std::shared_ptr<ov::Model> model =
+        read_openvino_model(core_, model_path, weights_path);
 
     // 将模型编译到目标推理设备，生成可执行的 CompiledModel
     model_ = core_.compile_model(model, device);
@@ -371,8 +481,17 @@ void detect_det_ppocr::postprocess()
 // 加载 rec 识别模型（CRNN/SVTR 结构，PaddlePaddle 格式）并在指定设备上编译
 void detect_rec_ppocr::load_model(const std::string& model_path, const std::string& device)
 {
-    // 读取 PaddlePaddle 模型（OpenVINO 可直接解析 .pdmodel + .pdiparams）
-    std::shared_ptr<ov::Model> model = core_.read_model(model_path);
+    load_model(model_path, "", device);
+}
+
+void detect_rec_ppocr::load_model(
+    const std::string& model_path,
+    const std::string& weights_path,
+    const std::string& device)
+{
+    // OpenVINO 可读取单文件模型，也可读取 IR .xml + .bin。
+    std::shared_ptr<ov::Model> model =
+        read_openvino_model(core_, model_path, weights_path);
     const ov::PartialShape output_shape = model->output(0).get_partial_shape();
     if (output_shape.rank().is_static() &&
         output_shape.rank().get_length() == 3 &&
@@ -401,6 +520,16 @@ void detect_rec_ppocr::loda_dict(const std::string& dict_path)
     allowed_class_indices_.clear();
     allowed_chars_loaded_ = false;
     dict_.push_back("blank"); // 索引 0：CTC blank 标签
+
+    if (is_yaml_path(dict_path))
+    {
+        const std::vector<std::string> chars =
+            load_paddleocr_character_dict(dict_path);
+        dict_.insert(dict_.end(), chars.begin(), chars.end());
+        dict_.push_back(" "); // 最后一个索引为空格
+        validate_model_dictionary();
+        return;
+    }
 
     std::ifstream ifs(dict_path);
     if (!ifs.is_open())

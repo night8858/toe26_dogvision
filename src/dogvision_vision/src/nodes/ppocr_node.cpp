@@ -7,7 +7,7 @@
  *   - production（生产模式）：通过 /ocr/trigger 话题触发，发布 /ocr/result
  *
  * 完整流水线：
- *   1. 从海康相机获取帧
+ *   1. 从 settings.json 选择的相机获取帧
  *   2. 鱼眼去畸变（可选）
  *   3. 按配置准备彩色或三通道灰度整帧 OCR 输入
  *   4. PPOCR 文本检测（detect_det_ppocr）
@@ -36,11 +36,12 @@
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include <dogvision_vision/camera/hikvision.hpp>
+#include <dogvision_vision/camera/camera_source.hpp>
 #include <dogvision_vision/common_structs.h>
 #include <dogvision_vision/ocr_MultiFrameVoter.hpp>
 #include <dogvision_vision/ocr_detect.hpp>
@@ -56,6 +57,36 @@ constexpr char kOcrDebugWindowName[] = "Math OCR Debug";
 
 std::atomic<bool> g_ocr_triggered{false};
 std::atomic<bool> g_ocr_running{true};
+
+struct OCRModelPaths
+{
+    std::string model_path;
+    std::string weights_path;
+};
+
+OCRModelPaths select_ocr_model_paths(
+    const std::string& xml_path,
+    const std::string& bin_path,
+    const std::string& legacy_path,
+    const std::string& label)
+{
+    if (!xml_path.empty())
+    {
+        if (bin_path.empty())
+        {
+            throw std::runtime_error(
+                "PP-OCR " + label + " OpenVINO XML path is set but BIN path is empty");
+        }
+        return OCRModelPaths{xml_path, bin_path};
+    }
+
+    if (!legacy_path.empty())
+        return OCRModelPaths{legacy_path, ""};
+
+    throw std::runtime_error(
+        "PP-OCR " + label +
+        " model path is empty; configure OpenVINO .xml/.bin paths or legacy model path");
+}
 
 struct OCRDebugFrame
 {
@@ -78,6 +109,97 @@ struct OCRDebugFrame
     std::size_t voter_valid = 0;
     bool voter_stable = false;
     std::string stable_expr;
+};
+
+class OcrVideoRecorder
+{
+public:
+    OcrVideoRecorder(const s_detector_params& config,
+                     const std::string& name_prefix,
+                     const rclcpp::Logger& logger)
+        : enabled_(config.save_ppocr_video)
+        , save_dir_(config.ppocr_video_save_dir)
+        , fps_(config.ppocr_video_fps)
+        , name_prefix_(name_prefix)
+        , logger_(logger)
+    {
+        if (enabled_ && save_dir_.empty())
+        {
+            RCLCPP_WARN(logger_, "PP-OCR video save dir is empty; video disabled.");
+            enabled_ = false;
+        }
+    }
+
+    ~OcrVideoRecorder()
+    {
+        close();
+    }
+
+    void write(const cv::Mat& frame)
+    {
+        if (!enabled_ || frame.empty())
+            return;
+
+        if (!writer_.isOpened() && !open(frame.size()))
+            return;
+
+        writer_.write(frame);
+        ++frame_count_;
+    }
+
+    void close()
+    {
+        if (writer_.isOpened())
+        {
+            writer_.release();
+            RCLCPP_INFO(logger_, "Saved PP-OCR video: %s (%d frames)",
+                        output_path_.c_str(), frame_count_);
+        }
+    }
+
+private:
+    bool open(const cv::Size& frame_size)
+    {
+        std::error_code ec;
+        fs::create_directories(save_dir_, ec);
+        if (ec)
+        {
+            RCLCPP_WARN(logger_, "Cannot create PP-OCR video dir '%s': %s",
+                        save_dir_.c_str(), ec.message().c_str());
+            enabled_ = false;
+            return false;
+        }
+
+        const auto now = std::chrono::system_clock::now().time_since_epoch();
+        const auto ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+        fs::path output(save_dir_);
+        output /= name_prefix_ + "_" + std::to_string(ms) + ".avi";
+        output_path_ = output.string();
+
+        writer_.open(output_path_, cv::VideoWriter::fourcc('M', 'P', '4', 'V'),
+                     fps_, frame_size, true);
+        if (!writer_.isOpened())
+        {
+            RCLCPP_WARN(logger_, "Cannot open PP-OCR video writer: %s",
+                        output_path_.c_str());
+            enabled_ = false;
+            return false;
+        }
+
+        RCLCPP_INFO(logger_, "PP-OCR video output: %s (%.2f FPS)",
+                    output_path_.c_str(), fps_);
+        return true;
+    }
+
+    bool enabled_;
+    std::string save_dir_;
+    double fps_;
+    std::string name_prefix_;
+    rclcpp::Logger logger_;
+    cv::VideoWriter writer_;
+    std::string output_path_;
+    int frame_count_ = 0;
 };
 
 struct VisualizationKey
@@ -399,27 +521,21 @@ cv::Mat make_candidate_canvas(
 } // namespace
 
 /**
- * @brief 在取帧失败时重连海康相机。
- * @param hik 需要重连的相机封装对象。
+ * @brief 在取帧失败时重连当前相机。
+ * @param camera 需要重连的相机适配对象。
  * @param logger 用于输出过程信息的日志对象。
  * @param max_retries 最大重连次数。
  * @retval bool 重连后能够成功获取有效帧时返回 true。
  */
-static bool ensure_camera(HikGrab& hik, const rclcpp::Logger& logger, int max_retries = 5)
+static bool ensure_camera(CameraSource& camera, const rclcpp::Logger& logger, int max_retries = 5)
 {
     for (int i = 0; i < max_retries; ++i)
     {
-        cv::Mat test;
-        if (hik.get_one_frame(test, 0) && !test.empty())
+        RCLCPP_WARN(logger, "Camera lost (attempt %d/%d), reconnecting...", i + 1, max_retries);
+        if (camera.recover(1))
         {
             return true;
         }
-
-        RCLCPP_WARN(logger, "Camera lost (attempt %d/%d), reconnecting...", i + 1, max_retries);
-        hik.Hik_end();
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        hik.Hik_init();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
     RCLCPP_ERROR(logger, "Camera reconnection failed after %d attempts.", max_retries);
     return false;
@@ -668,7 +784,7 @@ static void fill_voter_debug(OCRDebugFrame& debug, const OCRMultiFrameVoter& vot
 /**
  * @brief 运行连续 OCR 测试模式，并将稳定结果变化追加写入 YAML。
  * @param node ROS2 节点对象。
- * @param hik 相机封装对象。
+ * @param camera settings.json 选择的相机适配对象。
  * @param det 文本检测模型封装对象。
  * @param rec 文本识别模型封装对象。
  * @param yaml_path YAML 输出文件路径。
@@ -677,7 +793,7 @@ static void fill_voter_debug(OCRDebugFrame& debug, const OCRMultiFrameVoter& vot
  * @retval int 类进程退出码。
  */
 static int run_test_mode(const rclcpp::Node::SharedPtr& node,
-                         HikGrab& hik,
+                         CameraSource& camera,
                          detect_det_ppocr& det,
                          detect_rec_ppocr& rec,
                          const s_detector_params& ocr_config,
@@ -693,6 +809,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
     OCRMultiFrameVoter voter;
     cv::Rect2f stable_roi;
     bool has_stable_roi = false;
+    OcrVideoRecorder video_recorder(ocr_config, "ppocr_test", logger);
 
     RCLCPP_INFO(logger, "MODE       : TEST (continuous OCR + YAML output)");
     RCLCPP_INFO(logger, "YAML output: %s", yaml_path.c_str());
@@ -703,9 +820,9 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         rclcpp::spin_some(node);
 
         cv::Mat frame;
-        if (!hik.get_one_frame(frame, 0))
+        if (!camera.get_frame(frame))
         {
-            if (!ensure_camera(hik, logger))
+            if (!ensure_camera(camera, logger))
             {
                 RCLCPP_ERROR(logger, "Cannot recover camera, exiting.");
                 break;
@@ -713,14 +830,17 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
             continue;
         }
 
-        cv::Mat undistorted = undistort_image(frame);
-        if (!undistorted.empty())
+        if (ocr_config.enable_undistort)
         {
-            frame = undistorted;
-        }
-        else
-        {
-            RCLCPP_WARN(logger, "Undistortion failed, using raw frame.");
+            cv::Mat undistorted = undistort_image(frame);
+            if (!undistorted.empty())
+            {
+                frame = undistorted;
+            }
+            else
+            {
+                RCLCPP_WARN(logger, "Undistortion failed, using raw frame.");
+            }
         }
 
         std::string expr_str;
@@ -781,6 +901,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
             draw_result_overlay(
                 frame, stable_roi, stable.expr, stable.result, stable.mod4);
         }
+        video_recorder.write(frame);
 
         fill_voter_debug(debug, voter);
         const cv::Mat debug_panel = make_debug_panel(debug);
@@ -807,7 +928,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
 /**
  * @brief 运行基于触发的话题生产模式 OCR。
  * @param node ROS2 节点对象。
- * @param hik 相机封装对象。
+ * @param camera settings.json 选择的相机适配对象。
  * @param det 文本检测模型封装对象。
  * @param rec 文本识别模型封装对象。
  * @param show_visual 是否启用 OpenCV 可视化窗口。
@@ -815,7 +936,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
  * @retval int 类进程退出码。
  */
 static int run_production_mode(const rclcpp::Node::SharedPtr& node,
-                               HikGrab& hik,
+                               CameraSource& camera,
                                detect_det_ppocr& det,
                                detect_rec_ppocr& rec,
                                const s_detector_params& ocr_config,
@@ -863,6 +984,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     cv::Mat last_ocr_roi;
     cv::Mat last_debug_panel;
     OCRDebugFrame last_debug;
+    OcrVideoRecorder video_recorder(ocr_config, "ppocr_production", logger);
     rclcpp::WallRate idle_rate(20);
     while (rclcpp::ok())
     {
@@ -904,10 +1026,10 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         }
 
         cv::Mat frame;
-        if (!hik.get_one_frame(frame, 0))
+        if (!camera.get_frame(frame))
         {
             RCLCPP_ERROR(logger, "Failed to grab frame, reconnecting...");
-            if (ensure_camera(hik, logger))
+            if (ensure_camera(camera, logger))
             {
                 continue;
             }
@@ -915,10 +1037,13 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             break;
         }
 
-        cv::Mat undistorted = undistort_image(frame);
-        if (!undistorted.empty())
+        if (ocr_config.enable_undistort)
         {
-            frame = undistorted;
+            cv::Mat undistorted = undistort_image(frame);
+            if (!undistorted.empty())
+            {
+                frame = undistorted;
+            }
         }
 
         std::string expr_str;
@@ -978,6 +1103,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             draw_result_overlay(
                 frame, stable_roi, stable.expr, stable.result, stable.mod4);
         }
+        video_recorder.write(frame);
         last_display_frame = frame.clone();
         fill_voter_debug(debug, voter);
         last_debug_panel = make_debug_panel(debug);
@@ -1086,9 +1212,12 @@ static int run_visual_test_mode(const rclcpp::Node::SharedPtr& node,
             continue;
         }
 
-        cv::Mat undistorted = undistort_image(frame);
-        if (!undistorted.empty())
-            frame = undistorted;
+        if (ocr_config.enable_undistort)
+        {
+            cv::Mat undistorted = undistort_image(frame);
+            if (!undistorted.empty())
+                frame = undistorted;
+        }
 
         std::string expr_str;
         int int_result = 0;
@@ -1207,12 +1336,22 @@ int main(int argc, char** argv)
     RCLCPP_INFO(logger, "Config     : %s", config_path.c_str());
 
     detect_det_ppocr det(&config);
-    det.load_model(config.detect_config.ppocr_det_model_path, config.detect_config.det_device);
+    const OCRModelPaths det_model = select_ocr_model_paths(
+        config.detect_config.ppocr_det_model_xml_path,
+        config.detect_config.ppocr_det_model_bin_path,
+        config.detect_config.ppocr_det_model_path,
+        "det");
+    det.load_model(det_model.model_path, det_model.weights_path, config.detect_config.det_device);
 
     detect_rec_ppocr rec(&config);
-    rec.load_model(config.detect_config.ppocr_rec_model_path, config.detect_config.rec_device);
     rec.loda_dict(config.detect_config.rec_char_dict_path);
     rec.load_allowed_chars(config.detect_config.rec_allowed_chars_path);
+    const OCRModelPaths rec_model = select_ocr_model_paths(
+        config.detect_config.ppocr_rec_model_xml_path,
+        config.detect_config.ppocr_rec_model_bin_path,
+        config.detect_config.ppocr_rec_model_path,
+        "rec");
+    rec.load_model(rec_model.model_path, rec_model.weights_path, config.detect_config.rec_device);
 
     const float default_wh_ratio =
         (config.detect_config.rec_img_h > 0)
@@ -1220,9 +1359,20 @@ int main(int argc, char** argv)
             : 320.0f / 48.0f;
     rec.set_max_wh_ratio(default_wh_ratio);
 
-    init_fisheye_undistort(
-        config.hikcamera_config.width,
-        config.hikcamera_config.height);
+    if (config.detect_config.enable_undistort)
+    {
+        init_fisheye_undistort(
+            config.camera_type == "usb"
+                ? config.usbcamera_config[config.usb_camera_index].width
+                : config.hikcamera_config.width,
+            config.camera_type == "usb"
+                ? config.usbcamera_config[config.usb_camera_index].height
+                : config.hikcamera_config.height);
+    }
+    else
+    {
+        RCLCPP_INFO(logger, "OCR fisheye undistort disabled by settings.");
+    }
 
     std::error_code ec;
     fs::create_directories(fs::path(yaml_path).parent_path(), ec);
@@ -1247,34 +1397,33 @@ int main(int argc, char** argv)
     }
     else if (mode == "test" || mode == "production" || mode == "visual_test")
     {
-        s_camera_params cam_params{};
-        cam_params.device_id = config.hikcamera_config.device_id;
-        cam_params.width = config.hikcamera_config.width;
-        cam_params.height = config.hikcamera_config.height;
-        cam_params.offset_x = config.hikcamera_config.offset_x;
-        cam_params.offset_y = config.hikcamera_config.offset_y;
-        cam_params.exposure = config.hikcamera_config.exposure;
-
-        HikGrab hik(cam_params);
-        hik.Hik_init();
-        RCLCPP_INFO(logger, "Camera     : device=%d  %dx%d",
-                    cam_params.device_id, cam_params.width, cam_params.height);
+        CameraSource camera(config);
+        if (!camera.init())
+        {
+            RCLCPP_ERROR(logger, "Failed to initialize %s camera",
+                         camera.type_name().c_str());
+            rclcpp::shutdown();
+            return 1;
+        }
+        RCLCPP_INFO(logger, "Camera     : type=%s device=%d  %dx%d",
+                    camera.type_name().c_str(), camera.device_id(),
+                    camera.width(), camera.height());
 
         if (mode == "production")
         {
             ret = run_production_mode(
-                node, hik, det, rec, config.detect_config,
+                node, camera, det, rec, config.detect_config,
                 show_visual, show_ocr_roi, show_debug_panels,
                 enable_keyboard_trigger, debug_snapshot_dir);
         }
         else
         {
             ret = run_test_mode(
-                node, hik, det, rec, config.detect_config, yaml_path,
+                node, camera, det, rec, config.detect_config, yaml_path,
                 show_visual, show_ocr_roi, show_debug_panels,
                 debug_snapshot_dir);
         }
-        hik.Hik_end();
+        camera.shutdown();
     }
     else
     {

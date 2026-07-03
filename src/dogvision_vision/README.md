@@ -12,7 +12,7 @@ ROS 2 相机采集、YOLO 目标检测、PP-OCR 文字识别与算术题识别�
 |---|---|---|
 | `yolo_node` | `yolo_node` | 触发式单帧抓帧 → YOLO 推理 → 2×4 网格分配 → JSON 发布 |
 | `yolo_accuracy_test_node` | `yolo_accuracy_test_node` | 连续实时 YOLO 推理 → 标注可视化 → 带标注视频录制 |
-| `ppocr_node` | `ppocr_node` | 海康相机取帧 → 整帧 PP-OCR → 单行算术候选组合 → 白色外围筛选 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
+| `ppocr_node` | `ppocr_node` | 相机取帧 → 整帧 PP-OCR → 单行算术候选组合 → 白色外围筛选 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
 | `math_generator_node` | `math_generator_node` | 随机生成复合四则运算题 → 全屏渲染显示 → 追加写入 YAML |
 
 ---
@@ -153,6 +153,12 @@ source install/setup.bash
 
 ```jsonc
 {
+  // 当前使用的相机类型：hik 或 usb
+  "camera": {
+    "type": "hik",
+    "usb_index": 0
+  },
+
   // 海康相机参数
   "hikcamera": {
     "device_id": 0,
@@ -164,12 +170,13 @@ source install/setup.bash
     "gain": 9
   },
 
-  // 鱼眼畸变系数 D（4 个参数，从标定结果读取）
+  // 鱼眼去畸变与畸变系数 D（4 个参数，从标定结果读取）
   "lens_distortion": {
+    "enable_undistort": true,
     "D": [0.01947, 0.02210, -0.04101, 0.02622]
   },
 
-  // USB 相机参数（预留，当前未使用）
+  // USB 相机参数；camera.type="usb" 时使用 usbcamera{usb_index}
   "usbcamera0": { "device_id": 0, "width": 1920, "height": 1080, "FPS": 120 },
   "usbcamera1": { "device_id": 1, "width": 1920, "height": 1080, "FPS": 120 },
   "usbcamera2": { "device_id": 2, "width": 1920, "height": 1080, "FPS": 120 },
@@ -179,10 +186,14 @@ source install/setup.bash
   "path": {
     "openvino_bin_file_path": "models/yolo/yolo/m26325.bin",
     "openvino_xml_file_path": "models/yolo/yolo/m26325.xml",
-    "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
-    "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
+    "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
+    "ppocr_det_model_xml_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
+    "ppocr_rec_model_bin_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
+    "ppocr_rec_model_xml_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
+    "ppocr_det_model_path": "",                         // 旧 .pdmodel/ONNX 单文件回退路径
+    "ppocr_rec_model_path": "",                         // 旧 .pdmodel/ONNX 单文件回退路径
     "ppocr_cls_model_path": "",                          // 文字方向分类（暂未使用）
-    "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt",
+    "ppocr_dict_path": "models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
     "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt",
     "yolo_device": "CPU"                        // YOLO 推理设备：CPU / GPU / AUTO:GPU,CPU
   },
@@ -218,6 +229,14 @@ source install/setup.bash
     "saturation_scale": 1.3       // 饱和度缩放系数（1.0=不变，推荐 1.1~1.5）
   },
 
+  // 推理结果保存
+  "output_save": {
+    "save_ppocr_video": true,
+    "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
+    "ppocr_video_fps": 20.0,
+    "save_yolo_test_video": true
+  },
+
   // 类别数量与名称（最多 4 类）
   "nums": {
     "classes": 4,
@@ -228,6 +247,12 @@ source install/setup.bash
   }
 }
 ```
+
+鱼眼去畸变参数：
+
+| 参数 | 默认值 | 说明 |
+|---|---:|---|
+| `lens_distortion.enable_undistort` | `true` | `true` 启用鱼眼去畸变，`false` 所有视觉节点直接使用原图 |
 
 OCR 数学题筛选参数：
 
@@ -254,7 +279,16 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 | `clahe_tile_grid_size` | `8` | CLAHE 网格像素块边长，范围 `[1, 32]` |
 | `saturation_scale` | `1.3` | HSV-S 通道缩放系数，`1.0`=不变，范围 `(0, ∞)` |
 
-`ppocr_keys_v1.txt` 必须保留为官方完整字典，不能直接裁剪或重排，否则会破坏识别模型的类别索引。`math_chars.txt` 是解码白名单，当前允许：
+输出保存参数（`output_save` 节）：
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `save_ppocr_video` | `true` | 是否保存 PP-OCR 在线推理主标注视频 |
+| `ppocr_video_save_dir` | `data/ocr_output/video` | PP-OCR 视频保存目录 |
+| `ppocr_video_fps` | `20.0` | PP-OCR 视频帧率，必须大于 0 |
+| `save_yolo_test_video` | `true` | 是否保存 YOLO 准确率测试视频 |
+
+PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对应的 `inference.yml`，确保字符表类别数与模型输出一致。PP-OCRv4 旧模型仍可使用 `ppocr_keys_v1.txt`。`math_chars.txt` 是解码白名单，当前允许：
 
 ```text
 0-9  +  -  *  /  ×  ÷  =  .  (  )
@@ -271,7 +305,7 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 ### 5.1 `yolo_node` — 触发式 YOLO 推理节点
 
 **工作流程**：
-1. 加载配置文件，初始化 YOLO OpenVINO 模型和海康相机。
+1. 加载配置文件，初始化 YOLO OpenVINO 模型和 `settings.json` 选择的相机。
 2. 等待触发信号（话题 `/yolo/trigger` 收到 `"start_infer"` 或终端按 Enter）。
 3. 触发后抓取一帧 → 可选鱼眼去畸变 → 可选图像增强（CLAHE + 饱和度）→ YOLO 推理 → 跨类别 NMS（同一位置只保留置信度最高的框）→ 检测结果光栅排序 → 2×4 网格 K-means 分配。
 4. 发布 JSON 结果到 `/yolo/result` 和 `/yolo/block_grid`。
@@ -293,7 +327,7 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
 | `result_topic` | string | `/yolo/result` | 检测结果发布话题 |
 | `show_window` | bool | false | 是否显示 OpenCV 可视化窗口 |
-| `enable_undistort` | bool | true | 是否启用鱼眼去畸变 |
+| `enable_undistort` | bool | true | 是否启用鱼眼去畸变；还需 `settings.json` 中 `lens_distortion.enable_undistort=true` |
 | `save_images` | bool | true | 是否保存结果图 |
 | `enable_keyboard_trigger` | bool | true | 是否允许 Enter 触发；组合 launch 默认关闭 |
 | `save_dir` | string | `<share>/data/yolorun` | 结果图保存目录 |
@@ -329,7 +363,7 @@ ros2 topic pub --once /yolo/trigger std_msgs/msg/String "{data: start_infer}"
 ### 5.2 `yolo_accuracy_test_node` — YOLO 准确性测试节点
 
 **工作流程**：
-1. 加载配置，初始化 YOLO 模型和海康相机。
+1. 加载配置，初始化 YOLO 模型和 `settings.json` 选择的相机。
 2. 循环抓帧 → 去畸变 → YOLO 推理 → 可视化标注 → 写入视频文件。
 3. 按 Q 或 ESC 退出，自动关闭视频文件。
 
@@ -340,7 +374,7 @@ ros2 topic pub --once /yolo/trigger std_msgs/msg/String "{data: start_infer}"
 | 参数名 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
-| `enable_undistort` | bool | true | 是否启用去畸变 |
+| `enable_undistort` | bool | true | 是否启用去畸变；还需 `settings.json` 中 `lens_distortion.enable_undistort=true` |
 | `output_dir` | string | `<share>/data/yolotest` | 测试视频输出目录 |
 | `video_fps` | double | 20.0 | 输出视频帧率 |
 | `visual_nms_thresh` | double | 0.7 | 可视化 NMS 阈值（0~1），越高越容易保留同帧多个目标 |
@@ -360,7 +394,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 ### 5.3 `ppocr_node` — PP-OCR 算术题识别节点
 
 **工作流程**：
-1. 加载配置，初始化 PP-OCR 文本检测模型、文本识别模型、完整字典、数学字符白名单和海康相机。
+1. 加载配置，初始化 PP-OCR 文本检测模型、文本识别模型、完整字典、数学字符白名单和 `settings.json` 选择的相机。
 2. 两种运行模式：
 
    **test 模式**（连续测试 + YAML 输出）：
@@ -465,11 +499,11 @@ ocr_results:
 ```
 
 **多帧投票机制**：
-- 滑动窗口大小：10 帧
-- 某表达式出现次数 ≥ 6 次
-- 在有效帧中占比 ≥ 60%
-- 同时满足以上条件才标记为"稳定结果"
-- 连续 10 帧全为无效帧 → 稳定结果丢失
+- 滑动窗口大小：3 帧
+- 最近 3 帧均为有效识别且全部为同一表达式才标记为"稳定结果"
+- `StableChanged` 表示一次新的识别成功，同一稳定结果不会重复触发
+- 新表达式连续 3 次一致后替换旧稳定结果
+- 连续 3 帧全为无效帧 → 稳定结果丢失
 
 ---
 
@@ -522,8 +556,8 @@ math_problems:
 |---|---|
 | `s_detector_params` | 检测器参数聚合（模型路径、NCHW 尺寸、阈值、PPOCR 参数、类别名称） |
 | `s_hikcamera_params` | 海康相机参数（device_id, width, height, offset, exposure） |
-| `s_usbcamera_params` | USB 相机参数（预留） |
-| `Appconfig` | 顶层应用配置，包含 `detect_config`, `hikcamera_config`, `usbcamera_config[4]` |
+| `s_usbcamera_params` | USB 相机参数（device_id, width, height, FPS） |
+| `Appconfig` | 顶层应用配置，包含 `detect_config`, `camera_type`, `usb_camera_index`, `hikcamera_config`, `usbcamera_config[4]` |
 | `Detection` | YOLO 检测结果（bbox[4], conf, class_id） |
 | `OCRBox` | OCR 四点文本框（pts[4]） |
 | `OCRRecResult` | OCR 识别结果（text, score） |
@@ -584,26 +618,32 @@ public:
 ```cpp
 // 文本检测
 void detect_det_ppocr::load_model(const std::string& model_path, const std::string& device);
+void detect_det_ppocr::load_model(const std::string& model_path,
+                                  const std::string& weights_path,
+                                  const std::string& device);
 const std::vector<OCRBox>& get_det_boxes() const;
 
 // 文本识别
 void detect_rec_ppocr::load_model(const std::string& model_path, const std::string& device);
+void detect_rec_ppocr::load_model(const std::string& model_path,
+                                  const std::string& weights_path,
+                                  const std::string& device);
 void detect_rec_ppocr::loda_dict(const std::string& dict_path);
 void detect_rec_ppocr::load_allowed_chars(const std::string& allowed_chars_path);
 std::vector<OCRRecResult> Decode(const ov::Tensor& logits);
 void set_max_wh_ratio(float r);
 ```
 
-识别器加载顺序必须为：模型 → 完整字典 → 数学字符白名单。`Decode()` 会校验输入张量必须为 FP32 `[batch, time, classes]`，且类别数必须与完整字典一致。
+识别器加载顺序必须为：完整字典 → 数学字符白名单 → 模型。`Decode()` 会校验输入张量必须为 FP32 `[batch, time, classes]`，且类别数必须与完整字典一致。
 
 ### 6.5 `OCRMultiFrameVoter` — 多帧投票器 (`ocr_MultiFrameVoter.hpp`)
 
 ```cpp
 class OCRMultiFrameVoter {
 public:
-    static constexpr std::size_t kWindowSize = 10;     // 滑动窗口大小
-    static constexpr std::size_t kMinOccurrences = 6;  // 最低出现次数
-    static constexpr double kMinValidRatio = 0.60;     // 有效帧最低占比
+    static constexpr std::size_t kWindowSize = 3;      // 滑动窗口大小
+    static constexpr std::size_t kMinOccurrences = 3;  // 最低出现次数
+    static constexpr double kMinValidRatio = 1.0;      // 有效帧最低占比
 
     OCRVoteEvent update(const std::optional<OCRVoteResult>& frame_result);
     void reset();
@@ -638,8 +678,8 @@ public:
 | `render_yolo_result_image(dets, frame, class_names)` | 绘制带标注的结果图 |
 | `save_yolo_result_image(...)` | 保存结果图到文件 |
 | `show_viz_image(...)` | 在 OpenCV 窗口显示结果图 |
-| `run_single_detection(hik, cam_params, detector, enable_undistort, frame, dets)` | 取帧+推理一站式函数 |
-| `collect_detections(hik, cam_params, detector, enable_undistort, last_frame, duration_sec)` | 持续取帧+推理收集结果 |
+| `run_single_detection(camera, detector, enable_undistort, frame, dets)` | 取帧+推理一站式函数 |
+| `collect_detections(camera, detector, enable_undistort, last_frame, duration_sec)` | 持续取帧+推理收集结果 |
 
 ### 6.7 OCR 工具函数 (`ocr_utils.hpp`)
 
@@ -708,7 +748,7 @@ public:
 };
 ```
 
-> 注意：当前所有节点均使用海康相机，USB 相机类为预留实现，未在节点中使用。
+> 注意：YOLO 与 PPOCR 节点通过 `settings.json` 的 `camera.type` 在海康和 USB 相机之间切换；USB 模式默认使用 `usbcamera0`。
 
 ---
 
@@ -725,6 +765,8 @@ public:
 | `output_dir` | string | `<share>/data/yolotest` | 测试视频输出目录 |
 | `video_fps` | double | 20.0 | 输出视频帧率 |
 | `visual_nms_thresh` | double | 0.7 | 可视化 NMS 阈值 |
+
+是否保存测试视频由 `settings.json` 中 `output_save.save_yolo_test_video` 控制。
 
 ```bash
 ros2 launch dogvision_vision yolo_accuracy_test.launch
@@ -744,6 +786,8 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false v
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | 输出 YAML 路径 |
 | `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
 
+test/production 在线推理会按 `settings.json` 中 `output_save.save_ppocr_video` 自动保存 `"Math OCR"` 主标注视频。
+
 ```bash
 ros2 launch dogvision_vision ppocr_test.launch
 ros2 launch dogvision_vision ppocr_test.launch show_visual:=false
@@ -753,7 +797,7 @@ ros2 launch dogvision_vision ppocr_test.launch \
 
 ### 7.3 `ppocr_visual_test.launch`
 
-启动 PPOCR 可视化调试。默认 `input_path` 为空，使用海康相机实时画面；传入图片或目录时进入离线回放。
+启动 PPOCR 可视化调试。默认 `input_path` 为空，使用配置选择的相机实时画面；传入图片或目录时进入离线回放。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -865,12 +909,12 @@ ctest --test-dir build/dogvision_vision --output-on-failure
 
 `test/ocr_multi_frame_voter_test.cpp` 覆盖：
 
-- 6/10 帧达标时触发 `StableChanged`
-- 无效帧不计入占比分母
-- 5 次出现不达标
-- 稳定结果在 9 帧无效后仍保留，第 10 帧丢失
-- 新稳定结果替换旧结果
-- A-B-A 切换模式
+- 3/3 一致时触发 `StableChanged`
+- 2/3 一致时不触发
+- 2 同 1 异时不触发
+- 同一稳定结果不重复触发
+- 新稳定结果 3/3 一致后替换旧结果
+- 稳定结果在 2 帧无效后仍保留，第 3 帧丢失
 - `reset()` 清空状态
 
 `test/ocr_math_filter_decode_test.cpp` 覆盖：
@@ -1025,7 +1069,7 @@ A: 确保 `settings.json` 中 `path` 的模型路径正确，且已执行 `sourc
 A: 检查相机物理连接，确认设备号与配置一致。PPOCR 节点有自动重连机制（最多 5 次尝试）。
 
 **Q: 鱼眼去畸变无效？**
-A: 确认 `src/core/detector.cpp` 中 `ENABLE_FISHEYE_UNDISTORT` 宏已定义（默认启用），且 K/D 矩阵与标定结果一致。
+A: 先确认 `settings.json` 中 `lens_distortion.enable_undistort=true`；YOLO 节点还需 ROS 参数 `enable_undistort=true`。若仍无效，再检查 K/D 矩阵与标定结果是否一致。
 
 **Q: 如何启用 GPU 推理？**
 A: 在 `settings.json` 的 `path` 节中将 `yolo_device` 设为 `"GPU"` 或 `"AUTO:GPU,CPU"`。需确保系统安装了 Intel GPU 驱动（`intel-opencl-icd`）且 OpenVINO GPU 插件可用。推荐配合 FP16 精度模型获得最佳性能。

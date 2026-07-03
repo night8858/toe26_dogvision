@@ -1,4 +1,11 @@
 {
+  // ── 当前使用的相机类型 ──
+    "camera":
+    {
+      "type": "usb",      // hik=海康相机，usb=USB 相机
+      "usb_index": 0      // USB 模式下使用 usbcamera0~3 中的哪一路
+    },
+
   // ── 海康相机参数 ──
     "hikcamera":
     {
@@ -14,6 +21,7 @@
     // ── 鱼眼畸变参数 ──
     "lens_distortion":
     {
+      "enable_undistort": false,  // 是否启用鱼眼去畸变
       "D":[ 1.9474519085664992e-02, 2.2096711413330011e-02,-4.1006640770500716e-02, 2.6220651979250005e-02 ]
     },
 
@@ -58,15 +66,17 @@
       // "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolo/m26325.xml",
 
 
-      "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
-      "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
-      "ppocr_cls_model_path": "",
-
       // "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
       // "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
       // "ppocr_cls_model_path": "",
 
-      "ppocr_dict_path": "src/dogvision_vision/models/ppocr/Dict/ppocr_keys_v1.txt",
+      // 使用 PP-OCRv5，已转换为 OpenVINO IR 模型
+      "ppocr_det_model_bin_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
+      "ppocr_det_model_xml_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
+      "ppocr_rec_model_bin_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
+      "ppocr_rec_model_xml_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
+
+      "ppocr_dict_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
       "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
     },
 
@@ -115,6 +125,15 @@
       "clahe_clip_limit": 3.2,      // CLAHE 对比度限幅，越大对比度越强（推荐 1.5~4.0）
       "clahe_tile_grid_size": 8,    // CLAHE 网格尺寸（像素块边长，推荐 4~16）
       "saturation_scale": 1.2       // 饱和度缩放系数（1.0=不变，推荐 1.1~1.5）
+    },
+
+    // ── 推理结果保存参数 ──
+    "output_save":
+    {
+      "save_ppocr_video": true,      // 是否保存 PP-OCR 推理可视化视频
+      "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
+      "ppocr_video_fps": 20.0,       // PP-OCR 推理视频帧率
+      "save_yolo_test_video": true   // 是否保存 YOLO 准确率测试视频
     },
 
     // ── 类别名称设置 ──

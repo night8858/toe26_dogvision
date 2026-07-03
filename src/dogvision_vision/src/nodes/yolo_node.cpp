@@ -24,7 +24,7 @@
 
 #include <opencv2/opencv.hpp>
 
-#include <dogvision_vision/camera/hikvision.hpp>
+#include <dogvision_vision/camera/camera_source.hpp>
 #include <dogvision_vision/yolo_utils.hpp>
 
 namespace
@@ -105,7 +105,7 @@ int main(int argc, char** argv)
     const std::string config_path  = node->get_parameter("config_path").as_string();
     const std::string result_topic = node->get_parameter("result_topic").as_string();
     const bool show_window         = node->get_parameter("show_window").as_bool();
-    const bool enable_undistort    = node->get_parameter("enable_undistort").as_bool();
+    const bool enable_undistort_param = node->get_parameter("enable_undistort").as_bool();
     const bool save_images         = node->get_parameter("save_images").as_bool();
     const bool enable_keyboard_trigger =
         node->get_parameter("enable_keyboard_trigger").as_bool();
@@ -115,6 +115,8 @@ int main(int argc, char** argv)
     Appconfig config;
     detect_oponvino config_loader(nullptr);
     config_loader.load_config(config, config_path);
+    const bool enable_undistort =
+        enable_undistort_param && config.detect_config.enable_undistort;
 
     // ── 3. 加载类别名称 ──
     const std::vector<std::string> class_names = load_class_names(config);
@@ -130,17 +132,15 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // ── 5. 初始化海康相机 ──
-    s_camera_params cam_params{};
-    cam_params.device_id = config.hikcamera_config.device_id;
-    cam_params.width = config.hikcamera_config.width;
-    cam_params.height = config.hikcamera_config.height;
-    cam_params.offset_x = config.hikcamera_config.offset_x;
-    cam_params.offset_y = config.hikcamera_config.offset_y;
-    cam_params.exposure = config.hikcamera_config.exposure;
-
-    HikGrab hik(cam_params);
-    hik.Hik_init();
+    // ── 5. 初始化 settings.json 选择的相机 ──
+    CameraSource camera(config);
+    if (!camera.init())
+    {
+        RCLCPP_ERROR(node->get_logger(), "Failed to initialize %s camera",
+                     camera.type_name().c_str());
+        rclcpp::shutdown();
+        return 1;
+    }
 
     // ── 6. 创建 ROS2 发布者和订阅者 ──
     // 使用 transient_local + reliable QoS 确保新订阅者能收到最后一条消息
@@ -168,6 +168,14 @@ int main(int argc, char** argv)
                 show_window ? "true" : "false",
                 enable_undistort ? "true" : "false",
                 save_images ? "true" : "false");
+    RCLCPP_INFO(node->get_logger(), "Camera: type=%s device=%d %dx%d",
+                camera.type_name().c_str(), camera.device_id(),
+                camera.width(), camera.height());
+    if (enable_undistort_param && !config.detect_config.enable_undistort)
+    {
+        RCLCPP_INFO(node->get_logger(),
+                    "Undistort disabled by settings.json lens_distortion.enable_undistort.");
+    }
     RCLCPP_INFO(node->get_logger(), "YOLO image save dir: %s", save_dir.c_str());
     RCLCPP_INFO(node->get_logger(), "Keyboard trigger: %s",
                 enable_keyboard_trigger ? "Enter enabled" : "disabled");
@@ -200,7 +208,7 @@ int main(int argc, char** argv)
         RCLCPP_INFO(node->get_logger(), "Triggered: running one-frame inference...");
         cv::Mat last_frame;
         std::vector<Detection> final_dets;
-        if (!run_single_detection(hik, cam_params, detector, enable_undistort, last_frame, final_dets))
+        if (!run_single_detection(camera, detector, enable_undistort, last_frame, final_dets))
         {
             RCLCPP_WARN(node->get_logger(), "Failed to grab a valid frame for YOLO inference.");
         }
@@ -254,7 +262,7 @@ int main(int argc, char** argv)
     {
         cv::destroyAllWindows();
     }
-    hik.Hik_end();
+    camera.shutdown();
     rclcpp::shutdown();
     return 0;
 }

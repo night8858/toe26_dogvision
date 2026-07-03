@@ -2363,3 +2363,16 @@ ocr_results:
     question: "5-18+3/1*4"
     answer: -1
     mod4: 3
+ocr_results:
+  - id: 1
+    question: "15/1-4+316"
+    answer: 327
+    mod4: 3
+  - id: 2
+    question: "155-5+15/15"
+    answer: 151
+    mod4: 3
+  - id: 3
+    question: "16*11-9/1+11"
+    answer: 178
+    mod4: 2

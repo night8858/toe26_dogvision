@@ -32,11 +32,9 @@ enum class OCRVoteEvent
 /**
  * @brief 多帧滑动窗口投票器，用于提高 OCR 识别结果的稳定性
  *
- * 将连续多帧的 OCR 结果存入滑动窗口，统计各表达式出现的频次与占比，
- * 只有当某表达式同时满足：
- *   1. 出现次数 >= kMinOccurrences
- *   2. 有效帧中的占比 >= kMinValidRatio
- * 时才将其标记为"稳定结果"。
+ * 将最近 3 帧 OCR 结果存入滑动窗口，只有最近 3 帧均为有效识别且全部为
+ * 同一个表达式时，才将其标记为"稳定结果"。同一稳定结果不会重复触发，
+ * 新表达式连续 3 次一致后会替换旧稳定结果。
  *
  * 用法：
  * @code
@@ -51,20 +49,20 @@ class OCRMultiFrameVoter
 {
 public:
     /// 滑动窗口大小，最多保留最近的 N 帧数据
-    static constexpr std::size_t kWindowSize = 10;
+    static constexpr std::size_t kWindowSize = 3;
 
     /// 某表达式被认定为稳定所需的最低出现次数
-    static constexpr std::size_t kMinOccurrences = 6;
+    static constexpr std::size_t kMinOccurrences = 3;
 
     /// 某表达式在有效帧中所需的最低占比（0.0 ~ 1.0）
-    static constexpr double kMinValidRatio = 0.60;
+    static constexpr double kMinValidRatio = 1.0;
 
     /**
      * @brief 输入一帧 OCR 结果，更新投票状态
      *
      * 将当前帧结果加入滑动窗口尾部；若窗口已满，移除最早的一帧。
-     * 随后遍历窗口中的有效帧，统计各 expression 出现次数和占比，
-     * 若满足阈值条件则更新稳定结果。
+     * 随后遍历窗口中的有效帧，统计各 expression 出现次数和占比。
+     * 最近 3 帧都有效且表达式一致时，更新稳定结果。
      *
      * @param frame_result  当前帧的 OCR 识别结果。
      *                      传入 std::nullopt 表示该帧识别失败（无效帧）。

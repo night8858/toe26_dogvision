@@ -55,9 +55,13 @@ typedef struct
 ///////////// PPOCR 参数 ////////////////
 
     // ── 模型路径 ──
-    std::string ppocr_det_model_path; ///< 文本检测模型路径（.pdmodel 格式）
-    std::string ppocr_rec_model_path; ///< 文本识别模型路径（.pdmodel 格式）
+    std::string ppocr_det_model_path; ///< 文本检测模型路径（旧 .pdmodel/ONNX 单文件格式）
+    std::string ppocr_rec_model_path; ///< 文本识别模型路径（旧 .pdmodel/ONNX 单文件格式）
     std::string ppocr_cls_model_path; ///< 文本方向分类模型路径（.pdmodel 格式，可选）
+    std::string ppocr_det_model_xml_path; ///< 文本检测 OpenVINO IR .xml 路径
+    std::string ppocr_det_model_bin_path; ///< 文本检测 OpenVINO IR .bin 路径
+    std::string ppocr_rec_model_xml_path; ///< 文本识别 OpenVINO IR .xml 路径
+    std::string ppocr_rec_model_bin_path; ///< 文本识别 OpenVINO IR .bin 路径
 
     // ── 推理设备 ──
     std::string det_device = "CPU"; ///< 文本检测推理设备
@@ -113,6 +117,13 @@ typedef struct
     int yolo_enhance_clahe_tile_grid_size = 8;    ///< CLAHE 网格尺寸（像素块边长）
     float yolo_enhance_saturation_scale = 1.3f;   ///< 饱和度缩放系数
 
+    // ── 输出保存参数 ──
+    bool save_ppocr_video = true; ///< 是否保存 PP-OCR 推理可视化视频
+    std::string ppocr_video_save_dir; ///< PP-OCR 推理视频保存目录
+    double ppocr_video_fps = 20.0; ///< PP-OCR 推理视频帧率
+    bool save_yolo_test_video = true; ///< 是否保存 YOLO 准确率测试视频
+
+    bool enable_undistort = true; ///< 是否启用鱼眼去畸变
     float D_matrix[4]; ///< 鱼眼畸变参数 D 矩阵（4×1）
     
 }s_detector_params;
@@ -149,15 +160,18 @@ typedef struct
     int device_id; ///< 相机设备编号
     int width;     ///< 采集宽度（像素）
     int height;    ///< 采集高度（像素）
+    int fps;       ///< 目标帧率
 
 }s_usbcamera_params;
 
 /**
- * @brief 应用总配置，包含检测、海康相机和 USB 相机三部分
+ * @brief 应用总配置，包含检测、相机选择、海康相机和 USB 相机参数
  */
 typedef struct
 {
     s_detector_params detect_config;          ///< 检测器全局参数
+    std::string camera_type = "hik";          ///< 当前相机类型（hik / usb）
+    int usb_camera_index = 0;                 ///< USB 相机配置索引（0-3）
     s_hikcamera_params hikcamera_config;      ///< 海康相机参数
     s_usbcamera_params usbcamera_config[4];   ///< USB 相机参数（最多 4 个）
 

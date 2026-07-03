@@ -22,11 +22,22 @@ public:
 
     /**
      * @brief 加载并编译文本检测模型。
-     * @param model_path Paddle/OpenVINO 模型文件路径。
+     * @param model_path Paddle/ONNX/OpenVINO .xml 模型文件路径。
      * @param device OpenVINO 设备名称。
      * @retval void
      */
     void load_model(const std::string& model_path, const std::string& device);
+
+    /**
+     * @brief 加载并编译文本检测模型。
+     * @param model_path Paddle/ONNX/OpenVINO .xml 模型文件路径。
+     * @param weights_path OpenVINO IR .bin 路径；单文件模型传空字符串。
+     * @param device OpenVINO 设备名称。
+     * @retval void
+     */
+    void load_model(const std::string& model_path,
+                    const std::string& weights_path,
+                    const std::string& device);
 
     /**
      * @brief 为 PPOCR 文本检测预处理图像。
@@ -116,11 +127,22 @@ public:
 
     /**
      * @brief 加载并编译文本识别模型。
-     * @param model_path Paddle/OpenVINO 模型文件路径。
+     * @param model_path Paddle/ONNX/OpenVINO .xml 模型文件路径。
      * @param device OpenVINO 设备名称。
      * @retval void
      */
     void load_model(const std::string& model_path, const std::string& device);
+
+    /**
+     * @brief 加载并编译文本识别模型。
+     * @param model_path Paddle/ONNX/OpenVINO .xml 模型文件路径。
+     * @param weights_path OpenVINO IR .bin 路径；单文件模型传空字符串。
+     * @param device OpenVINO 设备名称。
+     * @retval void
+     */
+    void load_model(const std::string& model_path,
+                    const std::string& weights_path,
+                    const std::string& device);
 
     /**
      * @brief 为识别预处理裁剪后的文本图像。

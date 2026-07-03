@@ -240,3 +240,5 @@ double MathGenerator::getFontScale(int image_width) const
     double scale = static_cast<double>(image_width) / 640.0;
     return std::max(1.0, std::min(scale, 10.0));
 }
+
+

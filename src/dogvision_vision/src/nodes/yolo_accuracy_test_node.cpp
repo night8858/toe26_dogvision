@@ -24,8 +24,8 @@
 
 #include <opencv2/opencv.hpp>
 
+#include <dogvision_vision/camera/camera_source.hpp>
 #include <dogvision_vision/yolo_utils.hpp>
-#include <dogvision_vision/camera/hikvision.hpp>
 
 namespace fs = std::filesystem;
 
@@ -64,22 +64,6 @@ std::string build_video_path(const std::string& output_dir)
     return path.string();
 }
 
-/**
- * @brief 从应用配置构建海康相机参数。
- * @param config 已加载的应用配置。
- * @retval s_camera_params 海康相机初始化参数。
- */
-s_camera_params make_camera_params(const Appconfig& config)
-{
-    s_camera_params cam_params{};
-    cam_params.device_id = config.hikcamera_config.device_id;
-    cam_params.width = config.hikcamera_config.width;
-    cam_params.height = config.hikcamera_config.height;
-    cam_params.offset_x = config.hikcamera_config.offset_x;
-    cam_params.offset_y = config.hikcamera_config.offset_y;
-    cam_params.exposure = config.hikcamera_config.exposure;
-    return cam_params;
-}
 } // namespace
 
 /**
@@ -102,7 +86,7 @@ int main(int argc, char** argv)
     node->declare_parameter<double>("visual_nms_thresh", 0.7);
 
     const std::string config_path = node->get_parameter("config_path").as_string();
-    const bool enable_undistort = node->get_parameter("enable_undistort").as_bool();
+    const bool enable_undistort_param = node->get_parameter("enable_undistort").as_bool();
     const std::string output_dir = node->get_parameter("output_dir").as_string();
     double video_fps = node->get_parameter("video_fps").as_double();
     const double visual_nms_thresh = std::clamp(
@@ -128,11 +112,19 @@ int main(int argc, char** argv)
     detect_oponvino config_loader(nullptr);
     config_loader.load_config(config, config_path);
     config.detect_config.nms_thresh = static_cast<float>(visual_nms_thresh);
+    const bool enable_undistort =
+        enable_undistort_param && config.detect_config.enable_undistort;
+    const bool save_video = config.detect_config.save_yolo_test_video;
 
     const std::vector<std::string> class_names = load_class_names(config);
     RCLCPP_INFO(logger, "Loaded %d classes: %s",
                 config.detect_config.classes, join_class_names(class_names).c_str());
     RCLCPP_INFO(logger, "Visual NMS threshold: %.2f", visual_nms_thresh);
+    if (enable_undistort_param && !config.detect_config.enable_undistort)
+    {
+        RCLCPP_INFO(logger,
+                    "Undistort disabled by settings.json lens_distortion.enable_undistort.");
+    }
 
     detect_oponvino detector(&config);
     if (!detector.inference_init())
@@ -142,9 +134,17 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    s_camera_params cam_params = make_camera_params(config);
-    HikGrab hik(cam_params);
-    hik.Hik_init();
+    CameraSource camera(config);
+    if (!camera.init())
+    {
+        RCLCPP_ERROR(logger, "Failed to initialize %s camera",
+                     camera.type_name().c_str());
+        rclcpp::shutdown();
+        return 1;
+    }
+    RCLCPP_INFO(logger, "Camera: type=%s device=%d %dx%d",
+                camera.type_name().c_str(), camera.device_id(),
+                camera.width(), camera.height());
 
     cv::namedWindow(kWindowName, cv::WINDOW_NORMAL);
     cv::VideoWriter writer;
@@ -152,7 +152,10 @@ int main(int argc, char** argv)
     int ret = 0;
 
     RCLCPP_INFO(logger, "YOLO accuracy test started. Press Q or ESC to exit.");
-    RCLCPP_INFO(logger, "Video output: %s", video_path.c_str());
+    if (save_video)
+        RCLCPP_INFO(logger, "Video output: %s", video_path.c_str());
+    else
+        RCLCPP_INFO(logger, "Video saving disabled by settings.");
 
     while (rclcpp::ok())
     {
@@ -160,7 +163,7 @@ int main(int argc, char** argv)
 
         cv::Mat frame;
         std::vector<Detection> dets;
-        if (!run_single_detection(hik, cam_params, detector, enable_undistort, frame, dets))
+        if (!run_single_detection(camera, detector, enable_undistort, frame, dets))
         {
             RCLCPP_WARN_THROTTLE(logger, *node->get_clock(), 1000, "Failed to grab frame.");
             const int key = cv::waitKey(1);
@@ -178,7 +181,7 @@ int main(int argc, char** argv)
             continue;
         }
 
-        if (!writer.isOpened())
+        if (save_video && !writer.isOpened())
         {
             writer.open(video_path, cv::VideoWriter::fourcc('M', 'P', '4', 'V'),
                         video_fps, vis.size(), true);
@@ -190,7 +193,8 @@ int main(int argc, char** argv)
             }
         }
 
-        writer.write(vis);
+        if (save_video)
+            writer.write(vis);
         ++frame_count;
 
         if (frame_count % 30 == 0)
@@ -213,13 +217,13 @@ int main(int argc, char** argv)
         writer.release();
         RCLCPP_INFO(logger, "Saved video: %s", video_path.c_str());
     }
-    else
+    else if (save_video)
     {
         RCLCPP_WARN(logger, "No video saved because no valid frame was written.");
     }
 
     cv::destroyWindow(kWindowName);
-    hik.Hik_end();
+    camera.shutdown();
     rclcpp::shutdown();
     return ret;
 }

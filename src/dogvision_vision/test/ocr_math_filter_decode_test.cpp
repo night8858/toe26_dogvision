@@ -185,10 +185,22 @@ void test_candidate_grouping_and_selection()
 void test_restricted_ctc_decode()
 {
     const std::string dict_path = "/tmp/dogvision_test_ppocr_dict.txt";
+    const std::string yaml_dict_path = "/tmp/dogvision_test_ppocr_dict.yml";
     const std::string whitelist_path = "/tmp/dogvision_test_ppocr_allowed.txt";
+    const std::string yaml_whitelist_path = "/tmp/dogvision_test_ppocr_yaml_allowed.txt";
     const std::string missing_path = "/tmp/dogvision_test_ppocr_missing.txt";
     write_file(dict_path, "0\n1\n+\nA\n×\n");
+    write_file(yaml_dict_path,
+               "PostProcess:\n"
+               "  name: CTCLabelDecode\n"
+               "  character_dict:\n"
+               "  - '0'\n"
+               "  - '1'\n"
+               "  - +\n"
+               "  - '*'\n"
+               "  - ×\n");
     write_file(whitelist_path, "0\n1\n+\n×\n");
+    write_file(yaml_whitelist_path, "0\n*\n×\n");
     write_file(missing_path, "÷\n");
 
     detect_rec_ppocr recognizer(nullptr);
@@ -229,6 +241,20 @@ void test_restricted_ctc_decode()
     expect_throw([&] { invalid_recognizer.load_allowed_chars(missing_path); },
                  "missing whitelist character must be rejected");
 
+    detect_rec_ppocr yaml_recognizer(nullptr);
+    yaml_recognizer.loda_dict(yaml_dict_path);
+    yaml_recognizer.load_allowed_chars(yaml_whitelist_path);
+    ov::Tensor yaml_logits(ov::element::f32, {1, 4, 7});
+    float* yaml_values = yaml_logits.data<float>();
+    std::fill(yaml_values, yaml_values + yaml_logits.get_size(), -10.0f);
+    yaml_values[1] = 0.95f;
+    yaml_values[7 + 4] = 0.96f;
+    yaml_values[14] = 0.97f;
+    yaml_values[21 + 5] = 0.98f;
+    const auto yaml_result = yaml_recognizer.Decode(yaml_logits);
+    expect(yaml_result[0].text == "0*×",
+           "PaddleOCR inference.yml dictionary was not decoded correctly");
+
     detect_rec_ppocr repository_recognizer(nullptr);
     const std::string source_dir = DOGVISION_VISION_SOURCE_DIR;
     repository_recognizer.loda_dict(
@@ -237,7 +263,9 @@ void test_restricted_ctc_decode()
         source_dir + "/models/ppocr/Dict/math_chars.txt");
 
     std::remove(dict_path.c_str());
+    std::remove(yaml_dict_path.c_str());
     std::remove(whitelist_path.c_str());
+    std::remove(yaml_whitelist_path.c_str());
     std::remove(missing_path.c_str());
 }
 } // namespace

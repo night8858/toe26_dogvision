@@ -3,10 +3,12 @@
  * @brief OCR 多帧投票器单元测试
  *
  * 测试覆盖：
- *   - 正常稳定结果产生与替换
- *   - 无效帧不影响分母
- *   - 稳定结果丢失条件
- *   - A→B→A 模式的稳定性切换
+ *   - 3 次一致触发稳定结果
+ *   - 2 次一致不触发
+ *   - 2 同 1 异不触发
+ *   - 同一稳定结果不重复触发
+ *   - 新稳定结果替换旧结果
+ *   - 3 帧无效后稳定结果丢失
  *   - reset 清空功能
  */
 
@@ -57,64 +59,69 @@ int main()
 {
     {
         OCRMultiFrameVoter voter;
-        for (int i = 0; i < 5; ++i) add(voter, result("1+1", 2));
-        for (int i = 0; i < 4; ++i) add(voter, result("2+2", 4));
+        add(voter, result("1+1", 2));
+        add(voter, result("1+1", 2));
+        expect(!voter.has_stable_result(), "2/3 should not stabilize");
         add(voter, result("1+1", 2), OCRVoteEvent::StableChanged);
-        expect(voter.stable_result().expr == "1+1", "6/10 should stabilize");
+        expect(voter.stable_result().expr == "1+1", "3/3 should stabilize");
     }
 
     {
         OCRMultiFrameVoter voter;
-        for (int i = 0; i < 5; ++i) add(voter, result("3+3", 6));
+        add(voter, result("2+2", 4));
+        add(voter, result("2+2", 4));
+        add(voter, result("3+3", 6));
+        expect(!voter.has_stable_result(), "2 same plus 1 different must not stabilize");
+        expect(voter.valid_result_count() == 3, "all valid frames should be counted");
+    }
+
+    {
+        OCRMultiFrameVoter voter;
         add(voter, result("4+4", 8));
-        add(voter, result("3+3", 6), OCRVoteEvent::StableChanged);
-        expect(voter.valid_result_count() == 7, "valid denominator should be 7");
+        add(voter, result("4+4", 8));
+        add(voter, std::nullopt);
+        expect(!voter.has_stable_result(), "2 valid plus invalid must not stabilize");
+        expect(voter.valid_result_count() == 2, "invalid frames must not enter denominator");
     }
 
     {
         OCRMultiFrameVoter voter;
-        for (int i = 0; i < 5; ++i) add(voter, result("5+5", 10));
-        for (int i = 0; i < 5; ++i) add(voter, std::nullopt);
-        expect(!voter.has_stable_result(), "5 occurrences must not stabilize");
+        add(voter, result("5+5", 10));
+        add(voter, result("5+5", 10));
+        add(voter, result("5+5", 10), OCRVoteEvent::StableChanged);
+        add(voter, result("5+5", 10));
+        expect(voter.stable_result().expr == "5+5",
+               "same stable result should not repeat StableChanged");
     }
 
     {
         OCRMultiFrameVoter voter;
-        for (int i = 0; i < 5; ++i) add(voter, result("6+6", 12));
+        add(voter, result("6+6", 12));
+        add(voter, result("6+6", 12));
         add(voter, result("6+6", 12), OCRVoteEvent::StableChanged);
-        for (int i = 0; i < 4; ++i) add(voter, std::nullopt);
-        expect(voter.has_stable_result(), "invalid frames must not enter ratio denominator");
-        expect(voter.valid_result_count() == 6, "only valid results belong in denominator");
-    }
-
-    {
-        OCRMultiFrameVoter voter;
-        for (int i = 0; i < 5; ++i) add(voter, result("6+6", 12));
-        add(voter, result("6+6", 12), OCRVoteEvent::StableChanged);
-        for (int i = 0; i < 9; ++i) add(voter, std::nullopt);
-        expect(voter.has_stable_result(), "stable result should survive 9 invalid frames");
-        add(voter, std::nullopt, OCRVoteEvent::StableLost);
-        expect(!voter.has_stable_result(), "10 invalid frames should clear stable result");
-    }
-
-    {
-        OCRMultiFrameVoter voter;
-        for (int i = 0; i < 5; ++i) add(voter, result("7+7", 14));
+        add(voter, result("7+7", 14));
+        add(voter, result("7+7", 14));
+        expect(voter.stable_result().expr == "6+6", "2 new results must not replace old");
         add(voter, result("7+7", 14), OCRVoteEvent::StableChanged);
-        for (int i = 0; i < 4; ++i) add(voter, result("8+8", 16));
-        expect(voter.stable_result().expr == "7+7", "noise must not replace stable result");
+        expect(voter.stable_result().expr == "7+7", "new 3/3 stable target should replace old");
+    }
+
+    {
+        OCRMultiFrameVoter voter;
+        add(voter, result("8+8", 16));
         add(voter, result("8+8", 16));
         add(voter, result("8+8", 16), OCRVoteEvent::StableChanged);
-        expect(voter.stable_result().expr == "8+8", "new stable target should replace old");
+        add(voter, std::nullopt);
+        add(voter, std::nullopt);
+        expect(voter.has_stable_result(), "stable result should survive 2 invalid frames");
+        add(voter, std::nullopt, OCRVoteEvent::StableLost);
+        expect(!voter.has_stable_result(), "3 invalid frames should clear stable result");
+    }
 
-        for (int i = 0; i < 6; ++i)
-        {
-            const OCRVoteEvent expected =
-                (i == 5) ? OCRVoteEvent::StableChanged : OCRVoteEvent::None;
-            add(voter, result("7+7", 14), expected);
-        }
-        expect(voter.stable_result().expr == "7+7", "A-B-A should emit another change");
-
+    {
+        OCRMultiFrameVoter voter;
+        add(voter, result("9+9", 18));
+        add(voter, result("9+9", 18));
         voter.reset();
         expect(!voter.has_stable_result(), "reset should clear stable result");
         expect(voter.frame_count() == 0, "reset should clear frame history");

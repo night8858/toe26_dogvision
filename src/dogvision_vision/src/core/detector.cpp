@@ -80,6 +80,14 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.ppocr_det_model_path = resolve(value["path"]["ppocr_det_model_path"].asString());
         config.detect_config.ppocr_rec_model_path = resolve(value["path"]["ppocr_rec_model_path"].asString());
         config.detect_config.ppocr_cls_model_path = resolve(value["path"]["ppocr_cls_model_path"].asString());
+        config.detect_config.ppocr_det_model_xml_path =
+            resolve(value["path"]["ppocr_det_model_xml_path"].asString());
+        config.detect_config.ppocr_det_model_bin_path =
+            resolve(value["path"]["ppocr_det_model_bin_path"].asString());
+        config.detect_config.ppocr_rec_model_xml_path =
+            resolve(value["path"]["ppocr_rec_model_xml_path"].asString());
+        config.detect_config.ppocr_rec_model_bin_path =
+            resolve(value["path"]["ppocr_rec_model_bin_path"].asString());
         config.detect_config.rec_char_dict_path = resolve(value["path"]["ppocr_dict_path"].asString());
         config.detect_config.rec_allowed_chars_path =
             resolve(value["path"]["ppocr_allowed_chars_path"].asString());
@@ -141,6 +149,29 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             throw std::invalid_argument(
                 "yolo_enhance.saturation_scale must be > 0");
 
+        const Json::Value& output_save = value["output_save"];
+        if (!output_save.isNull())
+        {
+            config.detect_config.save_ppocr_video =
+                output_save.get("save_ppocr_video", true).asBool();
+            config.detect_config.ppocr_video_save_dir =
+                resolve(output_save.get(
+                    "ppocr_video_save_dir",
+                    "src/dogvision_vision/data/ocr_output/video").asString());
+            config.detect_config.ppocr_video_fps =
+                output_save.get("ppocr_video_fps", 20.0).asDouble();
+            config.detect_config.save_yolo_test_video =
+                output_save.get("save_yolo_test_video", true).asBool();
+        }
+        else
+        {
+            config.detect_config.ppocr_video_save_dir =
+                resolve("src/dogvision_vision/data/ocr_output/video");
+        }
+        if (config.detect_config.ppocr_video_fps <= 0.0)
+            throw std::invalid_argument(
+                "output_save.ppocr_video_fps must be > 0");
+
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();
         config.detect_config.w = value["NCHW"]["W"].asInt();
@@ -149,6 +180,13 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.type = value["img"]["type"].asInt();
         config.detect_config.width = value["img"]["width"].asInt();
         config.detect_config.height = value["img"]["height"].asInt();
+
+        const Json::Value& lens_distortion = value["lens_distortion"];
+        if (!lens_distortion.isNull())
+        {
+            config.detect_config.enable_undistort =
+                lens_distortion.get("enable_undistort", true).asBool();
+        }
 
         config.detect_config.nms_thresh = value["thresh"]["nms_thresh"].asFloat();
         config.detect_config.bbox_conf_thresh = value["thresh"]["bbox_conf_thresh"].asFloat();
@@ -160,6 +198,28 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.class2 = value["nums"]["cls2"].asString();
         config.detect_config.class3 = value["nums"]["cls3"].asString();
 
+        const Json::Value& camera = value["camera"];
+        if (!camera.isNull())
+        {
+            config.camera_type = camera.get("type", "hik").asString();
+            config.usb_camera_index = camera.get("usb_index", 0).asInt();
+        }
+        else
+        {
+            config.camera_type = "hik";
+            config.usb_camera_index = 0;
+        }
+        if (config.camera_type != "hik" && config.camera_type != "usb")
+        {
+            throw std::invalid_argument(
+                "camera.type must be either \"hik\" or \"usb\"");
+        }
+        if (config.usb_camera_index < 0 || config.usb_camera_index >= 4)
+        {
+            throw std::invalid_argument(
+                "camera.usb_index must be in [0, 3]");
+        }
+
         config.hikcamera_config.device_id = value["hikcamera"]["device_id"].asInt();
         config.hikcamera_config.exposure = value["hikcamera"]["exposure"].asInt();
         config.hikcamera_config.height = value["hikcamera"]["height"].asInt();
@@ -167,9 +227,14 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.hikcamera_config.offset_x = value["hikcamera"]["offset_x"].asInt();
         config.hikcamera_config.offset_y = value["hikcamera"]["offset_y"].asInt();
 
-        config.usbcamera_config[0].device_id = value["usbcamera0"]["device_id"].asInt();
-        config.usbcamera_config[0].width = value["usbcamera0"]["width"].asInt();
-        config.usbcamera_config[0].height = value["usbcamera0"]["height"].asInt();
+        for (int i = 0; i < 4; ++i)
+        {
+            const std::string key = "usbcamera" + std::to_string(i);
+            config.usbcamera_config[i].device_id = value[key]["device_id"].asInt();
+            config.usbcamera_config[i].width = value[key]["width"].asInt();
+            config.usbcamera_config[i].height = value[key]["height"].asInt();
+            config.usbcamera_config[i].fps = value[key].get("FPS", 120).asInt();
+        }
 
 #ifdef TWO_CAMERAS
         // 此处可补充多个相机的初始化
@@ -188,7 +253,22 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
     // 这里使用 OpenCV 的 cv::fisheye 专用模型，而不是普通 pinhole 模型。
     // 原因：鱼眼镜头的畸变形式与普通镜头不同，使用 fisheye 模型更稳定。
 #ifdef ENABLE_FISHEYE_UNDISTORT
-    const cv::Size image_size(config.hikcamera_config.width, config.hikcamera_config.height);
+    if (!config.detect_config.enable_undistort)
+    {
+        g_fisheye_map_ready = false;
+        std::cout << "fisheye undistort disabled by settings" << std::endl;
+        return;
+    }
+
+    const int camera_width =
+        (config.camera_type == "usb")
+            ? config.usbcamera_config[config.usb_camera_index].width
+            : config.hikcamera_config.width;
+    const int camera_height =
+        (config.camera_type == "usb")
+            ? config.usbcamera_config[config.usb_camera_index].height
+            : config.hikcamera_config.height;
+    const cv::Size image_size(camera_width, camera_height);
     if (image_size.width <= 0 || image_size.height <= 0)
     {
         g_fisheye_map_ready = false;
@@ -285,6 +365,14 @@ detector::detector(Appconfig *config)
     detect_config_.ppocr_det_model_path = config->detect_config.ppocr_det_model_path;
     detect_config_.ppocr_rec_model_path = config->detect_config.ppocr_rec_model_path;
     detect_config_.ppocr_cls_model_path = config->detect_config.ppocr_cls_model_path;
+    detect_config_.ppocr_det_model_xml_path =
+        config->detect_config.ppocr_det_model_xml_path;
+    detect_config_.ppocr_det_model_bin_path =
+        config->detect_config.ppocr_det_model_bin_path;
+    detect_config_.ppocr_rec_model_xml_path =
+        config->detect_config.ppocr_rec_model_xml_path;
+    detect_config_.ppocr_rec_model_bin_path =
+        config->detect_config.ppocr_rec_model_bin_path;
     detect_config_.rec_char_dict_path = config->detect_config.rec_char_dict_path;
     detect_config_.rec_allowed_chars_path = config->detect_config.rec_allowed_chars_path;
     detect_config_.ocr_math_use_grayscale =
@@ -309,6 +397,11 @@ detector::detector(Appconfig *config)
     detect_config_.yolo_enhance_clahe_clip_limit = config->detect_config.yolo_enhance_clahe_clip_limit;
     detect_config_.yolo_enhance_clahe_tile_grid_size = config->detect_config.yolo_enhance_clahe_tile_grid_size;
     detect_config_.yolo_enhance_saturation_scale = config->detect_config.yolo_enhance_saturation_scale;
+    detect_config_.enable_undistort = config->detect_config.enable_undistort;
+    detect_config_.save_ppocr_video = config->detect_config.save_ppocr_video;
+    detect_config_.ppocr_video_save_dir = config->detect_config.ppocr_video_save_dir;
+    detect_config_.ppocr_video_fps = config->detect_config.ppocr_video_fps;
+    detect_config_.save_yolo_test_video = config->detect_config.save_yolo_test_video;
 }
 
 detector::~detector()

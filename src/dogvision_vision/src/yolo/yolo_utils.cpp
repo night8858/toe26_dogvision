@@ -1,5 +1,4 @@
 #include <dogvision_vision/yolo_utils.hpp>
-#include <dogvision_vision/camera/hikvision.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -321,8 +320,7 @@ void show_viz_image(
 
 /**
  * @brief 从相机获取一帧图像并执行一次 YOLO 推理。
- * @param hik 海康相机封装对象。
- * @param cam_params 相机参数，包含设备编号。
+ * @param camera settings.json 选择的相机适配对象。
  * @param detector YOLO 检测器实例。
  * @param enable_undistort 是否执行鱼眼去畸变。
  * @param processed_frame 输出推理使用的图像。
@@ -330,15 +328,14 @@ void show_viz_image(
  * @retval bool 成功获取有效图像并完成推理流程时返回 true。
  */
 bool run_single_detection(
-    HikGrab& hik,
-    const s_camera_params& cam_params,
+    CameraSource& camera,
     detect_oponvino& detector,
     bool enable_undistort,
     cv::Mat& processed_frame,
     std::vector<Detection>& dets)
 {
     cv::Mat frame;
-    if (!hik.get_one_frame(frame, cam_params.device_id) || frame.empty())
+    if (!camera.get_frame(frame))
     {
         processed_frame.release();
         dets.clear();
@@ -360,8 +357,7 @@ bool run_single_detection(
 //  collect_detections
 // ============================================================
 std::vector<Detection> collect_detections(
-    HikGrab& hik,
-    const s_camera_params& cam_params,
+    CameraSource& camera,
     detect_oponvino& detector,
     bool enable_undistort,
     cv::Mat& last_frame,
@@ -372,7 +368,7 @@ std::vector<Detection> collect_detections(
 
     while (std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count() < duration_sec) {
         cv::Mat frame;
-        if (!hik.get_one_frame(frame, cam_params.device_id) || frame.empty())
+        if (!camera.get_frame(frame))
             continue;
 
         if (enable_undistort)
