@@ -28,6 +28,7 @@
     // ── USB 相机参数（最多 4 个） ──
     "usbcamera0":
     {
+      "device_path": "/dev/video2",  // 可选：USB 设备路径；为空或缺失时使用 VideoCapture(0)
       "device_id": 0,     // 设备编号
       "width": 1920,      // 采集宽度
       "height": 1080,     // 采集高度
@@ -35,14 +36,15 @@
     },
     "usbcamera1":
     {
+      "device_path": "/dev/video1",
       "device_id": 1,
       "width": 1920,
       "height": 1080,
       "FPS":120
     },
-
     "usbcamera2":
     {
+      "device_path": "/dev/video2",
       "device_id": 2,
       "width": 1920,
       "height": 1080,
@@ -50,6 +52,7 @@
     },
     "usbcamera3":
     {
+      "device_path": "/dev/video3",
       "device_id": 3,
       "width": 1920,
       "height": 1080,

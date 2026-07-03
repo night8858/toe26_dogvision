@@ -24,6 +24,7 @@
 
     "usbcamera0":
     {
+      "device_path": "/dev/video0",
       "device_id": 0,
       "width": 1920,
       "height": 1080,
@@ -31,6 +32,7 @@
     },
     "usbcamera1":
     {
+      "device_path": "/dev/video1",
       "device_id": 1,
       "width": 1920,
       "height": 1080,
@@ -39,6 +41,7 @@
 
     "usbcamera2":
     {
+      "device_path": "/dev/video2",
       "device_id": 2,
       "width": 1920,
       "height": 1080,
@@ -46,6 +49,7 @@
     },
     "usbcamera3":
     {
+      "device_path": "/dev/video3",
       "device_id": 3,
       "width": 1920,
       "height": 1080,

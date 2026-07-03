@@ -53,11 +53,22 @@ bool CameraSource::init_hik()
 
 bool CameraSource::init_usb()
 {
-    usb_capture_.open(usb_params_.device_id);
+    const bool use_device_path = !usb_params_.device_path.empty();
+    const std::string usb_source = use_device_path ? usb_params_.device_path : "0";
+
+    if (use_device_path)
+    {
+        usb_capture_.open(usb_params_.device_path);
+    }
+    else
+    {
+        usb_capture_.open(0);
+    }
+
     if (!usb_capture_.isOpened())
     {
-        std::cerr << "Error: USB camera failed to open device "
-                  << usb_params_.device_id << std::endl;
+        std::cerr << "Error: USB camera failed to open source "
+                  << usb_source << std::endl;
         return false;
     }
 
@@ -69,15 +80,15 @@ bool CameraSource::init_usb()
     cv::Mat test;
     if (!usb_capture_.read(test) || test.empty())
     {
-        std::cerr << "Error: USB camera opened but failed to read a frame from device "
-                  << usb_params_.device_id << std::endl;
+        std::cerr << "Error: USB camera opened but failed to read a frame from source "
+                  << usb_source << std::endl;
         shutdown_usb();
         return false;
     }
 
     initialized_ = true;
-    std::cout << "USB camera initialized successfully (device "
-              << usb_params_.device_id << ", " << usb_params_.width << "x"
+    std::cout << "USB camera initialized successfully (source "
+              << usb_source << ", " << usb_params_.width << "x"
               << usb_params_.height << " @" << usb_params_.fps << " FPS)" << std::endl;
     return true;
 }

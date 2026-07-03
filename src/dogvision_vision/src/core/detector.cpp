@@ -230,6 +230,8 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         for (int i = 0; i < 4; ++i)
         {
             const std::string key = "usbcamera" + std::to_string(i);
+            config.usbcamera_config[i].device_path =
+                value[key].get("device_path", "").asString();
             config.usbcamera_config[i].device_id = value[key]["device_id"].asInt();
             config.usbcamera_config[i].width = value[key]["width"].asInt();
             config.usbcamera_config[i].height = value[key]["height"].asInt();

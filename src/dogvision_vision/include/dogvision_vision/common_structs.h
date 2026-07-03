@@ -157,6 +157,7 @@ typedef struct
  */
 typedef struct
 {
+    std::string device_path; ///< USB 相机设备路径（可选，如 /dev/video0）
     int device_id; ///< 相机设备编号
     int width;     ///< 采集宽度（像素）
     int height;    ///< 采集高度（像素）
