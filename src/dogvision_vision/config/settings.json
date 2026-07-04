@@ -34,6 +34,7 @@
       "height": 1080,     // 采集高度
       "FPS":120           // 目标帧率
     },
+    
     "usbcamera1":
     {
       "device_path": "/dev/video1",
@@ -86,7 +87,9 @@
     // ── OCR 数学题后置筛选参数 ──
     "ocr_math_filter":
     {
-      "use_grayscale": false,             // true=整帧三通道灰度，false=原始彩色
+      "use_grayscale": false,             // true=OCR 输入转三通道灰度，false=原始彩色
+      "roi_enabled": true,                // true=只对指定画面象限做 OCR
+      "roi_quadrant": "top_right",        // OCR 象限：top_left/top_right/bottom_left/bottom_right/full
       "min_surround_white_ratio": 0.50,   // 数学题外围环带最小白色比例
       "surround_margin_ratio": 0.50,      // 环带宽度/平均文字高度
       "white_s_max": 110,                 // HSV 白色区域 S 通道上限

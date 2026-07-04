@@ -201,6 +201,8 @@ source install/setup.bash
   // OCR 数学题后置筛选
   "ocr_math_filter": {
     "use_grayscale": false,
+    "roi_enabled": true,
+    "roi_quadrant": "top_right",
     "min_surround_white_ratio": 0.50,
     "surround_margin_ratio": 0.50,
     "white_s_max": 110,
@@ -258,7 +260,9 @@ OCR 数学题筛选参数：
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
-| `use_grayscale` | `false` | `false` 使用原始彩色整帧，`true` 使用三通道灰度整帧 |
+| `use_grayscale` | `false` | `false` 使用原始彩色 OCR 输入，`true` 使用三通道灰度 OCR 输入 |
+| `roi_enabled` | `true` | `true` 只对指定画面象限做 OCR，旧配置缺失该字段时默认整帧 OCR |
+| `roi_quadrant` | `top_right` | OCR 象限：`top_left` / `top_right` / `bottom_left` / `bottom_right` / `full` |
 | `min_surround_white_ratio` | `0.50` | 算术候选外围环带的最小白色比例，范围 `[0,1]` |
 | `surround_margin_ratio` | `0.50` | 环带宽度与候选平均文字高度之比，范围 `(0,1]` |
 | `white_s_max` | `110` | HSV 白色判定的 S 通道上限，范围 `[0,255]` |
@@ -398,7 +402,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 2. 两种运行模式：
 
    **test 模式**（连续测试 + YAML 输出）：
-   - 循环取帧 → 去畸变 → 整帧文本检测与识别 → 单行算术候选组合 → 白色外围筛选 → 多帧投票
+   - 循环取帧 → 去畸变 → 右上象限文本检测与识别 → 单行算术候选组合 → 白色外围筛选 → 多帧投票
    - 稳定结果发生变化时追加写入 `ocr_results.yaml`
 
    **production 模式**（触发式生产）：
@@ -407,15 +411,16 @@ ros2 run dogvision_vision yolo_accuracy_test_node
    - 首个稳定结果通过 `/ocr/result` 发布 JSON，并通过 `/ocr/answer` 发布 `UInt8 mod4`
    - 发布一次后停止跟踪，等待下一次触发
 
-**全帧 OCR 与后置筛选流程**：
+**OCR ROI 与后置筛选流程**：
 
-1. 根据 `use_grayscale` 选择原始彩色或三通道灰度整帧作为 OCR 输入。
-2. 识别画面中的全部文字，按垂直重叠和水平间距组合单行候选。
-3. 严格校验算术语法，拒绝残缺括号、无二元运算符、除零和非有限结果。
-4. 合并候选文字框，并按平均文字高度向外扩张形成外围环带。
-5. 在原始彩色画面上统计环带白色比例，达到门槛后才进入多帧投票。
+1. 根据 `roi_enabled` 和 `roi_quadrant` 选择 OCR 输入区域；默认把去畸变后的画面四等分，只识别右上象限。
+2. 根据 `use_grayscale` 选择原始彩色或三通道灰度 ROI 作为 OCR 输入。
+3. 识别 ROI 中的全部文字，并将检测框坐标映射回整帧，按垂直重叠和水平间距组合单行候选。
+4. 严格校验算术语法，拒绝残缺括号、无二元运算符、除零和非有限结果。
+5. 合并候选文字框，并按平均文字高度向外扩张形成外围环带。
+6. 在原始彩色画面上统计环带白色比例，达到门槛后才进入多帧投票。
 
-白屏位置、面积和画面中心不再作为 OCR 前置条件。启用 `show_ocr_roi` 后，
+白屏位置、面积和画面中心不再作为 OCR 前置条件。主窗口会绘制当前 OCR ROI 边框。启用 `show_ocr_roi` 后，
 `"Math OCR Candidate"` 窗口显示当前最优算术候选及其白色比例和通过状态。
 
 **数学字符约束**：

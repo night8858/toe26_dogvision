@@ -9,7 +9,7 @@
  * 完整流水线：
  *   1. 从 settings.json 选择的相机获取帧
  *   2. 鱼眼去畸变（可选）
- *   3. 按配置准备彩色或三通道灰度整帧 OCR 输入
+ *   3. 按配置选择整帧或象限 ROI，并准备彩色或三通道灰度 OCR 输入
  *   4. PPOCR 文本检测（detect_det_ppocr）
  *   5. PPOCR 文本识别（detect_rec_ppocr，含数学字符白名单）
  *   6. 单行算术候选组合与严格表达式校验
@@ -64,6 +64,12 @@ struct OCRModelPaths
     std::string weights_path;
 };
 
+struct OcrRoiSelection
+{
+    std::string name;
+    cv::Rect rect;
+};
+
 OCRModelPaths select_ocr_model_paths(
     const std::string& xml_path,
     const std::string& bin_path,
@@ -86,6 +92,41 @@ OCRModelPaths select_ocr_model_paths(
     throw std::runtime_error(
         "PP-OCR " + label +
         " model path is empty; configure OpenVINO .xml/.bin paths or legacy model path");
+}
+
+static OcrRoiSelection select_ocr_roi(const cv::Mat& frame,
+                                      const s_detector_params& ocr_config)
+{
+    const cv::Rect full_rect(0, 0, frame.cols, frame.rows);
+    if (frame.empty() || !ocr_config.ocr_roi_enabled ||
+        ocr_config.ocr_roi_quadrant == "full")
+    {
+        return OcrRoiSelection{"full", full_rect};
+    }
+
+    const int half_w = frame.cols / 2;
+    const int half_h = frame.rows / 2;
+    cv::Rect roi = full_rect;
+    if (ocr_config.ocr_roi_quadrant == "top_left")
+        roi = cv::Rect(0, 0, half_w, half_h);
+    else if (ocr_config.ocr_roi_quadrant == "top_right")
+        roi = cv::Rect(half_w, 0, frame.cols - half_w, half_h);
+    else if (ocr_config.ocr_roi_quadrant == "bottom_left")
+        roi = cv::Rect(0, half_h, half_w, frame.rows - half_h);
+    else if (ocr_config.ocr_roi_quadrant == "bottom_right")
+        roi = cv::Rect(half_w, half_h, frame.cols - half_w, frame.rows - half_h);
+
+    roi &= full_rect;
+    if (roi.empty())
+        return OcrRoiSelection{"full", full_rect};
+    return OcrRoiSelection{ocr_config.ocr_roi_quadrant, roi};
+}
+
+static OCRBox offset_ocr_box(OCRBox box, const cv::Point2f& offset)
+{
+    for (auto& pt : box.pts)
+        pt += offset;
+    return box;
 }
 
 struct OCRDebugFrame
@@ -617,8 +658,13 @@ static bool run_ocr_pipeline(cv::Mat& img,
         }
     }
 
+    const OcrRoiSelection roi_selection =
+        select_ocr_roi(original_frame, ocr_config);
+    cv::rectangle(img, roi_selection.rect, cv::Scalar(255, 180, 0), 2, cv::LINE_AA);
+
+    const cv::Mat ocr_source = original_frame(roi_selection.rect);
     cv::Mat det_input = prepare_ocr_input(
-        original_frame, ocr_config.ocr_math_use_grayscale);
+        ocr_source, ocr_config.ocr_math_use_grayscale);
     if (debug != nullptr)
     {
         debug->ocr_input = det_input.clone();
@@ -627,13 +673,15 @@ static bool run_ocr_pipeline(cv::Mat& img,
     {
         if (out_roi != nullptr)
             *out_roi = cv::Rect2f();
-        RCLCPP_WARN(logger, "Empty full-frame OCR input, skip inference.");
+        RCLCPP_WARN(logger, "Empty OCR ROI input, skip inference.");
         return finish(false);
     }
 
     RCLCPP_INFO(
-        logger, "Full-frame OCR: %dx%d, grayscale=%s",
-        det_input.cols, det_input.rows,
+        logger, "OCR ROI    : %s x=%d y=%d w=%d h=%d, grayscale=%s",
+        roi_selection.name.c_str(),
+        roi_selection.rect.x, roi_selection.rect.y,
+        roi_selection.rect.width, roi_selection.rect.height,
         ocr_config.ocr_math_use_grayscale ? "true" : "false");
     det.preprocess(det_input);
     det.inference();
@@ -657,7 +705,11 @@ static bool run_ocr_pipeline(cv::Mat& img,
         if (!rec.result.empty() && !rec.result[0].text.empty())
         {
             OCRItem item;
-            item.box = all_boxes[i];
+            item.box = offset_ocr_box(
+                all_boxes[i],
+                cv::Point2f(
+                    static_cast<float>(roi_selection.rect.x),
+                    static_cast<float>(roi_selection.rect.y)));
             item.rec = rec.result[0];
             ocr_items.push_back(item);
             RCLCPP_INFO(logger, "  [%zu] \"%s\"  score=%.3f",

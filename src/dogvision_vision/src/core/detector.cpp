@@ -97,6 +97,10 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         {
             config.detect_config.ocr_math_use_grayscale =
                 math_filter.get("use_grayscale", false).asBool();
+            config.detect_config.ocr_roi_enabled =
+                math_filter.get("roi_enabled", false).asBool();
+            config.detect_config.ocr_roi_quadrant =
+                math_filter.get("roi_quadrant", "full").asString();
             config.detect_config.ocr_math_min_surround_white_ratio =
                 math_filter.get("min_surround_white_ratio", 0.50).asDouble();
             config.detect_config.ocr_math_surround_margin_ratio =
@@ -124,6 +128,18 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             config.detect_config.ocr_math_white_v_min > 255)
             throw std::invalid_argument(
                 "ocr_math_filter.white_v_min must be in [0, 255]");
+        const std::string& roi_quadrant =
+            config.detect_config.ocr_roi_quadrant;
+        if (roi_quadrant != "full" &&
+            roi_quadrant != "top_left" &&
+            roi_quadrant != "top_right" &&
+            roi_quadrant != "bottom_left" &&
+            roi_quadrant != "bottom_right")
+        {
+            throw std::invalid_argument(
+                "ocr_math_filter.roi_quadrant must be one of "
+                "full/top_left/top_right/bottom_left/bottom_right");
+        }
 
         // ── YOLO 图像增强参数 ──
         const Json::Value& yolo_enh = value["yolo_enhance"];
@@ -379,6 +395,10 @@ detector::detector(Appconfig *config)
     detect_config_.rec_allowed_chars_path = config->detect_config.rec_allowed_chars_path;
     detect_config_.ocr_math_use_grayscale =
         config->detect_config.ocr_math_use_grayscale;
+    detect_config_.ocr_roi_enabled =
+        config->detect_config.ocr_roi_enabled;
+    detect_config_.ocr_roi_quadrant =
+        config->detect_config.ocr_roi_quadrant;
     detect_config_.ocr_math_min_surround_white_ratio =
         config->detect_config.ocr_math_min_surround_white_ratio;
     detect_config_.ocr_math_surround_margin_ratio =

@@ -99,7 +99,9 @@ typedef struct
     std::string rec_allowed_chars_path;  ///< 允许输出的数学字符白名单路径
 
     // ── OCR 数学题后置筛选参数 ──
-    bool ocr_math_use_grayscale = false; ///< 是否将整帧 OCR 输入转为三通道灰度图
+    bool ocr_math_use_grayscale = false; ///< 是否将 OCR 输入转为三通道灰度图
+    bool ocr_roi_enabled = false; ///< 是否只对配置的 OCR ROI 做检测识别
+    std::string ocr_roi_quadrant = "full"; ///< OCR ROI 象限：full/top_left/top_right/bottom_left/bottom_right
     double ocr_math_min_surround_white_ratio = 0.50; ///< 最小外围白色比例
     double ocr_math_surround_margin_ratio = 0.50; ///< 外围环带宽度/平均文字高度
     int ocr_math_white_s_max = 110; ///< HSV 白色区域 S 通道上限
