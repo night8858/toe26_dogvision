@@ -1354,9 +1354,9 @@ int main(int argc, char** argv)
     const std::string share_dir = ament_index_cpp::get_package_share_directory("dogvision_vision");
     node->declare_parameter<std::string>("config_path", share_dir + "/config/settings.json");
     node->declare_parameter<std::string>("mode", "production");
-    node->declare_parameter<bool>("show_visual", true);
+    node->declare_parameter<bool>("show_visual", false);
     node->declare_parameter<bool>("show_ocr_roi", false);
-    node->declare_parameter<bool>("show_debug_panels", true);
+    node->declare_parameter<bool>("show_debug_panels", false);
     node->declare_parameter<bool>("enable_keyboard_trigger", true);
     node->declare_parameter<std::string>("yaml_path", share_dir + "/data/ocr_output/ocr_results.yaml");
     node->declare_parameter<std::string>("debug_snapshot_dir", share_dir + "/data/ocr_debug");
@@ -1379,6 +1379,11 @@ int main(int argc, char** argv)
     const std::string input_path = node->get_parameter("input_path").as_string();
     const bool loop = node->get_parameter("loop").as_bool();
     const int wait_ms = node->get_parameter("wait_ms").as_int();
+
+    RCLCPP_INFO(logger, "Windows    : show_visual=%s show_ocr_roi=%s show_debug_panels=%s",
+                show_visual ? "true" : "false",
+                show_ocr_roi ? "true" : "false",
+                show_debug_panels ? "true" : "false");
 
     Appconfig config;
     {

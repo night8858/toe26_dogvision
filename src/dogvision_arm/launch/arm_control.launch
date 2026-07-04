@@ -1,11 +1,24 @@
+<!--
+  机械臂控制启动脚本（生产模式）
+  启动 arm_interaction_node（硬件通信）和 arm_mission_node（任务调度），
+  用于正式运行时与机械臂硬件的交互及任务执行。
+  不包含命令终端节点，适合无人工干预的自动化场景。
+-->
 <launch>
+  <!-- USB 硬件 ID（VID:PID），用于自动识别机械臂 -->
   <arg name="hw_id" default="0483:5740"/>
+  <!-- 串口波特率 -->
   <arg name="baud_rate" default="115200"/>
+  <!-- 串口端口号，留空则自动搜索 -->
   <arg name="port" default=""/>
+  <!-- 关节位置缩放系数 -->
   <arg name="pos_scale" default="0.01"/>
+  <!-- OCR 答案输出话题 -->
   <arg name="ocr_answer_topic" default="/ocr/answer"/>
+  <!-- 任务执行超时时间（毫秒） -->
   <arg name="timeout_ms" default="15000"/>
 
+  <!-- 机械臂硬件交互节点：负责串口通信与指令收发 -->
   <node pkg="dogvision_arm" exec="arm_internation_node" name="arm_internation_node" output="screen">
     <param name="hw_id" value="$(var hw_id)" type="str"/>
     <param name="baud_rate" value="$(var baud_rate)" type="int"/>
@@ -14,6 +27,7 @@
     <param name="ocr_answer_topic" value="$(var ocr_answer_topic)" type="str"/>
   </node>
 
+  <!-- 机械臂任务调度节点：管理预设动作序列的执行 -->
   <node pkg="dogvision_arm" exec="arm_mission_node" name="arm_mission_node" output="screen">
     <param name="timeout_ms" value="$(var timeout_ms)" type="int"/>
   </node>

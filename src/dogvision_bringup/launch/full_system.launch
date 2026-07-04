@@ -1,25 +1,57 @@
+<!--
+  完整系统启动脚本
+  同时启动机械臂控制（arm_control）和视觉处理（vision）两大子系统，
+  集成了 YOLO 目标检测、PP-OCR 文字识别和机械臂交互，实现完整的"识别-决策-执行"闭环。
+-->
 <launch>
+  <!-- ==================== 机械臂参数 ==================== -->
+  <!-- USB 硬件 ID（VID:PID） -->
   <arg name="hw_id" default="0483:5740"/>
+  <!-- 串口波特率 -->
   <arg name="baud_rate" default="115200"/>
+  <!-- 串口端口号，留空自动搜索 -->
   <arg name="port" default=""/>
+  <!-- 关节位置缩放系数 -->
   <arg name="pos_scale" default="0.01"/>
+  <!-- 关节角度缩放系数 -->
   <arg name="angle_scale" default="0.01"/>
+  <!-- 通信协议类型：compiled（预编译）或 raw（原始命令） -->
   <arg name="protocol" default="compiled"/>
+  <!-- OCR 答案输出话题 -->
   <arg name="ocr_answer_topic" default="/ocr/answer"/>
+  <!-- 机械臂任务配置文件路径 -->
   <arg name="mission_config" default="$(find-pkg-share dogvision_arm)/config/pos_set.yaml"/>
 
+  <!-- ==================== 视觉系统参数 ==================== -->
+  <!-- 视觉系统配置文件路径（JSON 格式） -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
-  <arg name="show_window" default="false"/>
+  <!-- 调试模式开关 -->
+  <arg name="debug" default="false"/>
+  <!-- 是否显示图像窗口（默认跟随 debug 模式） -->
+  <arg name="show_window" default="$(var debug)"/>
+  <!-- 是否启用鱼眼图像去畸变 -->
   <arg name="enable_undistort" default="true"/>
+  <!-- 是否保存检测图像 -->
   <arg name="save_images" default="true"/>
+  <!-- 图像保存目录 -->
   <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <!-- YOLO 是否启用键盘触发检测 -->
   <arg name="yolo_enable_keyboard_trigger" default="false"/>
+  <!-- PP-OCR 运行模式：production（生产）/ test（测试）/ visual_test（可视化测试） -->
   <arg name="ppocr_mode" default="production"/>
-  <arg name="ppocr_show_visual" default="true"/>
-  <arg name="ppocr_show_ocr_roi" default="false"/>
+  <!-- PP-OCR 是否显示可视化结果 -->
+  <arg name="ppocr_show_visual" default="$(var debug)"/>
+  <!-- PP-OCR 是否显示 OCR 感兴趣区域 -->
+  <arg name="ppocr_show_ocr_roi" default="$(var debug)"/>
+  <!-- PP-OCR 是否显示调试面板 -->
+  <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
+  <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
+  <!-- OCR 结果 YAML 输出路径 -->
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
+  <!-- ==================== 包含子启动文件 ==================== -->
+  <!-- 引入机械臂控制启动文件 -->
   <include file="$(find-pkg-share dogvision_arm)/launch/arm_control.launch">
     <arg name="hw_id" value="$(var hw_id)"/>
     <arg name="baud_rate" value="$(var baud_rate)"/>
@@ -31,8 +63,10 @@
     <arg name="mission_config" value="$(var mission_config)"/>
   </include>
 
+  <!-- 引入视觉处理启动文件（YOLO + PP-OCR） -->
   <include file="$(find-pkg-share dogvision_bringup)/launch/vision.launch">
     <arg name="config_path" value="$(var config_path)"/>
+    <arg name="debug" value="$(var debug)"/>
     <arg name="show_window" value="$(var show_window)"/>
     <arg name="enable_undistort" value="$(var enable_undistort)"/>
     <arg name="save_images" value="$(var save_images)"/>
@@ -41,6 +75,7 @@
     <arg name="ppocr_mode" value="$(var ppocr_mode)"/>
     <arg name="ppocr_show_visual" value="$(var ppocr_show_visual)"/>
     <arg name="ppocr_show_ocr_roi" value="$(var ppocr_show_ocr_roi)"/>
+    <arg name="ppocr_show_debug_panels" value="$(var ppocr_show_debug_panels)"/>
     <arg name="ppocr_enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)"/>
     <arg name="ocr_yaml_path" value="$(var ocr_yaml_path)"/>
   </include>

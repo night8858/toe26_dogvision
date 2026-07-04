@@ -4,13 +4,20 @@
   可通过参数调整数值范围、生成间隔和画布尺寸。
 -->
 <launch>
+  <!-- 算术题结果 YAML 输出路径 -->
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/math_generator/math_results.yaml"/>
+  <!-- 算术题数值最小值 -->
   <arg name="min_val" default="1"/>
+  <!-- 算术题数值最大值 -->
   <arg name="max_val" default="100"/>
+  <!-- 题目生成间隔（秒） -->
   <arg name="interval" default="10"/>
+  <!-- 全屏显示画布宽度（像素） -->
   <arg name="canvas_width" default="1920"/>
+  <!-- 全屏显示画布高度（像素） -->
   <arg name="canvas_height" default="1080"/>
 
+  <!-- 算术题生成节点：定时生成复合四则运算题并全屏显示 -->
   <node pkg="dogvision_vision" exec="math_generator_node" name="math_generator_node" output="screen">
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
     <param name="min_val" value="$(var min_val)" type="int"/>

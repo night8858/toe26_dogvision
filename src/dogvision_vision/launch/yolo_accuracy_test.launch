@@ -4,12 +4,18 @@
   将标注结果录制为视频文件供离线评估。
 -->
 <launch>
+  <!-- 视觉系统配置文件路径 -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
+  <!-- 是否启用鱼眼图像去畸变 -->
   <arg name="enable_undistort" default="true"/>
+  <!-- 测试输出视频保存目录 -->
   <arg name="output_dir" default="$(find-pkg-share dogvision_vision)/data/yolotest"/>
+  <!-- 录制视频帧率 -->
   <arg name="video_fps" default="30.0"/>
+  <!-- 可视化 NMS 阈值，用于过滤低置信度检测框 -->
   <arg name="visual_nms_thresh" default="0.7"/>
 
+  <!-- YOLO 准确性测试节点：边检测边录制视频供离线评估 -->
   <node pkg="dogvision_vision" exec="yolo_accuracy_test_node" name="yolo_accuracy_test_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="enable_undistort" value="$(var enable_undistort)" type="bool"/>

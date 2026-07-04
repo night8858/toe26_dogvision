@@ -217,14 +217,16 @@ ros2 run dogvision_vision math_generator_node
 | `ocr_answer_topic` | `/ocr/answer` | OCR 答案到机械臂的 UInt8 话题 |
 | `mission_config` | `<share>/dogvision_arm/config/pos_set.yaml` | 机械臂任务位置配置 |
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
-| `show_window` | `false` | YOLO 是否显示 OpenCV 窗口 |
+| `debug` | `false` | 调试模式；默认打开 YOLO/PPOCR OpenCV 窗口 |
+| `show_window` | `$(var debug)` | YOLO 是否显示 OpenCV 窗口 |
 | `enable_undistort` | `true` | YOLO 是否启用去畸变 |
 | `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
 | `yolo_enable_keyboard_trigger` | `false` | 组合启动时关闭 YOLO Enter，避免争抢 stdin |
 | `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
-| `ppocr_show_visual` | `true` | PPOCR 是否显示整帧结果窗口 |
-| `ppocr_show_ocr_roi` | `false` | PPOCR 是否显示当前最佳算术候选及白色筛选状态 |
+| `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示整帧结果窗口 |
+| `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选及白色筛选状态 |
+| `ppocr_show_debug_panels` | `$(var debug)` | PPOCR 是否显示调试拼图窗口 |
 | `ppocr_enable_keyboard_trigger` | `true` | 组合启动时由 Enter 触发 OCR |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 
@@ -256,12 +258,15 @@ ros2 run dogvision_vision math_generator_node
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
-| `show_window` | `false` | YOLO 是否显示 OpenCV 窗口 |
+| `debug` | `false` | 调试模式；默认打开 YOLO/PPOCR OpenCV 窗口 |
+| `show_window` | `$(var debug)` | YOLO 是否显示 OpenCV 窗口 |
 | `enable_undistort` | `true` | YOLO 是否启用去畸变 |
 | `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
 | `ppocr_mode` | `production` | PPOCR 模式 |
-| `ppocr_show_visual` | `true` | PPOCR 是否显示可视化窗口 |
+| `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示可视化窗口 |
+| `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选窗口 |
+| `ppocr_show_debug_panels` | `$(var debug)` | PPOCR 是否显示调试拼图窗口 |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 
 ## 8. 话题与消息

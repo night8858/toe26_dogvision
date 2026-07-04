@@ -443,9 +443,9 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 |---|---|---|---|
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
 | `mode` | string | `"production"` | 运行模式：`"test"`、`"production"` 或 `"visual_test"` |
-| `show_visual` | bool | true | 是否显示 `"Math OCR"` 整帧结果窗口 |
+| `show_visual` | bool | false | 是否显示 `"Math OCR"` 整帧结果窗口 |
 | `show_ocr_roi` | bool | false | 是否显示当前最优算术候选及筛选状态 |
-| `show_debug_panels` | bool | true | 是否显示 `"Math OCR Debug"` 调试拼图窗口 |
+| `show_debug_panels` | bool | false | 是否显示 `"Math OCR Debug"` 调试拼图窗口 |
 | `enable_keyboard_trigger` | bool | true | production 模式是否允许 Enter 触发 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | test 模式下 YAML 输出路径 |
 | `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |

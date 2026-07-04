@@ -2,7 +2,7 @@
   // ── 当前使用的相机类型 ──
     "camera":
     {
-      "type": "usb",      // hik=海康相机，usb=USB 相机
+      "type": "hik",      // hik=海康相机，usb=USB 相机
       "usb_index": 0      // USB 模式下使用 usbcamera0~3 中的哪一路
     },
 
@@ -28,11 +28,12 @@
     // ── USB 相机参数（最多 4 个） ──
     "usbcamera0":
     {
+      //给c920罗技相机使用的usb相机参数
       "device_path": "/dev/video2",  // 可选：USB 设备路径；为空或缺失时使用 VideoCapture(0)
       "device_id": 0,     // 设备编号
       "width": 1920,      // 采集宽度
       "height": 1080,     // 采集高度
-      "FPS":120           // 目标帧率
+      "FPS":30           // 目标帧率
     },
     
     "usbcamera1":

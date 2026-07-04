@@ -3,13 +3,20 @@
   以 test 模式启动 ppocr_node，连续 OCR + 多帧投票，稳定结果存入 YAML。
 -->
 <launch>
+  <!-- 视觉系统配置文件路径 -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
+  <!-- 是否显示可视化结果 -->
   <arg name="show_visual" default="true"/>
+  <!-- 是否显示 OCR 感兴趣区域 -->
   <arg name="show_ocr_roi" default="true"/>
+  <!-- 是否显示调试面板 -->
   <arg name="show_debug_panels" default="true"/>
+  <!-- OCR 结果 YAML 输出路径 -->
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
+  <!-- 调试快照保存目录 -->
   <arg name="debug_snapshot_dir" default="$(find-pkg-share dogvision_vision)/data/ocr_debug"/>
 
+  <!-- PP-OCR 节点（测试模式）：连续 OCR 识别 + 多帧投票，输出稳定结果到 YAML -->
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="test" type="str"/>

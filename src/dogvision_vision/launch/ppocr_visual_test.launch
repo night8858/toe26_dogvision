@@ -1,19 +1,29 @@
 <!--
-  PP-OCR visual debugging launcher.
-  Default input_path is empty, so this starts live camera visualization.
-  Set input_path to a file or directory for offline image playback.
+  PP-OCR 可视化调试启动脚本
+  以 visual_test 模式启动 ppocr_node，默认从相机实时画面进行 OCR 可视化调试。
+  设置 input_path 为图片文件或目录路径可切换到离线图像回放模式。
 -->
 <launch>
+  <!-- 视觉系统配置文件路径 -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
+  <!-- 输入路径：留空使用相机实时画面，指定文件/目录则进行离线回放 -->
   <arg name="input_path" default=""/>
+  <!-- 离线回放时是否循环播放 -->
   <arg name="loop" default="false"/>
+  <!-- 离线回放时每帧等待时间（毫秒） -->
   <arg name="wait_ms" default="1000"/>
+  <!-- 是否显示可视化结果 -->
   <arg name="show_visual" default="true"/>
+  <!-- 是否显示 OCR 感兴趣区域 -->
   <arg name="show_ocr_roi" default="true"/>
+  <!-- 是否显示调试面板 -->
   <arg name="show_debug_panels" default="true"/>
+  <!-- OCR 结果 YAML 输出路径 -->
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
+  <!-- 调试快照保存目录 -->
   <arg name="debug_snapshot_dir" default="$(find-pkg-share dogvision_vision)/data/ocr_debug"/>
 
+  <!-- PP-OCR 节点（可视化测试模式）：实时显示 OCR 检测与识别过程 -->
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="visual_test" type="str"/>

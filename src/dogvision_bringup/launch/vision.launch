@@ -1,16 +1,37 @@
+<!--
+  视觉处理启动脚本
+  同时启动 YOLO 目标检测节点和 PP-OCR 文字识别节点，
+  从相机获取图像进行实时检测与识别，结果可通过话题输出给其他模块（如机械臂）。
+-->
 <launch>
+  <!-- 视觉系统配置文件路径 -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
-  <arg name="show_window" default="false"/>
+  <!-- 调试模式开关 -->
+  <arg name="debug" default="false"/>
+  <!-- 是否显示图像窗口 -->
+  <arg name="show_window" default="$(var debug)"/>
+  <!-- 是否启用鱼眼图像去畸变 -->
   <arg name="enable_undistort" default="true"/>
+  <!-- 是否保存检测图像 -->
   <arg name="save_images" default="true"/>
+  <!-- 图像保存目录 -->
   <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <!-- YOLO 是否启用键盘触发检测 -->
   <arg name="yolo_enable_keyboard_trigger" default="false"/>
+  <!-- PP-OCR 运行模式：production / test / visual_test -->
   <arg name="ppocr_mode" default="production"/>
-  <arg name="ppocr_show_visual" default="true"/>
-  <arg name="ppocr_show_ocr_roi" default="false"/>
+  <!-- PP-OCR 是否显示可视化结果 -->
+  <arg name="ppocr_show_visual" default="$(var debug)"/>
+  <!-- PP-OCR 是否显示 OCR 感兴趣区域 -->
+  <arg name="ppocr_show_ocr_roi" default="$(var debug)"/>
+  <!-- PP-OCR 是否显示调试面板 -->
+  <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
+  <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
+  <!-- OCR 结果 YAML 输出路径 -->
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
+  <!-- YOLO 目标检测节点：实时检测图像中的目标物体 -->
   <node pkg="dogvision_vision" exec="yolo_node" name="yolo_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="show_window" value="$(var show_window)" type="bool"/>
@@ -20,11 +41,13 @@
     <param name="enable_keyboard_trigger" value="$(var yolo_enable_keyboard_trigger)" type="bool"/>
   </node>
 
+  <!-- PP-OCR 文字识别节点：检测并识别图像中的文字信息 -->
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="$(var ppocr_mode)" type="str"/>
     <param name="show_visual" value="$(var ppocr_show_visual)" type="bool"/>
     <param name="show_ocr_roi" value="$(var ppocr_show_ocr_roi)" type="bool"/>
+    <param name="show_debug_panels" value="$(var ppocr_show_debug_panels)" type="bool"/>
     <param name="enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)" type="bool"/>
     <param name="yaml_path" value="$(var ocr_yaml_path)" type="str"/>
   </node>
