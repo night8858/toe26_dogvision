@@ -34,7 +34,7 @@ dogvision_vision/
 │   │   ├── ocr_results.yaml       # PPOCR test 模式输出
 │   │   └── result.txt             # 辅助测试记录
 │   ├── yolorun/                   # YOLO 单帧结果图保存目录（.jpg）
-│   └── yolotest/                  # YOLO 准确性测试视频保存目录（.avi）
+│   └── yolotest/                  # YOLO 准确性测试视频保存目录（.mp4）
 ├── include/dogvision_vision/
 │   ├── common_structs.h           # 共享数据结构（Detection, Appconfig, OCRBox 等）
 │   ├── detector.hpp               # 检测器基类
@@ -209,6 +209,13 @@ source install/setup.bash
     "white_v_min": 50
   },
 
+  // OCR test 模式可视化窗口
+  "ocr_test_visualization": {
+    "show_visual": true,
+    "show_ocr_roi": true,
+    "show_debug_panels": true
+  },
+
   // YOLO 输入张量形状 NCHW
   "NCHW": { "batch_size": 1, "C": 3, "W": 640, "H": 640 },
 
@@ -291,6 +298,8 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 | `ppocr_video_save_dir` | `data/ocr_output/video` | PP-OCR 视频保存目录 |
 | `ppocr_video_fps` | `20.0` | PP-OCR 视频帧率，必须大于 0 |
 | `save_yolo_test_video` | `true` | 是否保存 YOLO 准确率测试视频 |
+
+视频文件统一保存为 MP4，文件名格式为 `<前缀>_<毫秒时间戳>.mp4`。图片文件统一保存为 JPG，文件名格式为 `<前缀>_<毫秒时间戳>.jpg` 或 `<前缀>_<毫秒时间戳>_<后缀>.jpg`。
 
 PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对应的 `inference.yml`，确保字符表类别数与模型输出一致。PP-OCRv4 旧模型仍可使用 `ppocr_keys_v1.txt`。`math_chars.txt` 是解码白名单，当前允许：
 
@@ -391,7 +400,7 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch
 ros2 run dogvision_vision yolo_accuracy_test_node
 ```
 
-视频文件命名格式：`yolo_accuracy_{毫秒时间戳}.avi`（MP4V 编码）。
+视频文件命名格式：`yolo_accuracy_{毫秒时间戳}.mp4`。
 
 ---
 
@@ -443,12 +452,12 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 |---|---|---|---|
 | `config_path` | string | `<share>/config/settings.json` | 配置文件路径 |
 | `mode` | string | `"production"` | 运行模式：`"test"`、`"production"` 或 `"visual_test"` |
-| `show_visual` | bool | false | 是否显示 `"Math OCR"` 整帧结果窗口 |
-| `show_ocr_roi` | bool | false | 是否显示当前最优算术候选及筛选状态 |
-| `show_debug_panels` | bool | false | 是否显示 `"Math OCR Debug"` 调试拼图窗口 |
+| `show_visual` | bool | false | 是否显示 `"Math OCR"` 整帧结果窗口；test 模式默认来自 `ocr_test_visualization` |
+| `show_ocr_roi` | bool | false | 是否显示当前最优算术候选及筛选状态；test 模式默认来自 `ocr_test_visualization` |
+| `show_debug_panels` | bool | false | 是否显示 `"Math OCR Debug"` 调试拼图窗口；test 模式默认来自 `ocr_test_visualization` |
 | `enable_keyboard_trigger` | bool | true | production 模式是否允许 Enter 触发 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | test 模式下 YAML 输出路径 |
-| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
+| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存 JPG 调试快照的目录 |
 | `input_path` | string | 空 | visual_test 模式的离线图片或目录；为空时使用相机 |
 | `loop` | bool | false | visual_test 离线目录是否循环播放 |
 | `wait_ms` | int | 1000 | visual_test 离线目录每张图片自动播放间隔 |
@@ -785,19 +794,21 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false v
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `config_path` | string | `<share>/config/settings.json` | 视觉配置文件 |
-| `show_visual` | bool | true | 是否显示整帧 OCR 结果窗口 |
-| `show_ocr_roi` | bool | true | 是否显示当前最优算术候选及筛选状态 |
-| `show_debug_panels` | bool | true | 是否显示原图、OCR 输入、白色 mask、ROI 的调试拼图 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | 输出 YAML 路径 |
 | `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
+
+test 模式窗口由 `settings.json` 中 `ocr_test_visualization` 控制：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `show_visual` | true | 是否显示整帧 OCR 结果窗口 |
+| `show_ocr_roi` | true | 是否显示当前最优算术候选及筛选状态 |
+| `show_debug_panels` | true | 是否显示原图、OCR 输入、白色 mask、ROI 的调试拼图 |
 
 test/production 在线推理会按 `settings.json` 中 `output_save.save_ppocr_video` 自动保存 `"Math OCR"` 主标注视频。
 
 ```bash
 ros2 launch dogvision_vision ppocr_test.launch
-ros2 launch dogvision_vision ppocr_test.launch show_visual:=false
-ros2 launch dogvision_vision ppocr_test.launch \
-  show_visual:=false show_ocr_roi:=true
 ```
 
 ### 7.3 `ppocr_visual_test.launch`
@@ -812,7 +823,7 @@ ros2 launch dogvision_vision ppocr_test.launch \
 | `show_visual` | bool | true | 显示整帧标注窗口 |
 | `show_ocr_roi` | bool | true | 显示最佳 OCR 候选窗口 |
 | `show_debug_panels` | bool | true | 显示调试拼图窗口 |
-| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 快照保存目录 |
+| `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | JPG 快照保存目录 |
 
 快捷键：
 
@@ -939,7 +950,7 @@ ctest --test-dir build/dogvision_vision --output-on-failure
 ros2 launch dogvision_vision yolo_accuracy_test.launch
 ```
 
-实时显示标注窗口，按 Q 或 ESC 退出，自动保存标注视频到 `data/yolotest/`。
+实时显示标注窗口，按 Q 或 ESC 退出，自动保存 MP4 标注视频到 `data/yolotest/`。
 
 ### 9.3 PPOCR 连续测试
 
@@ -963,7 +974,7 @@ ros2 launch dogvision_vision ppocr_visual_test.launch
 | `Math OCR Candidate` | 当前最佳算术候选或 ROI 局部放大 |
 | `Math OCR Debug` | 原图、OCR 输入、白色 mask、ROI/候选、候选分数和投票状态 |
 
-6m 屏幕调试时优先看 `Math OCR Debug`：白色 mask 应稳定覆盖屏幕白底区域，ROI 内字符应清晰且高度足够；候选列表里的 `white` 应高于阈值，`score` 过低时优先调整焦距、曝光、屏幕字号或 OCR 阈值。按 `s` 保存快照到 `data/ocr_debug` 便于离线复盘。
+6m 屏幕调试时优先看 `Math OCR Debug`：白色 mask 应稳定覆盖屏幕白底区域，ROI 内字符应清晰且高度足够；候选列表里的 `white` 应高于阈值，`score` 过低时优先调整焦距、曝光、屏幕字号或 OCR 阈值。按 `s` 保存 JPG 快照到 `data/ocr_debug` 便于离线复盘。
 
 ---
 

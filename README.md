@@ -140,7 +140,7 @@ ros2 launch dogvision_bringup full_system.launch
 ros2 launch dogvision_bringup vision.launch
 ```
 
-YOLO 准确性测试，会打开可视化窗口并在退出后保存 AVI/MJPG 标注视频：
+YOLO 准确性测试，会打开可视化窗口并在退出后保存 MP4 标注视频：
 
 ```bash
 ros2 launch dogvision_vision yolo_accuracy_test.launch
@@ -355,7 +355,7 @@ PPOCR 使用最近 10 个处理帧进行投票。某个归一化算式至少出�
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
 | `enable_undistort` | `true` | 是否进行鱼眼去畸变 |
 | `output_dir` | `<share>/dogvision_vision/data/yolotest` | 标注测试视频输出目录 |
-| `video_fps` | `20.0` | AVI/MJPG 视频写入帧率 |
+| `video_fps` | `20.0` | MP4 视频写入帧率 |
 | `visual_nms_thresh` | `0.7` | 测试可视化 NMS 阈值，避免相近目标被过度合并 |
 
 ### `ppocr_node`
@@ -364,7 +364,7 @@ PPOCR 使用最近 10 个处理帧进行投票。某个归一化算式至少出�
 |---|---|---|
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
 | `mode` | `production` | `production` 触发后持续跟踪，`test` 连续投票并将稳定变化写入 YAML |
-| `show_visual` | `true` | 是否显示本地 OpenCV 窗口 |
+| `show_visual` | `false` | 是否显示本地 OpenCV 窗口；test 模式默认可由 `settings.json` 的 `ocr_test_visualization` 控制 |
 | `yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | test 模式输出文件 |
 
 ### `math_generator_node`

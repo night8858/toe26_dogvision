@@ -51,7 +51,7 @@ std::string join_class_names(const std::vector<std::string>& class_names)
 /**
  * @brief 使用当前时间构建测试视频输出路径。
  * @param output_dir 视频输出目录。
- * @retval std::string 带时间戳的 AVI 视频完整路径。
+ * @retval std::string 带时间戳的 MP4 视频完整路径。
  */
 std::string build_video_path(const std::string& output_dir)
 {
@@ -60,7 +60,7 @@ std::string build_video_path(const std::string& output_dir)
         now.time_since_epoch()).count();
 
     fs::path path(output_dir);
-    path /= "yolo_accuracy_" + std::to_string(millis) + ".avi";
+    path /= "yolo_accuracy_" + std::to_string(millis) + ".mp4";
     return path.string();
 }
 
@@ -183,7 +183,7 @@ int main(int argc, char** argv)
 
         if (save_video && !writer.isOpened())
         {
-            writer.open(video_path, cv::VideoWriter::fourcc('M', 'P', '4', 'V'),
+            writer.open(video_path, cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
                         video_fps, vis.size(), true);
             if (!writer.isOpened())
             {

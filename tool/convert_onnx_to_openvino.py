@@ -47,11 +47,23 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Convert only one model.",
     )
-    # parser.add_argument(
-    #     "--compress-to-fp16",
-    #     action="store_true",
-    #     help="Ask ovc to compress model weights to FP16.",
-    # )
+    parser.add_argument(
+        "--det-output-name",
+        default=None,
+        help="Custom output filename (without extension) for the detection model. "
+        "Defaults to the ONNX stem name.",
+    )
+    parser.add_argument(
+        "--rec-output-name",
+        default=None,
+        help="Custom output filename (without extension) for the recognition model. "
+        "Defaults to the ONNX stem name.",
+    )
+    parser.add_argument(
+        "--compress-to-fp16",
+        action="store_true",
+        help="Ask ovc to compress model weights to FP16.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -173,8 +185,20 @@ def command_for(
     onnx_path: Path,
     output_dir: Path,
     compress_to_fp16: bool,
+    output_name: str | None = None,
 ) -> list[str]:
-    cmd = [*ovc_cmd, str(onnx_path), "--output_model", str(output_dir / onnx_path.stem)]
+    """Build the ovc command line.
+
+    Args:
+        ovc_cmd: Base ovc command (with python module prefix if needed).
+        onnx_path: Path to the source ONNX model.
+        output_dir: Directory where OpenVINO IR files will be written.
+        compress_to_fp16: Whether to add --compress_to_fp16 True.
+        output_name: Custom output filename without extension.
+            Defaults to the stem of the ONNX file.
+    """
+    name = output_name if output_name else onnx_path.stem
+    cmd = [*ovc_cmd, str(onnx_path), "--output_model", str(output_dir / name)]
     if compress_to_fp16:
         cmd.extend(["--compress_to_fp16", "True"])
     return cmd
@@ -203,10 +227,21 @@ def main() -> int:
     if ovc_cmd is None:
         return 2
 
+    output_names: dict[str, str | None] = {
+        "det": args.det_output_name,
+        "rec": args.rec_output_name,
+    }
+
     for kind in selected_kinds(args.only):
         onnx_path = inputs[kind]
         output_dir = output_dir_for(kind, onnx_path, args.output_root)
-        cmd = command_for(ovc_cmd, onnx_path, output_dir, args.compress_to_fp16)
+        cmd = command_for(
+            ovc_cmd,
+            onnx_path,
+            output_dir,
+            args.compress_to_fp16,
+            output_name=output_names[kind],
+        )
 
         print(f"[{kind}] ONNX model:     {onnx_path}")
         print(f"[{kind}] OpenVINO IR:   {output_dir}")

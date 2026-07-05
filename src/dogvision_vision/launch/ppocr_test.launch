@@ -5,12 +5,6 @@
 <launch>
   <!-- 视觉系统配置文件路径 -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
-  <!-- 是否显示可视化结果 -->
-  <arg name="show_visual" default="true"/>
-  <!-- 是否显示 OCR 感兴趣区域 -->
-  <arg name="show_ocr_roi" default="true"/>
-  <!-- 是否显示调试面板 -->
-  <arg name="show_debug_panels" default="true"/>
   <!-- OCR 结果 YAML 输出路径 -->
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
   <!-- 调试快照保存目录 -->
@@ -20,9 +14,6 @@
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="test" type="str"/>
-    <param name="show_visual" value="$(var show_visual)" type="bool"/>
-    <param name="show_ocr_roi" value="$(var show_ocr_roi)" type="bool"/>
-    <param name="show_debug_panels" value="$(var show_debug_panels)" type="bool"/>
     <param name="enable_keyboard_trigger" value="false" type="bool"/>
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
     <param name="debug_snapshot_dir" value="$(var debug_snapshot_dir)" type="str"/>

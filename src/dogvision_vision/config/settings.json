@@ -2,7 +2,7 @@
   // ── 当前使用的相机类型 ──
     "camera":
     {
-      "type": "hik",      // hik=海康相机，usb=USB 相机
+      "type": "usb",      // hik=海康相机，usb=USB 相机
       "usb_index": 0      // USB 模式下使用 usbcamera0~3 中的哪一路
     },
 
@@ -33,7 +33,7 @@
       "device_id": 0,     // 设备编号
       "width": 1920,      // 采集宽度
       "height": 1080,     // 采集高度
-      "FPS":30           // 目标帧率
+      "FPS":30            // 目标帧率
     },
     
     "usbcamera1":
@@ -95,6 +95,14 @@
       "surround_margin_ratio": 0.50,      // 环带宽度/平均文字高度
       "white_s_max": 110,                 // HSV 白色区域 S 通道上限
       "white_v_min": 50                   // HSV 白色区域 V 通道下限
+    },
+
+    // ── OCR test 模式可视化窗口配置 ──
+    "ocr_test_visualization":
+    {
+      "show_visual": true,                // 是否显示 Math OCR 整帧结果窗口
+      "show_ocr_roi": false,               // 是否显示 Math OCR Candidate 候选窗口
+      "show_debug_panels": false           // 是否显示 Math OCR Debug 调试拼图窗口
     },
 
     // ── YOLO 网络输入尺寸（NCHW 格式） ──

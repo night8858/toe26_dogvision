@@ -215,10 +215,10 @@ private:
         const auto ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
         fs::path output(save_dir_);
-        output /= name_prefix_ + "_" + std::to_string(ms) + ".avi";
+        output /= name_prefix_ + "_" + std::to_string(ms) + ".mp4";
         output_path_ = output.string();
 
-        writer_.open(output_path_, cv::VideoWriter::fourcc('M', 'P', '4', 'V'),
+        writer_.open(output_path_, cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
                      fps_, frame_size, true);
         if (!writer_.isOpened())
         {
@@ -462,19 +462,19 @@ bool save_debug_snapshot(const OCRDebugFrame& debug,
 
     bool ok = true;
     if (!debug.original_frame.empty())
-        ok &= cv::imwrite(base.string() + "_original.png", debug.original_frame);
+        ok &= cv::imwrite(base.string() + "_original.jpg", debug.original_frame);
     if (!display_frame.empty())
-        ok &= cv::imwrite(base.string() + "_annotated.png", display_frame);
+        ok &= cv::imwrite(base.string() + "_annotated.jpg", display_frame);
     if (!debug.ocr_input.empty())
-        ok &= cv::imwrite(base.string() + "_ocr_input.png", debug.ocr_input);
+        ok &= cv::imwrite(base.string() + "_ocr_input.jpg", debug.ocr_input);
     if (!debug.white_mask.empty())
-        ok &= cv::imwrite(base.string() + "_white_mask.png", debug.white_mask);
+        ok &= cv::imwrite(base.string() + "_white_mask.jpg", debug.white_mask);
     if (!debug.white_roi_crop.empty())
-        ok &= cv::imwrite(base.string() + "_white_roi.png", debug.white_roi_crop);
+        ok &= cv::imwrite(base.string() + "_white_roi.jpg", debug.white_roi_crop);
     if (!ocr_roi.empty())
-        ok &= cv::imwrite(base.string() + "_candidate.png", ocr_roi);
+        ok &= cv::imwrite(base.string() + "_candidate.jpg", ocr_roi);
     if (!debug_panel.empty())
-        ok &= cv::imwrite(base.string() + "_debug.png", debug_panel);
+        ok &= cv::imwrite(base.string() + "_debug.jpg", debug_panel);
 
     RCLCPP_INFO(logger, "%s OCR debug snapshot: %s_*",
                 ok ? "Saved" : "Partially saved",
@@ -1354,9 +1354,26 @@ int main(int argc, char** argv)
     const std::string share_dir = ament_index_cpp::get_package_share_directory("dogvision_vision");
     node->declare_parameter<std::string>("config_path", share_dir + "/config/settings.json");
     node->declare_parameter<std::string>("mode", "production");
-    node->declare_parameter<bool>("show_visual", false);
-    node->declare_parameter<bool>("show_ocr_roi", false);
-    node->declare_parameter<bool>("show_debug_panels", false);
+
+    const std::string config_path = node->get_parameter("config_path").as_string();
+    const std::string mode = node->get_parameter("mode").as_string();
+
+    Appconfig config;
+    {
+        detect_det_ppocr loader(nullptr);
+        loader.load_config(config, config_path);
+    }
+
+    const bool default_show_visual =
+        (mode == "test") ? config.detect_config.ocr_test_show_visual : false;
+    const bool default_show_ocr_roi =
+        (mode == "test") ? config.detect_config.ocr_test_show_ocr_roi : false;
+    const bool default_show_debug_panels =
+        (mode == "test") ? config.detect_config.ocr_test_show_debug_panels : false;
+
+    node->declare_parameter<bool>("show_visual", default_show_visual);
+    node->declare_parameter<bool>("show_ocr_roi", default_show_ocr_roi);
+    node->declare_parameter<bool>("show_debug_panels", default_show_debug_panels);
     node->declare_parameter<bool>("enable_keyboard_trigger", true);
     node->declare_parameter<std::string>("yaml_path", share_dir + "/data/ocr_output/ocr_results.yaml");
     node->declare_parameter<std::string>("debug_snapshot_dir", share_dir + "/data/ocr_debug");
@@ -1364,8 +1381,6 @@ int main(int argc, char** argv)
     node->declare_parameter<bool>("loop", false);
     node->declare_parameter<int>("wait_ms", 1000);
 
-    const std::string config_path = node->get_parameter("config_path").as_string();
-    const std::string mode = node->get_parameter("mode").as_string();
     const bool show_visual = node->get_parameter("show_visual").as_bool();
     const bool show_ocr_roi =
         node->get_parameter("show_ocr_roi").as_bool();
@@ -1384,12 +1399,6 @@ int main(int argc, char** argv)
                 show_visual ? "true" : "false",
                 show_ocr_roi ? "true" : "false",
                 show_debug_panels ? "true" : "false");
-
-    Appconfig config;
-    {
-        detect_det_ppocr loader(nullptr);
-        loader.load_config(config, config_path);
-    }
     RCLCPP_INFO(logger, "Config     : %s", config_path.c_str());
 
     detect_det_ppocr det(&config);

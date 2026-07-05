@@ -2376,3 +2376,8 @@ ocr_results:
     question: "16*11-9/1+11"
     answer: 178
     mod4: 2
+ocr_results:
+  - id: 1
+    question: "12-4*2+6/3"
+    answer: 6
+    mod4: 2

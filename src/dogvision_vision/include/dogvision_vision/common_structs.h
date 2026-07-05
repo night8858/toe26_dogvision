@@ -107,6 +107,11 @@ typedef struct
     int ocr_math_white_s_max = 110; ///< HSV 白色区域 S 通道上限
     int ocr_math_white_v_min = 50; ///< HSV 白色区域 V 通道下限
 
+    // ── OCR 测试模式窗口显示参数 ──
+    bool ocr_test_show_visual = true; ///< test 模式是否显示整帧 OCR 结果窗口
+    bool ocr_test_show_ocr_roi = true; ///< test 模式是否显示当前最优算术候选窗口
+    bool ocr_test_show_debug_panels = true; ///< test 模式是否显示 OCR 调试拼图窗口
+
     // ── 类别名称（JSON 中 cls0~cls3 字段） ──
     std::string class0; ///< 第 0 类名称
     std::string class1; ///< 第 1 类名称

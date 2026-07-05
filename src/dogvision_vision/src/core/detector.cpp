@@ -141,6 +141,18 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
                 "full/top_left/top_right/bottom_left/bottom_right");
         }
 
+        // ── OCR 测试模式窗口显示参数 ──
+        const Json::Value& test_visual = value["ocr_test_visualization"];
+        if (!test_visual.isNull())
+        {
+            config.detect_config.ocr_test_show_visual =
+                test_visual.get("show_visual", true).asBool();
+            config.detect_config.ocr_test_show_ocr_roi =
+                test_visual.get("show_ocr_roi", true).asBool();
+            config.detect_config.ocr_test_show_debug_panels =
+                test_visual.get("show_debug_panels", true).asBool();
+        }
+
         // ── YOLO 图像增强参数 ──
         const Json::Value& yolo_enh = value["yolo_enhance"];
         if (!yolo_enh.isNull())
