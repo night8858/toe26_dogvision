@@ -35,6 +35,12 @@
   <arg name="save_images" default="true"/>
   <!-- 图像保存目录 -->
   <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <!-- 共享相机图像话题 -->
+  <arg name="image_topic" default="/camera/image_raw"/>
+  <!-- 共享相机 frame_id -->
+  <arg name="camera_frame_id" default="camera"/>
+  <!-- 共享相机发布帧率 -->
+  <arg name="camera_publish_rate" default="30.0"/>
   <!-- YOLO 是否启用键盘触发检测 -->
   <arg name="yolo_enable_keyboard_trigger" default="false"/>
   <!-- PP-OCR 运行模式：production（生产）/ test（测试）/ visual_test（可视化测试） -->
@@ -47,6 +53,12 @@
   <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
   <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
+  <!-- PP-OCR 稳定识别后是否自动保存标注结果图 -->
+  <arg name="ppocr_save_result_images" default="true"/>
+  <!-- PP-OCR 自动结果图保存目录；留空时使用 debug_snapshot_dir/auto -->
+  <arg name="ppocr_result_image_dir" default=""/>
+  <!-- PP-OCR 自动结果图最多保留张数 -->
+  <arg name="ppocr_max_result_images" default="30"/>
   <!-- OCR 结果 YAML 输出路径 -->
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
@@ -71,12 +83,18 @@
     <arg name="enable_undistort" value="$(var enable_undistort)"/>
     <arg name="save_images" value="$(var save_images)"/>
     <arg name="save_dir" value="$(var save_dir)"/>
+    <arg name="image_topic" value="$(var image_topic)"/>
+    <arg name="camera_frame_id" value="$(var camera_frame_id)"/>
+    <arg name="camera_publish_rate" value="$(var camera_publish_rate)"/>
     <arg name="yolo_enable_keyboard_trigger" value="$(var yolo_enable_keyboard_trigger)"/>
     <arg name="ppocr_mode" value="$(var ppocr_mode)"/>
     <arg name="ppocr_show_visual" value="$(var ppocr_show_visual)"/>
     <arg name="ppocr_show_ocr_roi" value="$(var ppocr_show_ocr_roi)"/>
     <arg name="ppocr_show_debug_panels" value="$(var ppocr_show_debug_panels)"/>
     <arg name="ppocr_enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)"/>
+    <arg name="ppocr_save_result_images" value="$(var ppocr_save_result_images)"/>
+    <arg name="ppocr_result_image_dir" value="$(var ppocr_result_image_dir)"/>
+    <arg name="ppocr_max_result_images" value="$(var ppocr_max_result_images)"/>
     <arg name="ocr_yaml_path" value="$(var ocr_yaml_path)"/>
   </include>
 </launch>

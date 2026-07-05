@@ -6,6 +6,67 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
+#include <vector>
+
+namespace
+{
+constexpr std::size_t kMaxSavedYoloImages = 30;
+
+bool matches_saved_image_pattern(const std::filesystem::path& path,
+                                 const std::string& prefix,
+                                 const std::string& extension)
+{
+    const std::string name = path.filename().string();
+    return name.rfind(prefix, 0) == 0 && path.extension() == extension;
+}
+
+void prune_saved_images(const std::string& dir,
+                        const std::string& prefix,
+                        const std::string& extension,
+                        std::size_t max_count)
+{
+    if (dir.empty() || max_count == 0)
+        return;
+
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir, ec))
+        return;
+
+    std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>> files;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+    {
+        if (ec)
+            break;
+        if (!entry.is_regular_file(ec) ||
+            !matches_saved_image_pattern(entry.path(), prefix, extension))
+        {
+            continue;
+        }
+
+        const auto write_time = std::filesystem::last_write_time(entry.path(), ec);
+        if (!ec)
+            files.emplace_back(write_time, entry.path());
+    }
+
+    if (files.size() <= max_count)
+        return;
+
+    std::sort(files.begin(), files.end(),
+              [](const auto& lhs, const auto& rhs) {
+                  if (lhs.first == rhs.first)
+                      return lhs.second.string() < rhs.second.string();
+                  return lhs.first < rhs.first;
+              });
+
+    // 只清理 yolo_*.jpg 自动结果图，保留最新 30 张，避免调试目录无限增长。
+    const std::size_t remove_count = files.size() - max_count;
+    for (std::size_t i = 0; i < remove_count; ++i)
+    {
+        std::filesystem::remove(files[i].second, ec);
+        ec.clear();
+    }
+}
+} // namespace
 
 // ============================================================
 //  reset_grid / class_name_of / load_class_names
@@ -291,6 +352,10 @@ bool save_yolo_result_image(
     if (ok && saved_path != nullptr)
     {
         *saved_path = output_path.string();
+    }
+    if (ok)
+    {
+        prune_saved_images(save_dir, "yolo_", ".jpg", kMaxSavedYoloImages);
     }
     return ok;
 }

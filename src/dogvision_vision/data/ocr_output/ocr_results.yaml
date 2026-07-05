@@ -2381,3 +2381,34 @@ ocr_results:
     question: "12-4*2+6/3"
     answer: 6
     mod4: 2
+ocr_results:
+  - id: 1
+    question: "12-4*2+6/3"
+    answer: 6
+    mod4: 2
+ocr_results:
+  - id: 1
+    question: "12-4*2+6/3"
+    answer: 6
+    mod4: 2
+  - id: 2
+    question: "12-4*2+6/3"
+    answer: 6
+    mod4: 2
+ocr_results:
+  - id: 1
+    question: "18-4*4+9/3"
+    answer: 5
+    mod4: 1
+  - id: 2
+    question: "18-4*4+9/3"
+    answer: 5
+    mod4: 1
+  - id: 3
+    question: "18-4*4+9/3"
+    answer: 5
+    mod4: 1
+  - id: 4
+    question: "18-4*4+9/3"
+    answer: 5
+    mod4: 1

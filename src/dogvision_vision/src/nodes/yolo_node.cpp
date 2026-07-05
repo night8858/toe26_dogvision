@@ -13,10 +13,14 @@
  */
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cv_bridge/cv_bridge.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/string.hpp>
 
 #include <atomic>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -35,6 +39,14 @@ constexpr char kGridTopic[] = "/yolo/block_grid"; ///< 网格结果话题名
 
 std::atomic<bool> g_triggered{false};  ///< 触发标志，由话题回调或键盘线程置位
 std::atomic<bool> g_running{true};     ///< 运行标志，用于控制键盘线程退出
+
+struct LatestFrameBuffer
+{
+    std::mutex mutex;
+    cv::Mat frame;
+    rclcpp::Time stamp;
+    bool has_frame = false;
+};
 } // namespace
 
 /**
@@ -65,6 +77,62 @@ static void trigger_callback(const std_msgs::msg::String::SharedPtr msg)
     }
 }
 
+static void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg,
+                           const std::shared_ptr<LatestFrameBuffer>& buffer,
+                           const rclcpp::Logger& logger)
+{
+    try
+    {
+        auto cv_ptr = cv_bridge::toCvShare(msg, "bgr8");
+        std::lock_guard<std::mutex> lock(buffer->mutex);
+        // 话题模式只缓存最新帧，触发推理时使用这张图，避免 YOLO 节点直接占用相机。
+        buffer->frame = cv_ptr->image.clone();
+        buffer->stamp = msg->header.stamp;
+        buffer->has_frame = true;
+    }
+    catch (const cv_bridge::Exception& e)
+    {
+        RCLCPP_WARN(logger, "Failed to convert image message: %s", e.what());
+    }
+}
+
+static bool take_latest_frame(const std::shared_ptr<LatestFrameBuffer>& buffer,
+                              cv::Mat& frame)
+{
+    std::lock_guard<std::mutex> lock(buffer->mutex);
+    if (!buffer->has_frame || buffer->frame.empty())
+    {
+        frame.release();
+        return false;
+    }
+    frame = buffer->frame.clone();
+    return true;
+}
+
+static bool run_detection_on_frame(cv::Mat frame,
+                                   detect_oponvino& detector,
+                                   bool enable_undistort,
+                                   cv::Mat& processed_frame,
+                                   std::vector<Detection>& dets)
+{
+    if (frame.empty())
+    {
+        processed_frame.release();
+        dets.clear();
+        return false;
+    }
+
+    if (enable_undistort)
+    {
+        frame = detector.diatorion(frame);
+    }
+
+    processed_frame = frame;
+    dets.clear();
+    detector.yolo_run(processed_frame, dets);
+    return true;
+}
+
 /**
  * @brief 运行 ROS2 YOLO 节点入口。
  * @param argc 命令行参数数量。
@@ -78,7 +146,7 @@ static void trigger_callback(const std_msgs::msg::String::SharedPtr msg)
  *   1. 初始化 ROS2 节点并声明参数
  *   2. 从 JSON 配置文件加载检测参数
  *   3. 初始化 YOLO OpenVINO 检测器
- *   4. 初始化海康相机
+ *   4. 根据 image_source 选择直接相机或共享图像话题
  *   5. 创建 ROS2 发布者/订阅者
  *   6. 启动键盘输入线程
  *   7. 进入主循环：等待触发 → 单帧推理 → 发布结果
@@ -101,6 +169,8 @@ int main(int argc, char** argv)
     node->declare_parameter<bool>       ("save_images", true);
     node->declare_parameter<bool>       ("enable_keyboard_trigger", true);
     node->declare_parameter<std::string>("save_dir", share_dir + "/data/yolorun");
+    node->declare_parameter<std::string>("image_source", "camera");
+    node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
 
     const std::string config_path  = node->get_parameter("config_path").as_string();
     const std::string result_topic = node->get_parameter("result_topic").as_string();
@@ -110,6 +180,17 @@ int main(int argc, char** argv)
     const bool enable_keyboard_trigger =
         node->get_parameter("enable_keyboard_trigger").as_bool();
     const std::string save_dir     = node->get_parameter("save_dir").as_string();
+    const std::string image_source = node->get_parameter("image_source").as_string();
+    const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const bool use_topic_image = image_source == "topic";
+    if (image_source != "camera" && image_source != "topic")
+    {
+        RCLCPP_ERROR(node->get_logger(),
+                     "Unsupported image_source '%s'. Use 'camera' or 'topic'.",
+                     image_source.c_str());
+        rclcpp::shutdown();
+        return 1;
+    }
 
     // ── 2. 加载配置文件 ──
     Appconfig config;
@@ -132,14 +213,29 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // ── 5. 初始化 settings.json 选择的相机 ──
-    CameraSource camera(config);
-    if (!camera.init())
+    // ── 5. 初始化图像来源 ──
+    std::unique_ptr<CameraSource> camera;
+    std::shared_ptr<LatestFrameBuffer> frame_buffer;
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub;
+    if (use_topic_image)
     {
-        RCLCPP_ERROR(node->get_logger(), "Failed to initialize %s camera",
-                     camera.type_name().c_str());
-        rclcpp::shutdown();
-        return 1;
+        frame_buffer = std::make_shared<LatestFrameBuffer>();
+        image_sub = node->create_subscription<sensor_msgs::msg::Image>(
+            image_topic, rclcpp::SensorDataQoS(),
+            [frame_buffer, logger = node->get_logger()](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+                image_callback(msg, frame_buffer, logger);
+            });
+    }
+    else
+    {
+        camera = std::make_unique<CameraSource>(config);
+        if (!camera->init())
+        {
+            RCLCPP_ERROR(node->get_logger(), "Failed to initialize %s camera",
+                         camera->type_name().c_str());
+            rclcpp::shutdown();
+            return 1;
+        }
     }
 
     // ── 6. 创建 ROS2 发布者和订阅者 ──
@@ -168,9 +264,16 @@ int main(int argc, char** argv)
                 show_window ? "true" : "false",
                 enable_undistort ? "true" : "false",
                 save_images ? "true" : "false");
-    RCLCPP_INFO(node->get_logger(), "Camera: type=%s device=%d %dx%d",
-                camera.type_name().c_str(), camera.device_id(),
-                camera.width(), camera.height());
+    if (use_topic_image)
+    {
+        RCLCPP_INFO(node->get_logger(), "Image input: topic %s", image_topic.c_str());
+    }
+    else
+    {
+        RCLCPP_INFO(node->get_logger(), "Camera: type=%s device=%d %dx%d",
+                    camera->type_name().c_str(), camera->device_id(),
+                    camera->width(), camera->height());
+    }
     if (enable_undistort_param && !config.detect_config.enable_undistort)
     {
         RCLCPP_INFO(node->get_logger(),
@@ -208,9 +311,28 @@ int main(int argc, char** argv)
         RCLCPP_INFO(node->get_logger(), "Triggered: running one-frame inference...");
         cv::Mat last_frame;
         std::vector<Detection> final_dets;
-        if (!run_single_detection(camera, detector, enable_undistort, last_frame, final_dets))
+        bool inference_ok = false;
+        if (use_topic_image)
         {
-            RCLCPP_WARN(node->get_logger(), "Failed to grab a valid frame for YOLO inference.");
+            cv::Mat topic_frame;
+            if (!take_latest_frame(frame_buffer, topic_frame))
+            {
+                RCLCPP_WARN(node->get_logger(),
+                            "No image received on %s; skip this YOLO trigger.",
+                            image_topic.c_str());
+                continue;
+            }
+            inference_ok = run_detection_on_frame(
+                topic_frame, detector, enable_undistort, last_frame, final_dets);
+        }
+        else
+        {
+            inference_ok = run_single_detection(
+                *camera, detector, enable_undistort, last_frame, final_dets);
+        }
+        if (!inference_ok)
+        {
+            RCLCPP_WARN(node->get_logger(), "Failed to get a valid frame for YOLO inference.");
         }
         RCLCPP_INFO(node->get_logger(), "Raw detections: %zu", final_dets.size());
 
@@ -262,7 +384,12 @@ int main(int argc, char** argv)
     {
         cv::destroyAllWindows();
     }
-    camera.shutdown();
+    if (camera)
+    {
+        camera->shutdown();
+    }
+    (void)trigger_sub;
+    (void)image_sub;
     rclcpp::shutdown();
     return 0;
 }

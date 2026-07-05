@@ -128,6 +128,9 @@ typedef struct
     bool save_ppocr_video = true; ///< 是否保存 PP-OCR 推理可视化视频
     std::string ppocr_video_save_dir; ///< PP-OCR 推理视频保存目录
     double ppocr_video_fps = 20.0; ///< PP-OCR 推理视频帧率
+    bool save_ocr_result_images = true; ///< 是否保存 OCR 稳定结果标注图
+    std::string ocr_result_image_dir; ///< OCR 稳定结果图保存目录
+    int max_ocr_result_images = 30; ///< OCR 稳定结果图最多保留张数
     bool save_yolo_test_video = true; ///< 是否保存 YOLO 准确率测试视频
 
     bool enable_undistort = true; ///< 是否启用鱼眼去畸变

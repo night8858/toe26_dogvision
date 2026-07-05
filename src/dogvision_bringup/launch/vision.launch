@@ -1,7 +1,7 @@
 <!--
   视觉处理启动脚本
-  同时启动 YOLO 目标检测节点和 PP-OCR 文字识别节点，
-  从相机获取图像进行实时检测与识别，结果可通过话题输出给其他模块（如机械臂）。
+  同时启动共享相机节点、YOLO 目标检测节点和 PP-OCR 文字识别节点。
+  只有 camera_node 打开物理相机，YOLO/OCR 订阅图像话题，避免 USB 相机被重复占用。
 -->
 <launch>
   <!-- 视觉系统配置文件路径 -->
@@ -16,6 +16,12 @@
   <arg name="save_images" default="true"/>
   <!-- 图像保存目录 -->
   <arg name="save_dir" default="$(find-pkg-share dogvision_vision)/data/yolorun"/>
+  <!-- 共享相机图像话题 -->
+  <arg name="image_topic" default="/camera/image_raw"/>
+  <!-- 共享相机 frame_id -->
+  <arg name="camera_frame_id" default="camera"/>
+  <!-- 共享相机发布帧率 -->
+  <arg name="camera_publish_rate" default="30.0"/>
   <!-- YOLO 是否启用键盘触发检测 -->
   <arg name="yolo_enable_keyboard_trigger" default="false"/>
   <!-- PP-OCR 运行模式：production / test / visual_test -->
@@ -28,12 +34,28 @@
   <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
   <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
+  <!-- PP-OCR 稳定识别后是否自动保存标注结果图 -->
+  <arg name="ppocr_save_result_images" default="true"/>
+  <!-- PP-OCR 自动结果图保存目录；留空时使用 debug_snapshot_dir/auto -->
+  <arg name="ppocr_result_image_dir" default=""/>
+  <!-- PP-OCR 自动结果图最多保留张数 -->
+  <arg name="ppocr_max_result_images" default="30"/>
   <!-- OCR 结果 YAML 输出路径 -->
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
+
+  <!-- 共享相机采集节点：组合启动时唯一直接访问物理相机的节点 -->
+  <node pkg="dogvision_vision" exec="camera_node" name="camera_node" output="screen">
+    <param name="config_path" value="$(var config_path)" type="str"/>
+    <param name="image_topic" value="$(var image_topic)" type="str"/>
+    <param name="frame_id" value="$(var camera_frame_id)" type="str"/>
+    <param name="publish_rate" value="$(var camera_publish_rate)" type="float"/>
+  </node>
 
   <!-- YOLO 目标检测节点：实时检测图像中的目标物体 -->
   <node pkg="dogvision_vision" exec="yolo_node" name="yolo_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
+    <param name="image_source" value="topic" type="str"/>
+    <param name="image_topic" value="$(var image_topic)" type="str"/>
     <param name="show_window" value="$(var show_window)" type="bool"/>
     <param name="enable_undistort" value="$(var enable_undistort)" type="bool"/>
     <param name="save_images" value="$(var save_images)" type="bool"/>
@@ -44,11 +66,16 @@
   <!-- PP-OCR 文字识别节点：检测并识别图像中的文字信息 -->
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
+    <param name="image_source" value="topic" type="str"/>
+    <param name="image_topic" value="$(var image_topic)" type="str"/>
     <param name="mode" value="$(var ppocr_mode)" type="str"/>
     <param name="show_visual" value="$(var ppocr_show_visual)" type="bool"/>
     <param name="show_ocr_roi" value="$(var ppocr_show_ocr_roi)" type="bool"/>
     <param name="show_debug_panels" value="$(var ppocr_show_debug_panels)" type="bool"/>
     <param name="enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)" type="bool"/>
+    <param name="save_result_images" value="$(var ppocr_save_result_images)" type="bool"/>
+    <param name="result_image_dir" value="$(var ppocr_result_image_dir)" type="str"/>
+    <param name="max_result_images" value="$(var ppocr_max_result_images)" type="int"/>
     <param name="yaml_path" value="$(var ocr_yaml_path)" type="str"/>
   </node>
 </launch>

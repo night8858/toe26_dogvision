@@ -148,6 +148,9 @@
       "save_ppocr_video": true,      // 是否保存 PP-OCR 推理可视化视频
       "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
       "ppocr_video_fps": 20.0,       // PP-OCR 推理视频帧率
+      "save_ocr_result_images": true, // 是否保存 OCR 稳定结果标注图
+      "ocr_result_image_dir": "src/dogvision_vision/data/ocr_debug/auto",
+      "max_ocr_result_images": 30,    // OCR 稳定结果图最多保留张数
       "save_yolo_test_video": true   // 是否保存 YOLO 准确率测试视频
     },
 

@@ -18,7 +18,9 @@
  */
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cv_bridge/cv_bridge.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 
@@ -34,6 +36,8 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -68,6 +72,22 @@ struct OcrRoiSelection
 {
     std::string name;
     cv::Rect rect;
+};
+
+struct LatestImageFrameBuffer
+{
+    std::mutex mutex;
+    cv::Mat frame;
+    rclcpp::Time stamp;
+    bool has_frame = false;
+};
+
+struct OCRFrameSource
+{
+    bool use_topic = false;
+    CameraSource* camera = nullptr;
+    std::shared_ptr<LatestImageFrameBuffer> topic_buffer;
+    std::string image_topic;
 };
 
 OCRModelPaths select_ocr_model_paths(
@@ -593,6 +613,77 @@ static void ocr_trigger_callback(const std_msgs::msg::String::SharedPtr msg)
     g_ocr_triggered.store(true);
 }
 
+static void ocr_image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg,
+                               const std::shared_ptr<LatestImageFrameBuffer>& buffer,
+                               const rclcpp::Logger& logger)
+{
+    try
+    {
+        auto cv_ptr = cv_bridge::toCvShare(msg, "bgr8");
+        std::lock_guard<std::mutex> lock(buffer->mutex);
+        // OCR 只处理最新画面；缓存一帧即可避免本节点直接占用物理相机。
+        buffer->frame = cv_ptr->image.clone();
+        buffer->stamp = msg->header.stamp;
+        buffer->has_frame = true;
+    }
+    catch (const cv_bridge::Exception& e)
+    {
+        RCLCPP_WARN(logger, "Failed to convert OCR image message: %s", e.what());
+    }
+}
+
+static bool take_latest_ocr_frame(const std::shared_ptr<LatestImageFrameBuffer>& buffer,
+                                  cv::Mat& frame)
+{
+    if (!buffer)
+    {
+        frame.release();
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(buffer->mutex);
+    if (!buffer->has_frame || buffer->frame.empty())
+    {
+        frame.release();
+        return false;
+    }
+    frame = buffer->frame.clone();
+    return true;
+}
+
+static bool acquire_ocr_frame(OCRFrameSource& source,
+                              const rclcpp::Node::SharedPtr& node,
+                              cv::Mat& frame,
+                              bool& fatal_error)
+{
+    fatal_error = false;
+    if (source.use_topic)
+    {
+        if (!take_latest_ocr_frame(source.topic_buffer, frame))
+        {
+            RCLCPP_WARN_THROTTLE(
+                node->get_logger(), *node->get_clock(), 2000,
+                "No image received on %s; OCR is waiting for camera_node.",
+                source.image_topic.c_str());
+            return false;
+        }
+        return true;
+    }
+
+    if (!source.camera || !source.camera->get_frame(frame))
+    {
+        RCLCPP_ERROR(node->get_logger(), "Failed to grab frame, reconnecting...");
+        if (source.camera && ensure_camera(*source.camera, node->get_logger()))
+        {
+            return false;
+        }
+        RCLCPP_ERROR(node->get_logger(), "Cannot recover camera, exiting.");
+        fatal_error = true;
+        return false;
+    }
+    return true;
+}
+
 /**
  * @brief 执行一次完整的 OCR 与算术表达式解析流程。
  * @param img 输入 BGR 图像。
@@ -825,6 +916,115 @@ static void draw_result_overlay(cv::Mat& frame,
                 cv::FONT_HERSHEY_DUPLEX, font_scale, cv::Scalar(255, 255, 255), thickness, cv::LINE_AA);
 }
 
+static bool matches_auto_result_image(const fs::path& path,
+                                      const std::string& prefix)
+{
+    const std::string name = path.filename().string();
+    return name.rfind(prefix, 0) == 0 && path.extension() == ".jpg";
+}
+
+static void prune_auto_result_images(const std::string& dir,
+                                     const std::string& prefix,
+                                     std::size_t max_count)
+{
+    if (dir.empty() || max_count == 0)
+        return;
+
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec))
+        return;
+
+    std::vector<std::pair<fs::file_time_type, fs::path>> files;
+    for (const auto& entry : fs::directory_iterator(dir, ec))
+    {
+        if (ec)
+            break;
+        if (!entry.is_regular_file(ec) ||
+            !matches_auto_result_image(entry.path(), prefix))
+        {
+            continue;
+        }
+
+        const auto write_time = fs::last_write_time(entry.path(), ec);
+        if (!ec)
+            files.emplace_back(write_time, entry.path());
+    }
+
+    if (files.size() <= max_count)
+        return;
+
+    std::sort(files.begin(), files.end(),
+              [](const auto& lhs, const auto& rhs) {
+                  if (lhs.first == rhs.first)
+                      return lhs.second.string() < rhs.second.string();
+                  return lhs.first < rhs.first;
+              });
+
+    // 只清理 ocr_*.jpg 自动结果图，避免误删手动保存的 debug snapshot。
+    const std::size_t remove_count = files.size() - max_count;
+    for (std::size_t i = 0; i < remove_count; ++i)
+    {
+        fs::remove(files[i].second, ec);
+        ec.clear();
+    }
+}
+
+static bool save_ocr_result_image(const cv::Mat& frame,
+                                  const cv::Rect2f& math_roi,
+                                  const OCRVoteResult& stable,
+                                  const std::string& result_image_dir,
+                                  int max_result_images,
+                                  const rclcpp::Logger& logger)
+{
+    if (frame.empty() || result_image_dir.empty())
+        return false;
+
+    std::error_code ec;
+    fs::create_directories(result_image_dir, ec);
+    if (ec)
+    {
+        RCLCPP_WARN(logger, "Cannot create OCR result image dir '%s': %s",
+                    result_image_dir.c_str(), ec.message().c_str());
+        return false;
+    }
+
+    cv::Mat annotated = frame.clone();
+    const cv::Rect image_rect(0, 0, annotated.cols, annotated.rows);
+    cv::Rect roi_rect(
+        cv::Point(static_cast<int>(std::round(math_roi.x)),
+                  static_cast<int>(std::round(math_roi.y))),
+        cv::Size(static_cast<int>(std::round(math_roi.width)),
+                 static_cast<int>(std::round(math_roi.height))));
+    roi_rect &= image_rect;
+    if (roi_rect.area() > 0)
+    {
+        cv::rectangle(annotated, roi_rect, cv::Scalar(0, 220, 0), 3);
+    }
+    draw_result_overlay(
+        annotated, math_roi, stable.expr, stable.result, stable.mod4);
+
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    const fs::path output_path =
+        fs::path(result_image_dir) / ("ocr_" + std::to_string(ms) + ".jpg");
+
+    const bool ok = cv::imwrite(output_path.string(), annotated);
+    if (ok)
+    {
+        // 自动结果图最多保留 max_result_images 张，默认 30 张，便于长期调试不爆目录。
+        prune_auto_result_images(
+            result_image_dir, "ocr_",
+            static_cast<std::size_t>(std::max(1, max_result_images)));
+        RCLCPP_INFO(logger, "Saved OCR result image: %s", output_path.string().c_str());
+    }
+    else
+    {
+        RCLCPP_WARN(logger, "Failed to save OCR result image: %s",
+                    output_path.string().c_str());
+    }
+    return ok;
+}
+
 static void fill_voter_debug(OCRDebugFrame& debug, const OCRMultiFrameVoter& voter)
 {
     debug.voter_frames = voter.frame_count();
@@ -836,7 +1036,7 @@ static void fill_voter_debug(OCRDebugFrame& debug, const OCRMultiFrameVoter& vot
 /**
  * @brief 运行连续 OCR 测试模式，并将稳定结果变化追加写入 YAML。
  * @param node ROS2 节点对象。
- * @param camera settings.json 选择的相机适配对象。
+ * @param frame_source 直接相机或共享图像话题来源。
  * @param det 文本检测模型封装对象。
  * @param rec 文本识别模型封装对象。
  * @param yaml_path YAML 输出文件路径。
@@ -845,7 +1045,7 @@ static void fill_voter_debug(OCRDebugFrame& debug, const OCRMultiFrameVoter& vot
  * @retval int 类进程退出码。
  */
 static int run_test_mode(const rclcpp::Node::SharedPtr& node,
-                         CameraSource& camera,
+                         OCRFrameSource& frame_source,
                          detect_det_ppocr& det,
                          detect_rec_ppocr& rec,
                          const s_detector_params& ocr_config,
@@ -853,7 +1053,10 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
                          bool show_visual,
                          bool show_ocr_roi,
                          bool show_debug_panels,
-                         const std::string& debug_snapshot_dir)
+                         const std::string& debug_snapshot_dir,
+                         bool save_result_images,
+                         const std::string& result_image_dir,
+                         int max_result_images)
 {
     auto logger = node->get_logger();
     int problem_id = 0;
@@ -862,6 +1065,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
     cv::Rect2f stable_roi;
     bool has_stable_roi = false;
     OcrVideoRecorder video_recorder(ocr_config, "ppocr_test", logger);
+    rclcpp::WallRate idle_rate(20);
 
     RCLCPP_INFO(logger, "MODE       : TEST (continuous OCR + YAML output)");
     RCLCPP_INFO(logger, "YAML output: %s", yaml_path.c_str());
@@ -872,13 +1076,14 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         rclcpp::spin_some(node);
 
         cv::Mat frame;
-        if (!camera.get_frame(frame))
+        bool fatal_error = false;
+        if (!acquire_ocr_frame(frame_source, node, frame, fatal_error))
         {
-            if (!ensure_camera(camera, logger))
+            if (fatal_error)
             {
-                RCLCPP_ERROR(logger, "Cannot recover camera, exiting.");
                 break;
             }
+            idle_rate.sleep();
             continue;
         }
 
@@ -940,6 +1145,13 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
             {
                 RCLCPP_WARN(logger, "Cannot open YAML: %s", yaml_path.c_str());
             }
+
+            if (save_result_images)
+            {
+                save_ocr_result_image(
+                    frame, stable_roi, stable, result_image_dir,
+                    max_result_images, logger);
+            }
         }
         else if (event == OCRVoteEvent::StableLost)
         {
@@ -980,7 +1192,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
 /**
  * @brief 运行基于触发的话题生产模式 OCR。
  * @param node ROS2 节点对象。
- * @param camera settings.json 选择的相机适配对象。
+ * @param frame_source 直接相机或共享图像话题来源。
  * @param det 文本检测模型封装对象。
  * @param rec 文本识别模型封装对象。
  * @param show_visual 是否启用 OpenCV 可视化窗口。
@@ -988,7 +1200,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
  * @retval int 类进程退出码。
  */
 static int run_production_mode(const rclcpp::Node::SharedPtr& node,
-                               CameraSource& camera,
+                               OCRFrameSource& frame_source,
                                detect_det_ppocr& det,
                                detect_rec_ppocr& rec,
                                const s_detector_params& ocr_config,
@@ -996,7 +1208,10 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                                bool show_ocr_roi,
                                bool show_debug_panels,
                                bool enable_keyboard_trigger,
-                               const std::string& debug_snapshot_dir)
+                               const std::string& debug_snapshot_dir,
+                               bool save_result_images,
+                               const std::string& result_image_dir,
+                               int max_result_images)
 {
     auto logger = node->get_logger();
     auto latched_qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
@@ -1078,15 +1293,15 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         }
 
         cv::Mat frame;
-        if (!camera.get_frame(frame))
+        bool fatal_error = false;
+        if (!acquire_ocr_frame(frame_source, node, frame, fatal_error))
         {
-            RCLCPP_ERROR(logger, "Failed to grab frame, reconnecting...");
-            if (ensure_camera(camera, logger))
+            if (fatal_error)
             {
-                continue;
+                break;
             }
-            RCLCPP_ERROR(logger, "Cannot recover camera, exiting.");
-            break;
+            idle_rate.sleep();
+            continue;
         }
 
         if (ocr_config.enable_undistort)
@@ -1139,6 +1354,13 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             answer_pub->publish(answer_msg);
             RCLCPP_INFO(logger, "Answer     : mod4=%u published to /ocr/answer",
                         static_cast<unsigned>(answer_msg.data));
+
+            if (save_result_images)
+            {
+                save_ocr_result_image(
+                    frame, stable_roi, stable, result_image_dir,
+                    max_result_images, logger);
+            }
 
             tracking_active = false;
             RCLCPP_INFO(logger, "OCR cycle complete. Waiting for next trigger.");
@@ -1380,6 +1602,14 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("input_path", "");
     node->declare_parameter<bool>("loop", false);
     node->declare_parameter<int>("wait_ms", 1000);
+    node->declare_parameter<std::string>("image_source", "camera");
+    node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<bool>(
+        "save_result_images", config.detect_config.save_ocr_result_images);
+    node->declare_parameter<std::string>(
+        "result_image_dir", config.detect_config.ocr_result_image_dir);
+    node->declare_parameter<int>(
+        "max_result_images", config.detect_config.max_ocr_result_images);
 
     const bool show_visual = node->get_parameter("show_visual").as_bool();
     const bool show_ocr_roi =
@@ -1394,12 +1624,40 @@ int main(int argc, char** argv)
     const std::string input_path = node->get_parameter("input_path").as_string();
     const bool loop = node->get_parameter("loop").as_bool();
     const int wait_ms = node->get_parameter("wait_ms").as_int();
+    const std::string image_source = node->get_parameter("image_source").as_string();
+    const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const bool save_result_images =
+        node->get_parameter("save_result_images").as_bool();
+    std::string result_image_dir =
+        node->get_parameter("result_image_dir").as_string();
+    int max_result_images =
+        node->get_parameter("max_result_images").as_int();
+    if (result_image_dir.empty())
+    {
+        result_image_dir = (fs::path(debug_snapshot_dir) / "auto").string();
+    }
+    if (max_result_images <= 0)
+    {
+        RCLCPP_WARN(logger, "max_result_images must be > 0; using 30.");
+        max_result_images = 30;
+    }
+    const bool use_topic_image = image_source == "topic";
+    if (image_source != "camera" && image_source != "topic")
+    {
+        RCLCPP_ERROR(logger, "Unsupported image_source '%s'. Use 'camera' or 'topic'.",
+                     image_source.c_str());
+        rclcpp::shutdown();
+        return 1;
+    }
 
     RCLCPP_INFO(logger, "Windows    : show_visual=%s show_ocr_roi=%s show_debug_panels=%s",
                 show_visual ? "true" : "false",
                 show_ocr_roi ? "true" : "false",
                 show_debug_panels ? "true" : "false");
     RCLCPP_INFO(logger, "Config     : %s", config_path.c_str());
+    RCLCPP_INFO(logger, "OCR images : save=%s dir=%s max=%d",
+                save_result_images ? "true" : "false",
+                result_image_dir.c_str(), max_result_images);
 
     detect_det_ppocr det(&config);
     const OCRModelPaths det_model = select_ocr_model_paths(
@@ -1463,33 +1721,62 @@ int main(int argc, char** argv)
     }
     else if (mode == "test" || mode == "production" || mode == "visual_test")
     {
-        CameraSource camera(config);
-        if (!camera.init())
+        std::unique_ptr<CameraSource> camera;
+        std::shared_ptr<LatestImageFrameBuffer> topic_buffer;
+        rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub;
+        OCRFrameSource frame_source;
+        frame_source.use_topic = use_topic_image;
+        frame_source.image_topic = image_topic;
+
+        if (use_topic_image)
         {
-            RCLCPP_ERROR(logger, "Failed to initialize %s camera",
-                         camera.type_name().c_str());
-            rclcpp::shutdown();
-            return 1;
+            topic_buffer = std::make_shared<LatestImageFrameBuffer>();
+            frame_source.topic_buffer = topic_buffer;
+            image_sub = node->create_subscription<sensor_msgs::msg::Image>(
+                image_topic, rclcpp::SensorDataQoS(),
+                [topic_buffer, logger](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+                    ocr_image_callback(msg, topic_buffer, logger);
+                });
+            // 组合启动时 PPOCR 不再打开相机，只消费 camera_node 发布的共享图像。
+            RCLCPP_INFO(logger, "Image input: topic %s", image_topic.c_str());
         }
-        RCLCPP_INFO(logger, "Camera     : type=%s device=%d  %dx%d",
-                    camera.type_name().c_str(), camera.device_id(),
-                    camera.width(), camera.height());
+        else
+        {
+            camera = std::make_unique<CameraSource>(config);
+            if (!camera->init())
+            {
+                RCLCPP_ERROR(logger, "Failed to initialize %s camera",
+                             camera->type_name().c_str());
+                rclcpp::shutdown();
+                return 1;
+            }
+            frame_source.camera = camera.get();
+            RCLCPP_INFO(logger, "Camera     : type=%s device=%d  %dx%d",
+                        camera->type_name().c_str(), camera->device_id(),
+                        camera->width(), camera->height());
+        }
 
         if (mode == "production")
         {
             ret = run_production_mode(
-                node, camera, det, rec, config.detect_config,
+                node, frame_source, det, rec, config.detect_config,
                 show_visual, show_ocr_roi, show_debug_panels,
-                enable_keyboard_trigger, debug_snapshot_dir);
+                enable_keyboard_trigger, debug_snapshot_dir,
+                save_result_images, result_image_dir, max_result_images);
         }
         else
         {
             ret = run_test_mode(
-                node, camera, det, rec, config.detect_config, yaml_path,
+                node, frame_source, det, rec, config.detect_config, yaml_path,
                 show_visual, show_ocr_roi, show_debug_panels,
-                debug_snapshot_dir);
+                debug_snapshot_dir,
+                save_result_images, result_image_dir, max_result_images);
         }
-        camera.shutdown();
+        if (camera)
+        {
+            camera->shutdown();
+        }
+        (void)image_sub;
     }
     else
     {

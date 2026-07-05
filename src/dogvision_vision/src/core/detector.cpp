@@ -188,6 +188,14 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
                     "src/dogvision_vision/data/ocr_output/video").asString());
             config.detect_config.ppocr_video_fps =
                 output_save.get("ppocr_video_fps", 20.0).asDouble();
+            config.detect_config.save_ocr_result_images =
+                output_save.get("save_ocr_result_images", true).asBool();
+            config.detect_config.ocr_result_image_dir =
+                resolve(output_save.get(
+                    "ocr_result_image_dir",
+                    "src/dogvision_vision/data/ocr_debug/auto").asString());
+            config.detect_config.max_ocr_result_images =
+                output_save.get("max_ocr_result_images", 30).asInt();
             config.detect_config.save_yolo_test_video =
                 output_save.get("save_yolo_test_video", true).asBool();
         }
@@ -195,10 +203,15 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         {
             config.detect_config.ppocr_video_save_dir =
                 resolve("src/dogvision_vision/data/ocr_output/video");
+            config.detect_config.ocr_result_image_dir =
+                resolve("src/dogvision_vision/data/ocr_debug/auto");
+            config.detect_config.max_ocr_result_images = 30;
         }
         if (config.detect_config.ppocr_video_fps <= 0.0)
             throw std::invalid_argument(
                 "output_save.ppocr_video_fps must be > 0");
+        if (config.detect_config.max_ocr_result_images <= 0)
+            config.detect_config.max_ocr_result_images = 30;
 
         config.detect_config.batch_size = value["NCHW"]["batch_size"].asInt();
         config.detect_config.c = value["NCHW"]["C"].asInt();

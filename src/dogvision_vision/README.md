@@ -6,13 +6,14 @@ ROS 2 相机采集、YOLO 目标检测、PP-OCR 文字识别与算术题识别�
 
 ## 1. 功能概述
 
-本包提供四个独立节点和一个共享库，覆盖完整的视觉感知流水线：
+本包提供五个独立节点和一个共享库，覆盖完整的视觉感知流水线：
 
 | 可执行文件 | 节点名 | 功能 |
 |---|---|---|
-| `yolo_node` | `yolo_node` | 触发式单帧抓帧 → YOLO 推理 → 2×4 网格分配 → JSON 发布 |
+| `camera_node` | `camera_node` | 独占打开物理相机 → 发布共享原始图像 `/camera/image_raw` |
+| `yolo_node` | `yolo_node` | 触发式单帧 YOLO 推理 → 2×4 网格分配 → JSON 发布；组合启动时订阅共享图像 |
 | `yolo_accuracy_test_node` | `yolo_accuracy_test_node` | 连续实时 YOLO 推理 → 标注可视化 → 带标注视频录制 |
-| `ppocr_node` | `ppocr_node` | 相机取帧 → 整帧 PP-OCR → 单行算术候选组合 → 白色外围筛选 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
+| `ppocr_node` | `ppocr_node` | 共享图像/相机取帧 → 整帧 PP-OCR → 算术候选筛选 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
 | `math_generator_node` | `math_generator_node` | 随机生成复合四则运算题 → 全屏渲染显示 → 追加写入 YAML |
 
 ---
@@ -297,9 +298,13 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 | `save_ppocr_video` | `true` | 是否保存 PP-OCR 在线推理主标注视频 |
 | `ppocr_video_save_dir` | `data/ocr_output/video` | PP-OCR 视频保存目录 |
 | `ppocr_video_fps` | `20.0` | PP-OCR 视频帧率，必须大于 0 |
+| `save_ocr_result_images` | `true` | 是否保存 OCR 稳定结果标注图 |
+| `ocr_result_image_dir` | `data/ocr_debug/auto` | OCR 稳定结果图保存目录 |
+| `max_ocr_result_images` | `30` | OCR 稳定结果图最多保留张数 |
 | `save_yolo_test_video` | `true` | 是否保存 YOLO 准确率测试视频 |
 
 视频文件统一保存为 MP4，文件名格式为 `<前缀>_<毫秒时间戳>.mp4`。图片文件统一保存为 JPG，文件名格式为 `<前缀>_<毫秒时间戳>.jpg` 或 `<前缀>_<毫秒时间戳>_<后缀>.jpg`。
+实际运行节点会自动保留最近的调试结果图：YOLO 的 `yolo_*.jpg` 在 `save_dir` 中最多 30 张；PPOCR 的 `ocr_*.jpg` 默认保存在 `output_save.ocr_result_image_dir`，数量由 `max_ocr_result_images` 控制。
 
 PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对应的 `inference.yml`，确保字符表类别数与模型输出一致。PP-OCRv4 旧模型仍可使用 `ppocr_keys_v1.txt`。`math_chars.txt` 是解码白名单，当前允许：
 
@@ -318,7 +323,7 @@ PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对�
 ### 5.1 `yolo_node` — 触发式 YOLO 推理节点
 
 **工作流程**：
-1. 加载配置文件，初始化 YOLO OpenVINO 模型和 `settings.json` 选择的相机。
+1. 加载配置文件并初始化 YOLO OpenVINO 模型；默认直接打开相机，`vision.launch` 中改为订阅 `/camera/image_raw`。
 2. 等待触发信号（话题 `/yolo/trigger` 收到 `"start_infer"` 或终端按 Enter）。
 3. 触发后抓取一帧 → 可选鱼眼去畸变 → 可选图像增强（CLAHE + 饱和度）→ YOLO 推理 → 跨类别 NMS（同一位置只保留置信度最高的框）→ 检测结果光栅排序 → 2×4 网格 K-means 分配。
 4. 发布 JSON 结果到 `/yolo/result` 和 `/yolo/block_grid`。
@@ -330,6 +335,7 @@ PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对�
 | 接口 | 类型 | 方向 | 说明 |
 |---|---|---|---|
 | `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `"start_infer"` 触发一次推理 |
+| `/camera/image_raw` | `sensor_msgs/msg/Image` | 订阅 | `image_source:=topic` 时使用的共享图像输入 |
 | `/yolo/result` | `std_msgs/msg/String` | 发布 | transient_local, JSON 格式检测结果 |
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | transient_local, JSON 格式 2×4 类别网格 |
 
@@ -341,14 +347,16 @@ PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对�
 | `result_topic` | string | `/yolo/result` | 检测结果发布话题 |
 | `show_window` | bool | false | 是否显示 OpenCV 可视化窗口 |
 | `enable_undistort` | bool | true | 是否启用鱼眼去畸变；还需 `settings.json` 中 `lens_distortion.enable_undistort=true` |
-| `save_images` | bool | true | 是否保存结果图 |
+| `save_images` | bool | true | 是否保存结果图；每次触发后保存 `yolo_<时间戳>.jpg`，自动保留最新 30 张 |
 | `enable_keyboard_trigger` | bool | true | 是否允许 Enter 触发；组合 launch 默认关闭 |
 | `save_dir` | string | `<share>/data/yolorun` | 结果图保存目录 |
+| `image_source` | string | `camera` | 图像来源：`camera` 直接打开相机，`topic` 订阅共享图像 |
+| `image_topic` | string | `/camera/image_raw` | `image_source:=topic` 时订阅的图像话题 |
 
 **启动方式**：
 
 ```bash
-# 方式一：通过 vision.launch 启动（含 ppocr_node）
+# 方式一：通过 vision.launch 启动（含 camera_node + ppocr_node）
 ros2 launch dogvision_bringup vision.launch
 
 # 方式二：直接运行
@@ -442,6 +450,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 
 | 接口 | 类型 | 方向 | 说明 |
 |---|---|---|---|
+| `/camera/image_raw` | `sensor_msgs/msg/Image` | 订阅 | `image_source:=topic` 时使用的共享图像输入 |
 | `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 任意内容触发 production 模式开始跟踪 |
 | `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local, JSON 格式稳定识别结果 |
 | `/ocr/answer` | `std_msgs/msg/UInt8` | 发布 | reliable/volatile，稳定结果的 `mod4`（0-3） |
@@ -461,6 +470,11 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 | `input_path` | string | 空 | visual_test 模式的离线图片或目录；为空时使用相机 |
 | `loop` | bool | false | visual_test 离线目录是否循环播放 |
 | `wait_ms` | int | 1000 | visual_test 离线目录每张图片自动播放间隔 |
+| `image_source` | string | `camera` | 图像来源：`camera` 直接打开相机，`topic` 订阅共享图像 |
+| `image_topic` | string | `/camera/image_raw` | `image_source:=topic` 时订阅的图像话题 |
+| `save_result_images` | bool | `output_save.save_ocr_result_images` | 稳定识别完成后是否自动保存 OCR 标注结果图 |
+| `result_image_dir` | string | `output_save.ocr_result_image_dir` | 自动结果图目录；传空字符串时使用 `<debug_snapshot_dir>/auto` |
+| `max_result_images` | int | `output_save.max_ocr_result_images` | 自动结果图最多保留张数，仅清理 `ocr_*.jpg` |
 
 **启动方式**：
 
@@ -469,7 +483,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 ros2 launch dogvision_vision ppocr_test.launch
 
 # production 模式（由 vision.launch 默认启动）
-ros2 launch dogvision_bringup vision.launch     # 含 ppocr 和 yolo
+ros2 launch dogvision_bringup vision.launch     # 含 camera_node、ppocr 和 yolo
 
 # production 同时显示整帧筛选结果和最佳算术候选
 ros2 launch dogvision_bringup vision.launch \
@@ -871,11 +885,13 @@ ros2 launch dogvision_vision math_generator.launch interval:=5 min_val:=1 max_va
 # 全系统（含机械臂 + 视觉）
 ros2 launch dogvision_bringup full_system.launch
 
-# 仅视觉（yolo_node + ppocr_node production 模式）
+# 仅视觉（camera_node + yolo_node + ppocr_node production 模式）
 ros2 launch dogvision_bringup vision.launch
 ```
 
-详见 `dogvision_bringup` 包的 README。
+`vision.launch` 默认只有 `camera_node` 打开物理相机，`yolo_node` 和
+`ppocr_node` 订阅 `/camera/image_raw`。这样可以避免两个推理节点同时占用
+同一个 USB 相机。
 
 ---
 
@@ -883,6 +899,7 @@ ros2 launch dogvision_bringup vision.launch
 
 | 话题 | 类型 | 方向 | 说明 | 所属节点 |
 |---|---|---|---|---|
+| `/camera/image_raw` | `sensor_msgs/msg/Image` | 发布/订阅 | 共享原始 BGR 图像；组合启动时 YOLO/PPOCR 都从这里取帧 | `camera_node` |
 | `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `"start_infer"` 触发单帧 YOLO 推理 | `yolo_node` |
 | `/yolo/result` | `std_msgs/msg/String` | 发布 | YOLO 检测结果 JSON（transient_local） | `yolo_node` |
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | 2×4 类别网格 JSON（transient_local） | `yolo_node` |
@@ -893,6 +910,11 @@ ros2 launch dogvision_bringup vision.launch
 ```bash
 # 查看话题列表
 ros2 topic list
+
+# 检查共享相机图像是否正常发布与被订阅
+ros2 node list
+ros2 topic info -v /camera/image_raw
+ros2 topic hz /camera/image_raw
 
 # 实时查看结果
 ros2 topic echo /yolo/result

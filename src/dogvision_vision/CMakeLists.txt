@@ -29,6 +29,8 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
 
 # ── 第三方库依赖 ──
 find_package(OpenCV REQUIRED)
@@ -95,7 +97,14 @@ add_executable(yolo_node
   src/nodes/yolo_node.cpp
 )
 target_link_libraries(yolo_node dogvision_vision_lib Threads::Threads)
-ament_target_dependencies(yolo_node rclcpp std_msgs ament_index_cpp)
+ament_target_dependencies(yolo_node rclcpp std_msgs sensor_msgs cv_bridge ament_index_cpp)
+
+# ── 可执行目标：共享相机采集节点 ──
+add_executable(camera_node
+  src/nodes/camera_node.cpp
+)
+target_link_libraries(camera_node dogvision_vision_lib Threads::Threads)
+ament_target_dependencies(camera_node rclcpp sensor_msgs cv_bridge ament_index_cpp)
 
 # ── 可执行目标：YOLO 准确性测试节点（视频录制） ──
 add_executable(yolo_accuracy_test_node
@@ -110,7 +119,7 @@ add_executable(ppocr_node
 )
 target_include_directories(ppocr_node PRIVATE ${JSONCPP_INCLUDE_DIRS})
 target_link_libraries(ppocr_node dogvision_vision_lib Threads::Threads ${JSONCPP_LIBRARIES})
-ament_target_dependencies(ppocr_node rclcpp std_msgs ament_index_cpp)
+ament_target_dependencies(ppocr_node rclcpp std_msgs sensor_msgs cv_bridge ament_index_cpp)
 
 # ── 可执行目标：数学题生成节点 ──
 add_executable(math_generator_node
@@ -141,6 +150,7 @@ endif()
 # ── 安装规则 ──
 install(TARGETS
   dogvision_vision_lib           # 核心库
+  camera_node                    # 共享相机采集节点
   yolo_node                      # YOLO 检测节点
   yolo_accuracy_test_node        # YOLO 准确性测试节点
   ppocr_node                     # PPOCR 识别节点

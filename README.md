@@ -23,9 +23,10 @@ toe26_dogvision/
 | `dogvision_arm` | `arm_internation_node` | 串口收发、状态发布、断线重连 |
 | `dogvision_arm` | `arm_mission_node` | 高层任务指令拆解为低层机械臂命令 |
 | `dogvision_arm` | `arm_cmd_terminal_node` | 终端输入命令并发布到控制话题 |
-| `dogvision_vision` | `yolo_node` | 触发式单帧抓帧、YOLO 推理、2x4 网格 JSON 发布 |
+| `dogvision_vision` | `camera_node` | 独占打开物理相机，发布共享原始图像 `/camera/image_raw` |
+| `dogvision_vision` | `yolo_node` | 触发式单帧 YOLO 推理、2x4 网格 JSON 发布；组合启动时订阅共享图像 |
 | `dogvision_vision` | `yolo_accuracy_test_node` | 连续实时 YOLO 测试、窗口可视化、标注视频保存 |
-| `dogvision_vision` | `ppocr_node` | 算术题 ROI、PPOCR 检测识别、表达式计算、JSON 发布 |
+| `dogvision_vision` | `ppocr_node` | 算术题 ROI、PPOCR 检测识别、表达式计算、JSON 发布；组合启动时订阅共享图像 |
 | `dogvision_vision` | `math_generator_node` | 生成算术题、全屏显示、写入 YAML |
 
 ## 3. 依赖安装
@@ -220,8 +221,8 @@ ros2 run dogvision_vision math_generator_node
 | `debug` | `false` | 调试模式；默认打开 YOLO/PPOCR OpenCV 窗口 |
 | `show_window` | `$(var debug)` | YOLO 是否显示 OpenCV 窗口 |
 | `enable_undistort` | `true` | YOLO 是否启用去畸变 |
-| `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
-| `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
+| `save_images` | `true` | 是否保存每次触发后的 YOLO 标注结果图，自动保留最新 30 张 |
+| `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录，匹配 `yolo_*.jpg` 的旧图会自动清理 |
 | `yolo_enable_keyboard_trigger` | `false` | 组合启动时关闭 YOLO Enter，避免争抢 stdin |
 | `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
 | `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示整帧结果窗口 |
@@ -263,11 +264,20 @@ ros2 run dogvision_vision math_generator_node
 | `enable_undistort` | `true` | YOLO 是否启用去畸变 |
 | `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
+| `image_topic` | `/camera/image_raw` | `camera_node` 发布、YOLO/PPOCR 订阅的共享图像话题 |
+| `camera_frame_id` | `camera` | 共享图像消息的 `frame_id` |
+| `camera_publish_rate` | `30.0` | `camera_node` 发布帧率 |
 | `ppocr_mode` | `production` | PPOCR 模式 |
 | `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示可视化窗口 |
 | `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选窗口 |
 | `ppocr_show_debug_panels` | `$(var debug)` | PPOCR 是否显示调试拼图窗口 |
+| `ppocr_save_result_images` | `true` | PPOCR 稳定识别后是否自动保存标注结果图 |
+| `ppocr_result_image_dir` | 空字符串 | PPOCR 自动结果图目录；为空时使用 `<debug_snapshot_dir>/auto` |
+| `ppocr_max_result_images` | `30` | PPOCR 自动结果图最多保留张数 |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
+
+`ppocr_result_image_dir` 留空时，`ppocr_node` 使用 `settings.json` 中
+`output_save.ocr_result_image_dir`；ROS 参数仍可临时覆盖该配置。
 
 ## 8. 话题与消息
 
@@ -276,11 +286,23 @@ ros2 run dogvision_vision math_generator_node
 | `/arm_internation/data` | `std_msgs/msg/String` | 发布 | 机械臂、云台、传感器状态，20Hz |
 | `/arm_internation/cmd` | `std_msgs/msg/String` | 订阅 | 低层文本控制命令 |
 | `/arm/mission_cmd` | `std_msgs/msg/String` | 订阅/反馈 | 高层任务命令与完成反馈 |
+| `/camera/image_raw` | `sensor_msgs/msg/Image` | 发布/订阅 | `camera_node` 发布原始 BGR 图像，`vision.launch` 中 YOLO/PPOCR 订阅 |
 | `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `start_infer` 触发一次单帧推理 |
 | `/yolo/result` | `std_msgs/msg/String` | 发布 | transient_local YOLO JSON 结果 |
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | transient_local 2x4 网格 JSON |
 | `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 启动或重置生产模式 OCR 持续跟踪 |
 | `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local 稳定 OCR JSON 结果 |
+
+`vision.launch` 默认只由 `camera_node` 打开物理相机，`yolo_node` 和 `ppocr_node`
+通过 `/camera/image_raw` 获取画面，避免两个推理节点同时占用同一个 USB 相机。
+
+常用排查命令：
+
+```bash
+ros2 node list
+ros2 topic info -v /camera/image_raw
+ros2 topic hz /camera/image_raw
+```
 
 `/arm_internation/data` 示例：
 
@@ -345,7 +367,7 @@ PPOCR 使用最近 10 个处理帧进行投票。某个归一化算式至少出�
 | `result_topic` | `/yolo/result` | 检测结果发布话题 |
 | `show_window` | `false` | 是否显示本地 OpenCV 窗口 |
 | `enable_undistort` | `true` | 是否进行鱼眼去畸变 |
-| `save_images` | `true` | 是否保存每次触发后的 YOLO 结果图 |
+| `save_images` | `true` | 是否保存每次触发后的 YOLO 标注结果图，自动保留最新 30 张 |
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录 |
 
 ### `yolo_accuracy_test_node`
@@ -366,6 +388,9 @@ PPOCR 使用最近 10 个处理帧进行投票。某个归一化算式至少出�
 | `mode` | `production` | `production` 触发后持续跟踪，`test` 连续投票并将稳定变化写入 YAML |
 | `show_visual` | `false` | 是否显示本地 OpenCV 窗口；test 模式默认可由 `settings.json` 的 `ocr_test_visualization` 控制 |
 | `yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | test 模式输出文件 |
+| `save_result_images` | `output_save.save_ocr_result_images` | 稳定识别完成后是否自动保存 OCR 标注结果图 |
+| `result_image_dir` | `output_save.ocr_result_image_dir` | 自动结果图目录；传空字符串时使用 `<debug_snapshot_dir>/auto` |
+| `max_result_images` | `output_save.max_ocr_result_images` | 自动结果图最多保留张数 |
 
 ### `math_generator_node`
 
