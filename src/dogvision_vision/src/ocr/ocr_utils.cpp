@@ -37,6 +37,82 @@ cv::Mat prepare_ocr_input(const cv::Mat& input, bool use_grayscale)
     return bgr;
 }
 
+cv::Rect select_ocr_roi_rect(const cv::Size& frame_size,
+                             const s_detector_params& config)
+{
+    if (frame_size.width <= 0 || frame_size.height <= 0)
+        return {};
+
+    const cv::Rect full_rect(0, 0, frame_size.width, frame_size.height);
+    if (!config.ocr_roi_enabled || config.ocr_roi_mode == "full")
+        return full_rect;
+
+    if (config.ocr_roi_mode == "quadrant")
+    {
+        if (config.ocr_roi_quadrant == "full")
+            return full_rect;
+
+        const int half_w = frame_size.width / 2;
+        const int half_h = frame_size.height / 2;
+        cv::Rect roi = full_rect;
+        if (config.ocr_roi_quadrant == "top_left")
+            roi = cv::Rect(0, 0, half_w, half_h);
+        else if (config.ocr_roi_quadrant == "top_right")
+            roi = cv::Rect(half_w, 0, frame_size.width - half_w, half_h);
+        else if (config.ocr_roi_quadrant == "bottom_left")
+            roi = cv::Rect(0, half_h, half_w, frame_size.height - half_h);
+        else if (config.ocr_roi_quadrant == "bottom_right")
+            roi = cv::Rect(half_w, half_h,
+                           frame_size.width - half_w,
+                           frame_size.height - half_h);
+        else
+            throw std::invalid_argument(
+                "ocr_math_filter.roi_quadrant must be one of "
+                "full/top_left/top_right/bottom_left/bottom_right");
+
+        roi &= full_rect;
+        if (roi.empty())
+            return full_rect;
+        return roi;
+    }
+
+    if (config.ocr_roi_mode == "ratio")
+    {
+        const cv::Rect2d& ratio = config.ocr_roi_rect_ratio;
+        constexpr double eps = 1e-9;
+        if (ratio.x < 0.0 || ratio.x >= 1.0 ||
+            ratio.y < 0.0 || ratio.y >= 1.0 ||
+            ratio.width <= 0.0 || ratio.width > 1.0 ||
+            ratio.height <= 0.0 || ratio.height > 1.0 ||
+            ratio.x + ratio.width > 1.0 + eps ||
+            ratio.y + ratio.height > 1.0 + eps)
+        {
+            throw std::invalid_argument(
+                "ocr_math_filter.roi_rect_ratio requires x/y in [0,1), "
+                "w/h in (0,1], and x+w/y+h <= 1");
+        }
+
+        const int x0 = static_cast<int>(std::round(ratio.x * frame_size.width));
+        const int y0 = static_cast<int>(std::round(ratio.y * frame_size.height));
+        const int x1 = static_cast<int>(
+            std::round((ratio.x + ratio.width) * frame_size.width));
+        const int y1 = static_cast<int>(
+            std::round((ratio.y + ratio.height) * frame_size.height));
+
+        cv::Rect roi(
+            cv::Point(x0, y0),
+            cv::Point(std::max(x0 + 1, x1), std::max(y0 + 1, y1)));
+        roi &= full_rect;
+        if (roi.empty())
+            throw std::invalid_argument(
+                "ocr_math_filter.roi_rect_ratio resolves to an empty ROI");
+        return roi;
+    }
+
+    throw std::invalid_argument(
+        "ocr_math_filter.roi_mode must be one of full/quadrant/ratio");
+}
+
 // ============================================================
 //  crop_text_region
 // ============================================================

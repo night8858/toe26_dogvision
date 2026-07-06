@@ -101,6 +101,21 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
                 math_filter.get("roi_enabled", false).asBool();
             config.detect_config.ocr_roi_quadrant =
                 math_filter.get("roi_quadrant", "full").asString();
+            config.detect_config.ocr_roi_mode =
+                math_filter.get(
+                    "roi_mode",
+                    config.detect_config.ocr_roi_quadrant == "full"
+                        ? "full"
+                        : "quadrant").asString();
+            const Json::Value& roi_ratio = math_filter["roi_rect_ratio"];
+            if (!roi_ratio.isNull())
+            {
+                config.detect_config.ocr_roi_rect_ratio = cv::Rect2d(
+                    roi_ratio.get("x", 0.0).asDouble(),
+                    roi_ratio.get("y", 0.0).asDouble(),
+                    roi_ratio.get("w", 1.0).asDouble(),
+                    roi_ratio.get("h", 1.0).asDouble());
+            }
             config.detect_config.ocr_math_min_surround_white_ratio =
                 math_filter.get("min_surround_white_ratio", 0.50).asDouble();
             config.detect_config.ocr_math_surround_margin_ratio =
@@ -130,6 +145,15 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
                 "ocr_math_filter.white_v_min must be in [0, 255]");
         const std::string& roi_quadrant =
             config.detect_config.ocr_roi_quadrant;
+        const std::string& roi_mode =
+            config.detect_config.ocr_roi_mode;
+        if (roi_mode != "full" &&
+            roi_mode != "quadrant" &&
+            roi_mode != "ratio")
+        {
+            throw std::invalid_argument(
+                "ocr_math_filter.roi_mode must be one of full/quadrant/ratio");
+        }
         if (roi_quadrant != "full" &&
             roi_quadrant != "top_left" &&
             roi_quadrant != "top_right" &&
@@ -139,6 +163,28 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             throw std::invalid_argument(
                 "ocr_math_filter.roi_quadrant must be one of "
                 "full/top_left/top_right/bottom_left/bottom_right");
+        }
+        if (roi_mode == "ratio")
+        {
+            if (math_filter["roi_rect_ratio"].isNull())
+            {
+                throw std::invalid_argument(
+                    "ocr_math_filter.roi_rect_ratio is required when roi_mode=ratio");
+            }
+            const cv::Rect2d& ratio =
+                config.detect_config.ocr_roi_rect_ratio;
+            constexpr double eps = 1e-9;
+            if (ratio.x < 0.0 || ratio.x >= 1.0 ||
+                ratio.y < 0.0 || ratio.y >= 1.0 ||
+                ratio.width <= 0.0 || ratio.width > 1.0 ||
+                ratio.height <= 0.0 || ratio.height > 1.0 ||
+                ratio.x + ratio.width > 1.0 + eps ||
+                ratio.y + ratio.height > 1.0 + eps)
+            {
+                throw std::invalid_argument(
+                    "ocr_math_filter.roi_rect_ratio requires x/y in [0,1), "
+                    "w/h in (0,1], and x+w/y+h <= 1");
+            }
         }
 
         // ── OCR 测试模式窗口显示参数 ──
@@ -181,7 +227,7 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         if (!output_save.isNull())
         {
             config.detect_config.save_ppocr_video =
-                output_save.get("save_ppocr_video", true).asBool();
+                output_save.get("save_ppocr_video", false).asBool();
             config.detect_config.ppocr_video_save_dir =
                 resolve(output_save.get(
                     "ppocr_video_save_dir",
@@ -197,7 +243,7 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             config.detect_config.max_ocr_result_images =
                 output_save.get("max_ocr_result_images", 30).asInt();
             config.detect_config.save_yolo_test_video =
-                output_save.get("save_yolo_test_video", true).asBool();
+                output_save.get("save_yolo_test_video", false).asBool();
         }
         else
         {
@@ -422,8 +468,12 @@ detector::detector(Appconfig *config)
         config->detect_config.ocr_math_use_grayscale;
     detect_config_.ocr_roi_enabled =
         config->detect_config.ocr_roi_enabled;
+    detect_config_.ocr_roi_mode =
+        config->detect_config.ocr_roi_mode;
     detect_config_.ocr_roi_quadrant =
         config->detect_config.ocr_roi_quadrant;
+    detect_config_.ocr_roi_rect_ratio =
+        config->detect_config.ocr_roi_rect_ratio;
     detect_config_.ocr_math_min_surround_white_ratio =
         config->detect_config.ocr_math_min_surround_white_ratio;
     detect_config_.ocr_math_surround_margin_ratio =

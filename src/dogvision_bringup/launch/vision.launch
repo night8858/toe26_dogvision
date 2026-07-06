@@ -4,6 +4,10 @@
   只有 camera_node 打开物理相机，YOLO/OCR 订阅图像话题，避免 USB 相机被重复占用。
 -->
 <launch>
+  <!-- 子节点启动开关；按需关闭未使用模块可减少闲置 CPU/内存/相机占用 -->
+  <arg name="enable_camera" default="true"/>
+  <arg name="enable_yolo" default="true"/>
+  <arg name="enable_ppocr" default="true"/>
   <!-- 视觉系统配置文件路径 -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
   <!-- 调试模式开关 -->
@@ -34,6 +38,8 @@
   <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
   <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
+  <!-- PP-OCR 是否保存推理视频；默认关闭，避免长期运行生成大文件 -->
+  <arg name="ppocr_save_video" default="false"/>
   <!-- PP-OCR 稳定识别后是否自动保存标注结果图 -->
   <arg name="ppocr_save_result_images" default="true"/>
   <!-- PP-OCR 自动结果图保存目录；留空时使用 debug_snapshot_dir/auto -->
@@ -44,7 +50,7 @@
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
 
   <!-- 共享相机采集节点：组合启动时唯一直接访问物理相机的节点 -->
-  <node pkg="dogvision_vision" exec="camera_node" name="camera_node" output="screen">
+  <node pkg="dogvision_vision" exec="camera_node" name="camera_node" output="screen" if="$(var enable_camera)">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="image_topic" value="$(var image_topic)" type="str"/>
     <param name="frame_id" value="$(var camera_frame_id)" type="str"/>
@@ -52,7 +58,7 @@
   </node>
 
   <!-- YOLO 目标检测节点：实时检测图像中的目标物体 -->
-  <node pkg="dogvision_vision" exec="yolo_node" name="yolo_node" output="screen">
+  <node pkg="dogvision_vision" exec="yolo_node" name="yolo_node" output="screen" if="$(var enable_yolo)">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="image_source" value="topic" type="str"/>
     <param name="image_topic" value="$(var image_topic)" type="str"/>
@@ -64,7 +70,7 @@
   </node>
 
   <!-- PP-OCR 文字识别节点：检测并识别图像中的文字信息 -->
-  <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
+  <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen" if="$(var enable_ppocr)">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="image_source" value="topic" type="str"/>
     <param name="image_topic" value="$(var image_topic)" type="str"/>
@@ -73,6 +79,7 @@
     <param name="show_ocr_roi" value="$(var ppocr_show_ocr_roi)" type="bool"/>
     <param name="show_debug_panels" value="$(var ppocr_show_debug_panels)" type="bool"/>
     <param name="enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)" type="bool"/>
+    <param name="save_video" value="$(var ppocr_save_video)" type="bool"/>
     <param name="save_result_images" value="$(var ppocr_save_result_images)" type="bool"/>
     <param name="result_image_dir" value="$(var ppocr_result_image_dir)" type="str"/>
     <param name="max_result_images" value="$(var ppocr_max_result_images)" type="int"/>

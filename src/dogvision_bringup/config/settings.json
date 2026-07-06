@@ -59,15 +59,40 @@
 // OpenVINO模型路径和PPOCR模型路径
     "path":
     {
-      "openvino_bin_file_path": "models/yolo/m26325.bin",
-      "openvino_xml_file_path": "models/yolo/m26325.xml",
+      "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
+      "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
 
-      "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
-      "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
+      "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
+      "ppocr_det_model_xml_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
+      "ppocr_rec_model_bin_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
+      "ppocr_rec_model_xml_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
+
+      "ppocr_det_model_path": "",
+      "ppocr_rec_model_path": "",
       "ppocr_cls_model_path": "",
 
-      "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt"
+      "ppocr_dict_path": "models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
+      "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
 
+    },
+
+    "ocr_math_filter":
+    {
+      "use_grayscale": false,
+      "roi_enabled": true,
+      "roi_mode": "ratio",
+      "roi_quadrant": "top_right",
+      "roi_rect_ratio":
+      {
+        "x": 0.50,
+        "y": 0.00,
+        "w": 0.50,
+        "h": 0.50
+      },
+      "min_surround_white_ratio": 0.50,
+      "surround_margin_ratio": 0.50,
+      "white_s_max": 110,
+      "white_v_min": 50
     },
 
     "NCHW":

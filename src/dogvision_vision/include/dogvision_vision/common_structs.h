@@ -95,13 +95,15 @@ typedef struct
     float drop_score = 0.5f;   ///< 低于此分数的识别结果将被丢弃
 
     // ── 字典与白名单 ──
-    std::string rec_char_dict_path;      ///< 全量识别字典路径（ppocr_keys_v1.txt）
+    std::string rec_char_dict_path;      ///< 全量识别字典路径（如 PP-OCRv5 inference.yml）
     std::string rec_allowed_chars_path;  ///< 允许输出的数学字符白名单路径
 
     // ── OCR 数学题后置筛选参数 ──
     bool ocr_math_use_grayscale = false; ///< 是否将 OCR 输入转为三通道灰度图
     bool ocr_roi_enabled = false; ///< 是否只对配置的 OCR ROI 做检测识别
+    std::string ocr_roi_mode = "full"; ///< OCR ROI 模式：full/quadrant/ratio
     std::string ocr_roi_quadrant = "full"; ///< OCR ROI 象限：full/top_left/top_right/bottom_left/bottom_right
+    cv::Rect2d ocr_roi_rect_ratio{0.0, 0.0, 1.0, 1.0}; ///< 自定义 OCR ROI 比例坐标 x/y/w/h
     double ocr_math_min_surround_white_ratio = 0.50; ///< 最小外围白色比例
     double ocr_math_surround_margin_ratio = 0.50; ///< 外围环带宽度/平均文字高度
     int ocr_math_white_s_max = 110; ///< HSV 白色区域 S 通道上限
@@ -125,13 +127,13 @@ typedef struct
     float yolo_enhance_saturation_scale = 1.3f;   ///< 饱和度缩放系数
 
     // ── 输出保存参数 ──
-    bool save_ppocr_video = true; ///< 是否保存 PP-OCR 推理可视化视频
+    bool save_ppocr_video = false; ///< 是否保存 PP-OCR 推理可视化视频
     std::string ppocr_video_save_dir; ///< PP-OCR 推理视频保存目录
     double ppocr_video_fps = 20.0; ///< PP-OCR 推理视频帧率
     bool save_ocr_result_images = true; ///< 是否保存 OCR 稳定结果标注图
     std::string ocr_result_image_dir; ///< OCR 稳定结果图保存目录
     int max_ocr_result_images = 30; ///< OCR 稳定结果图最多保留张数
-    bool save_yolo_test_video = true; ///< 是否保存 YOLO 准确率测试视频
+    bool save_yolo_test_video = false; ///< 是否保存 YOLO 准确率测试视频
 
     bool enable_undistort = true; ///< 是否启用鱼眼去畸变
     float D_matrix[4]; ///< 鱼眼畸变参数 D 矩阵（4×1）

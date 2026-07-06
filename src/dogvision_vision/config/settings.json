@@ -64,24 +64,19 @@
     // ── OpenVINO 模型路径和 PPOCR 模型路径 ──
     "path":
     {
-      "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
-      "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
-
-      // "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolo/m26325.bin",
-      // "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolo/m26325.xml",
-
-
-      // "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
-      // "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
-      // "ppocr_cls_model_path": "",
+      "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
+      "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
 
       // 使用 PP-OCRv5，已转换为 OpenVINO IR 模型
-      "ppocr_det_model_bin_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
-      "ppocr_det_model_xml_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
-      "ppocr_rec_model_bin_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
-      "ppocr_rec_model_xml_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
+      "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
+      "ppocr_det_model_xml_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
+      "ppocr_rec_model_bin_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
+      "ppocr_rec_model_xml_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
 
-      "ppocr_dict_path": "src/dogvision_vision/models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
+      "ppocr_det_model_path": "",
+      "ppocr_rec_model_path": "",
+      "ppocr_cls_model_path": "",
+      "ppocr_dict_path": "models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
       "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
     },
 
@@ -89,8 +84,16 @@
     "ocr_math_filter":
     {
       "use_grayscale": false,             // true=OCR 输入转三通道灰度，false=原始彩色
-      "roi_enabled": true,                // true=只对指定画面象限做 OCR
-      "roi_quadrant": "top_right",        // OCR 象限：top_left/top_right/bottom_left/bottom_right/full
+      "roi_enabled": true,                // true=只对指定 ROI 做 OCR
+      "roi_mode": "ratio",                // OCR ROI 模式：full/quadrant/ratio
+      "roi_quadrant": "top_right",        // roi_mode=quadrant 时使用：top_left/top_right/bottom_left/bottom_right/full
+      "roi_rect_ratio":
+      {
+        "x": 0.50,                        // roi_mode=ratio 时使用，左上角 X 比例 [0,1)
+        "y": 0.00,                        // roi_mode=ratio 时使用，左上角 Y 比例 [0,1)
+        "w": 0.50,                        // roi_mode=ratio 时使用，宽度比例 (0,1]
+        "h": 0.50                         // roi_mode=ratio 时使用，高度比例 (0,1]
+      },
       "min_surround_white_ratio": 0.50,   // 数学题外围环带最小白色比例
       "surround_margin_ratio": 0.50,      // 环带宽度/平均文字高度
       "white_s_max": 110,                 // HSV 白色区域 S 通道上限
@@ -145,13 +148,13 @@
     // ── 推理结果保存参数 ──
     "output_save":
     {
-      "save_ppocr_video": true,      // 是否保存 PP-OCR 推理可视化视频
+      "save_ppocr_video": false,     // 是否保存 PP-OCR 推理可视化视频
       "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
       "ppocr_video_fps": 20.0,       // PP-OCR 推理视频帧率
       "save_ocr_result_images": true, // 是否保存 OCR 稳定结果标注图
       "ocr_result_image_dir": "src/dogvision_vision/data/ocr_debug/auto",
       "max_ocr_result_images": 30,    // OCR 稳定结果图最多保留张数
-      "save_yolo_test_video": true   // 是否保存 YOLO 准确率测试视频
+      "save_yolo_test_video": false  // 是否保存 YOLO 准确率测试视频
     },
 
     // ── 类别名称设置 ──

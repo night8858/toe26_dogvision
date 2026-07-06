@@ -9,12 +9,15 @@
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
   <!-- 调试快照保存目录 -->
   <arg name="debug_snapshot_dir" default="$(find-pkg-share dogvision_vision)/data/ocr_debug"/>
+  <!-- 是否保存 PPOCR 推理视频；默认关闭，避免安装目录产生大文件 -->
+  <arg name="save_video" default="false"/>
 
   <!-- PP-OCR 节点（测试模式）：连续 OCR 识别 + 多帧投票，输出稳定结果到 YAML -->
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">
     <param name="config_path" value="$(var config_path)" type="str"/>
     <param name="mode" value="test" type="str"/>
     <param name="enable_keyboard_trigger" value="false" type="bool"/>
+    <param name="save_video" value="$(var save_video)" type="bool"/>
     <param name="yaml_path" value="$(var yaml_path)" type="str"/>
     <param name="debug_snapshot_dir" value="$(var debug_snapshot_dir)" type="str"/>
   </node>

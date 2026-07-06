@@ -23,6 +23,8 @@
   <arg name="mission_config" default="$(find-pkg-share dogvision_arm)/config/pos_set.yaml"/>
 
   <!-- ==================== 视觉系统参数 ==================== -->
+  <!-- 是否启动视觉子系统；不用视觉时设为 false 可避免相机、YOLO、PPOCR 进程占用资源 -->
+  <arg name="enable_vision" default="true"/>
   <!-- 视觉系统配置文件路径（JSON 格式） -->
   <arg name="config_path" default="$(find-pkg-share dogvision_vision)/config/settings.json"/>
   <!-- 调试模式开关 -->
@@ -53,6 +55,8 @@
   <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
   <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
+  <!-- PP-OCR 是否保存推理视频；默认关闭，避免长期运行生成大文件 -->
+  <arg name="ppocr_save_video" default="false"/>
   <!-- PP-OCR 稳定识别后是否自动保存标注结果图 -->
   <arg name="ppocr_save_result_images" default="true"/>
   <!-- PP-OCR 自动结果图保存目录；留空时使用 debug_snapshot_dir/auto -->
@@ -76,7 +80,7 @@
   </include>
 
   <!-- 引入视觉处理启动文件（YOLO + PP-OCR） -->
-  <include file="$(find-pkg-share dogvision_bringup)/launch/vision.launch">
+  <include file="$(find-pkg-share dogvision_bringup)/launch/vision.launch" if="$(var enable_vision)">
     <arg name="config_path" value="$(var config_path)"/>
     <arg name="debug" value="$(var debug)"/>
     <arg name="show_window" value="$(var show_window)"/>
@@ -92,6 +96,7 @@
     <arg name="ppocr_show_ocr_roi" value="$(var ppocr_show_ocr_roi)"/>
     <arg name="ppocr_show_debug_panels" value="$(var ppocr_show_debug_panels)"/>
     <arg name="ppocr_enable_keyboard_trigger" value="$(var ppocr_enable_keyboard_trigger)"/>
+    <arg name="ppocr_save_video" value="$(var ppocr_save_video)"/>
     <arg name="ppocr_save_result_images" value="$(var ppocr_save_result_images)"/>
     <arg name="ppocr_result_image_dir" value="$(var ppocr_result_image_dir)"/>
     <arg name="ppocr_max_result_images" value="$(var ppocr_max_result_images)"/>

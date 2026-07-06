@@ -107,6 +107,39 @@ void test_full_frame_grayscale()
            "grayscale channels differ");
 }
 
+void test_ocr_roi_selection()
+{
+    s_detector_params config = make_filter_config();
+    const cv::Size frame_size(1920, 1080);
+
+    config.ocr_roi_enabled = false;
+    config.ocr_roi_mode = "ratio";
+    config.ocr_roi_rect_ratio = cv::Rect2d(0.5, 0.0, 0.5, 0.5);
+    cv::Rect roi = select_ocr_roi_rect(frame_size, config);
+    expect(roi == cv::Rect(0, 0, 1920, 1080),
+           "disabled OCR ROI must use full frame");
+
+    config.ocr_roi_enabled = true;
+    roi = select_ocr_roi_rect(frame_size, config);
+    expect(roi == cv::Rect(960, 0, 960, 540),
+           "ratio OCR ROI was not converted to top-right half frame");
+
+    config.ocr_roi_mode = "quadrant";
+    config.ocr_roi_quadrant = "bottom_left";
+    roi = select_ocr_roi_rect(frame_size, config);
+    expect(roi == cv::Rect(0, 540, 960, 540),
+           "quadrant OCR ROI compatibility was broken");
+
+    config.ocr_roi_mode = "invalid";
+    expect_throw([&] { select_ocr_roi_rect(frame_size, config); },
+                 "unknown OCR ROI mode must be rejected");
+
+    config.ocr_roi_mode = "ratio";
+    config.ocr_roi_rect_ratio = cv::Rect2d(0.8, 0.0, 0.3, 0.5);
+    expect_throw([&] { select_ocr_roi_rect(frame_size, config); },
+                 "out-of-bounds ratio OCR ROI must be rejected");
+}
+
 void test_strict_expression_parser()
 {
     double result = 0.0;
@@ -258,7 +291,7 @@ void test_restricted_ctc_decode()
     detect_rec_ppocr repository_recognizer(nullptr);
     const std::string source_dir = DOGVISION_VISION_SOURCE_DIR;
     repository_recognizer.loda_dict(
-        source_dir + "/models/ppocr/Dict/ppocr_keys_v1.txt");
+        source_dir + "/models/ppocr/PP-OCRv5_server_rec_infer/inference.yml");
     repository_recognizer.load_allowed_chars(
         source_dir + "/models/ppocr/Dict/math_chars.txt");
 
@@ -273,6 +306,7 @@ void test_restricted_ctc_decode()
 int main()
 {
     test_full_frame_grayscale();
+    test_ocr_roi_selection();
     test_strict_expression_parser();
     test_surround_white_ratio_and_edge_clipping();
     test_candidate_grouping_and_selection();

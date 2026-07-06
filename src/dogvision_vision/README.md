@@ -185,8 +185,8 @@ source install/setup.bash
 
   // 模型路径（相对于包 share 目录）
   "path": {
-    "openvino_bin_file_path": "models/yolo/yolo/m26325.bin",
-    "openvino_xml_file_path": "models/yolo/yolo/m26325.xml",
+    "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
+    "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
     "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
     "ppocr_det_model_xml_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
     "ppocr_rec_model_bin_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
@@ -203,7 +203,9 @@ source install/setup.bash
   "ocr_math_filter": {
     "use_grayscale": false,
     "roi_enabled": true,
+    "roi_mode": "ratio",
     "roi_quadrant": "top_right",
+    "roi_rect_ratio": { "x": 0.50, "y": 0.00, "w": 0.50, "h": 0.50 },
     "min_surround_white_ratio": 0.50,
     "surround_margin_ratio": 0.50,
     "white_s_max": 110,
@@ -241,10 +243,10 @@ source install/setup.bash
 
   // 推理结果保存
   "output_save": {
-    "save_ppocr_video": true,
+    "save_ppocr_video": false,
     "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
     "ppocr_video_fps": 20.0,
-    "save_yolo_test_video": true
+    "save_yolo_test_video": false
   },
 
   // 类别数量与名称（最多 4 类）
@@ -269,8 +271,10 @@ OCR 数学题筛选参数：
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
 | `use_grayscale` | `false` | `false` 使用原始彩色 OCR 输入，`true` 使用三通道灰度 OCR 输入 |
-| `roi_enabled` | `true` | `true` 只对指定画面象限做 OCR，旧配置缺失该字段时默认整帧 OCR |
-| `roi_quadrant` | `top_right` | OCR 象限：`top_left` / `top_right` / `bottom_left` / `bottom_right` / `full` |
+| `roi_enabled` | `true` | `true` 只对指定 ROI 做 OCR，`false` 使用整帧 OCR |
+| `roi_mode` | `ratio` | OCR ROI 模式：`full` / `quadrant` / `ratio`；旧配置缺失该字段时按 `roi_quadrant` 兼容 |
+| `roi_quadrant` | `top_right` | `roi_mode=quadrant` 时使用：`top_left` / `top_right` / `bottom_left` / `bottom_right` / `full` |
+| `roi_rect_ratio` | `{x:0.50,y:0.00,w:0.50,h:0.50}` | `roi_mode=ratio` 时使用；`x/y/w/h` 为相对当前 OCR 帧尺寸的比例坐标 |
 | `min_surround_white_ratio` | `0.50` | 算术候选外围环带的最小白色比例，范围 `[0,1]` |
 | `surround_margin_ratio` | `0.50` | 环带宽度与候选平均文字高度之比，范围 `(0,1]` |
 | `white_s_max` | `110` | HSV 白色判定的 S 通道上限，范围 `[0,255]` |
@@ -295,18 +299,18 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `save_ppocr_video` | `true` | 是否保存 PP-OCR 在线推理主标注视频 |
+| `save_ppocr_video` | `false` | 是否保存 PP-OCR 在线推理主标注视频 |
 | `ppocr_video_save_dir` | `data/ocr_output/video` | PP-OCR 视频保存目录 |
 | `ppocr_video_fps` | `20.0` | PP-OCR 视频帧率，必须大于 0 |
 | `save_ocr_result_images` | `true` | 是否保存 OCR 稳定结果标注图 |
 | `ocr_result_image_dir` | `data/ocr_debug/auto` | OCR 稳定结果图保存目录 |
 | `max_ocr_result_images` | `30` | OCR 稳定结果图最多保留张数 |
-| `save_yolo_test_video` | `true` | 是否保存 YOLO 准确率测试视频 |
+| `save_yolo_test_video` | `false` | 是否保存 YOLO 准确率测试视频 |
 
 视频文件统一保存为 MP4，文件名格式为 `<前缀>_<毫秒时间戳>.mp4`。图片文件统一保存为 JPG，文件名格式为 `<前缀>_<毫秒时间戳>.jpg` 或 `<前缀>_<毫秒时间戳>_<后缀>.jpg`。
 实际运行节点会自动保留最近的调试结果图：YOLO 的 `yolo_*.jpg` 在 `save_dir` 中最多 30 张；PPOCR 的 `ocr_*.jpg` 默认保存在 `output_save.ocr_result_image_dir`，数量由 `max_ocr_result_images` 控制。
 
-PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对应的 `inference.yml`，确保字符表类别数与模型输出一致。PP-OCRv4 旧模型仍可使用 `ppocr_keys_v1.txt`。`math_chars.txt` 是解码白名单，当前允许：
+PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对应的 `inference.yml`，确保字符表类别数与模型输出一致。`math_chars.txt` 是解码白名单，当前允许：
 
 ```text
 0-9  +  -  *  /  ×  ÷  =  .  (  )
@@ -419,7 +423,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 2. 两种运行模式：
 
    **test 模式**（连续测试 + YAML 输出）：
-   - 循环取帧 → 去畸变 → 右上象限文本检测与识别 → 单行算术候选组合 → 白色外围筛选 → 多帧投票
+   - 循环取帧 → 去畸变 → 配置 ROI 文本检测与识别 → 单行算术候选组合 → 白色外围筛选 → 多帧投票
    - 稳定结果发生变化时追加写入 `ocr_results.yaml`
 
    **production 模式**（触发式生产）：
@@ -430,7 +434,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 
 **OCR ROI 与后置筛选流程**：
 
-1. 根据 `roi_enabled` 和 `roi_quadrant` 选择 OCR 输入区域；默认把去畸变后的画面四等分，只识别右上象限。
+1. 根据 `roi_enabled`、`roi_mode`、`roi_quadrant` 和 `roi_rect_ratio` 选择 OCR 输入区域；默认使用等价于右上半屏的比例 ROI。
 2. 根据 `use_grayscale` 选择原始彩色或三通道灰度 ROI 作为 OCR 输入。
 3. 识别 ROI 中的全部文字，并将检测框坐标映射回整帧，按垂直重叠和水平间距组合单行候选。
 4. 严格校验算术语法，拒绝残缺括号、无二元运算符、除零和非有限结果。
@@ -792,13 +796,14 @@ public:
 | `enable_undistort` | bool | true | 是否启用去畸变 |
 | `output_dir` | string | `<share>/data/yolotest` | 测试视频输出目录 |
 | `video_fps` | double | 20.0 | 输出视频帧率 |
+| `save_video` | bool | false | 是否保存测试视频 |
 | `visual_nms_thresh` | double | 0.7 | 可视化 NMS 阈值 |
 
-是否保存测试视频由 `settings.json` 中 `output_save.save_yolo_test_video` 控制。
+是否保存测试视频由 `save_video` 参数控制；默认关闭以避免长期生成大文件。
 
 ```bash
 ros2 launch dogvision_vision yolo_accuracy_test.launch
-ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false video_fps:=30.0
+ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false video_fps:=30.0 save_video:=true
 ```
 
 ### 7.2 `ppocr_test.launch`
@@ -810,6 +815,7 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false v
 | `config_path` | string | `<share>/config/settings.json` | 视觉配置文件 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | 输出 YAML 路径 |
 | `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
+| `save_video` | bool | false | 是否保存 PPOCR 推理视频 |
 
 test 模式窗口由 `settings.json` 中 `ocr_test_visualization` 控制：
 
@@ -819,7 +825,7 @@ test 模式窗口由 `settings.json` 中 `ocr_test_visualization` 控制：
 | `show_ocr_roi` | true | 是否显示当前最优算术候选及筛选状态 |
 | `show_debug_panels` | true | 是否显示原图、OCR 输入、白色 mask、ROI 的调试拼图 |
 
-test/production 在线推理会按 `settings.json` 中 `output_save.save_ppocr_video` 自动保存 `"Math OCR"` 主标注视频。
+test/production 在线推理会按 `save_video` 参数决定是否保存 `"Math OCR"` 主标注视频，默认关闭以避免长期生成大文件。
 
 ```bash
 ros2 launch dogvision_vision ppocr_test.launch
@@ -885,8 +891,14 @@ ros2 launch dogvision_vision math_generator.launch interval:=5 min_val:=1 max_va
 # 全系统（含机械臂 + 视觉）
 ros2 launch dogvision_bringup full_system.launch
 
+# 只启动机械臂，不启动视觉进程
+ros2 launch dogvision_bringup full_system.launch enable_vision:=false
+
 # 仅视觉（camera_node + yolo_node + ppocr_node production 模式）
 ros2 launch dogvision_bringup vision.launch
+
+# 仅启动相机 + PPOCR，不启动 YOLO
+ros2 launch dogvision_bringup vision.launch enable_yolo:=false
 ```
 
 `vision.launch` 默认只有 `camera_node` 打开物理相机，`yolo_node` 和
@@ -958,6 +970,7 @@ ctest --test-dir build/dogvision_vision --output-on-failure
 `test/ocr_math_filter_decode_test.cpp` 覆盖：
 
 - 彩色整帧原样传递和可选三通道灰度转换
+- OCR ROI 比例坐标、象限兼容和非法配置校验
 - 严格表达式语法、括号、小数和除零校验
 - 白色外围环带比例与图像边缘裁剪
 - 多 OCR 框单行组合、偏离中心候选和多候选排序
@@ -1072,6 +1085,9 @@ source ~/toe26_dogvision/install/setup.bash
 
 # 2. 启动全系统
 ros2 launch dogvision_bringup full_system.launch
+
+# 不使用视觉时可关闭视觉子系统，避免相机、YOLO、PPOCR 进程占用资源
+ros2 launch dogvision_bringup full_system.launch enable_vision:=false
 
 # 或仅启动视觉
 ros2 launch dogvision_bringup vision.launch

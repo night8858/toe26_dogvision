@@ -111,10 +111,11 @@ int main(int argc, char** argv)
     Appconfig config;
     detect_oponvino config_loader(nullptr);
     config_loader.load_config(config, config_path);
+    node->declare_parameter<bool>("save_video", config.detect_config.save_yolo_test_video);
+    const bool save_video = node->get_parameter("save_video").as_bool();
     config.detect_config.nms_thresh = static_cast<float>(visual_nms_thresh);
     const bool enable_undistort =
         enable_undistort_param && config.detect_config.enable_undistort;
-    const bool save_video = config.detect_config.save_yolo_test_video;
 
     const std::vector<std::string> class_names = load_class_names(config);
     RCLCPP_INFO(logger, "Loaded %d classes: %s",

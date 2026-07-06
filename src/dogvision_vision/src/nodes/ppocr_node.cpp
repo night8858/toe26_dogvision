@@ -9,7 +9,7 @@
  * 完整流水线：
  *   1. 从 settings.json 选择的相机获取帧
  *   2. 鱼眼去畸变（可选）
- *   3. 按配置选择整帧或象限 ROI，并准备彩色或三通道灰度 OCR 输入
+ *   3. 按配置选择整帧、象限或比例矩形 ROI，并准备彩色或三通道灰度 OCR 输入
  *   4. PPOCR 文本检测（detect_det_ppocr）
  *   5. PPOCR 文本识别（detect_rec_ppocr，含数学字符白名单）
  *   6. 单行算术候选组合与严格表达式校验
@@ -117,29 +117,13 @@ OCRModelPaths select_ocr_model_paths(
 static OcrRoiSelection select_ocr_roi(const cv::Mat& frame,
                                       const s_detector_params& ocr_config)
 {
-    const cv::Rect full_rect(0, 0, frame.cols, frame.rows);
-    if (frame.empty() || !ocr_config.ocr_roi_enabled ||
-        ocr_config.ocr_roi_quadrant == "full")
-    {
-        return OcrRoiSelection{"full", full_rect};
-    }
-
-    const int half_w = frame.cols / 2;
-    const int half_h = frame.rows / 2;
-    cv::Rect roi = full_rect;
-    if (ocr_config.ocr_roi_quadrant == "top_left")
-        roi = cv::Rect(0, 0, half_w, half_h);
-    else if (ocr_config.ocr_roi_quadrant == "top_right")
-        roi = cv::Rect(half_w, 0, frame.cols - half_w, half_h);
-    else if (ocr_config.ocr_roi_quadrant == "bottom_left")
-        roi = cv::Rect(0, half_h, half_w, frame.rows - half_h);
-    else if (ocr_config.ocr_roi_quadrant == "bottom_right")
-        roi = cv::Rect(half_w, half_h, frame.cols - half_w, frame.rows - half_h);
-
-    roi &= full_rect;
-    if (roi.empty())
-        return OcrRoiSelection{"full", full_rect};
-    return OcrRoiSelection{ocr_config.ocr_roi_quadrant, roi};
+    cv::Rect roi = select_ocr_roi_rect(frame.size(), ocr_config);
+    std::string name = "full";
+    if (ocr_config.ocr_roi_enabled && ocr_config.ocr_roi_mode == "quadrant")
+        name = ocr_config.ocr_roi_quadrant;
+    else if (ocr_config.ocr_roi_enabled && ocr_config.ocr_roi_mode == "ratio")
+        name = "ratio";
+    return OcrRoiSelection{name, roi};
 }
 
 static OCRBox offset_ocr_box(OCRBox box, const cv::Point2f& offset)
@@ -1604,6 +1588,7 @@ int main(int argc, char** argv)
     node->declare_parameter<int>("wait_ms", 1000);
     node->declare_parameter<std::string>("image_source", "camera");
     node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<bool>("save_video", config.detect_config.save_ppocr_video);
     node->declare_parameter<bool>(
         "save_result_images", config.detect_config.save_ocr_result_images);
     node->declare_parameter<std::string>(
@@ -1626,6 +1611,7 @@ int main(int argc, char** argv)
     const int wait_ms = node->get_parameter("wait_ms").as_int();
     const std::string image_source = node->get_parameter("image_source").as_string();
     const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const bool save_video = node->get_parameter("save_video").as_bool();
     const bool save_result_images =
         node->get_parameter("save_result_images").as_bool();
     std::string result_image_dir =
@@ -1641,6 +1627,7 @@ int main(int argc, char** argv)
         RCLCPP_WARN(logger, "max_result_images must be > 0; using 30.");
         max_result_images = 30;
     }
+    config.detect_config.save_ppocr_video = save_video;
     const bool use_topic_image = image_source == "topic";
     if (image_source != "camera" && image_source != "topic")
     {
@@ -1655,6 +1642,9 @@ int main(int argc, char** argv)
                 show_ocr_roi ? "true" : "false",
                 show_debug_panels ? "true" : "false");
     RCLCPP_INFO(logger, "Config     : %s", config_path.c_str());
+    RCLCPP_INFO(logger, "OCR video  : save=%s dir=%s",
+                save_video ? "true" : "false",
+                config.detect_config.ppocr_video_save_dir.c_str());
     RCLCPP_INFO(logger, "OCR images : save=%s dir=%s max=%d",
                 save_result_images ? "true" : "false",
                 result_image_dir.c_str(), max_result_images);

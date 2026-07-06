@@ -102,11 +102,14 @@ src/dogvision_vision/config/settings.json
 ```jsonc
 {
   "path": {
-    "openvino_xml_file_path": "models/yolo/yolo/m26325.xml",
-    "openvino_bin_file_path": "models/yolo/yolo/m26325.bin",
-    "ppocr_det_model_path": "models/ppocr/ch_PP-OCRv4_det_infer/inference.pdmodel",
-    "ppocr_rec_model_path": "models/ppocr/ch_PP-OCRv4_rec_infer/inference.pdmodel",
-    "ppocr_dict_path": "models/ppocr/Dict/ppocr_keys_v1.txt"
+    "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
+    "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
+    "ppocr_det_model_xml_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
+    "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
+    "ppocr_rec_model_xml_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
+    "ppocr_rec_model_bin_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
+    "ppocr_dict_path": "models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
+    "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
   }
 }
 ```
@@ -135,16 +138,23 @@ source install/setup.bash
 ros2 launch dogvision_bringup full_system.launch
 ```
 
+只启动机械臂、不启动视觉进程：
+
+```bash
+ros2 launch dogvision_bringup full_system.launch enable_vision:=false
+```
+
 仅启动视觉：
 
 ```bash
 ros2 launch dogvision_bringup vision.launch
 ```
 
-YOLO 准确性测试，会打开可视化窗口并在退出后保存 MP4 标注视频：
+YOLO 准确性测试，会打开可视化窗口；需要保存 MP4 标注视频时显式开启 `save_video`：
 
 ```bash
 ros2 launch dogvision_vision yolo_accuracy_test.launch
+ros2 launch dogvision_vision yolo_accuracy_test.launch save_video:=true
 ```
 
 PPOCR 连续测试模式：
@@ -217,6 +227,7 @@ ros2 run dogvision_vision math_generator_node
 | `protocol` | `compiled` | 仅校验是否匹配编译协议；OCR 自动答案要求 BB/4DOF 构建 |
 | `ocr_answer_topic` | `/ocr/answer` | OCR 答案到机械臂的 UInt8 话题 |
 | `mission_config` | `<share>/dogvision_arm/config/pos_set.yaml` | 机械臂任务位置配置 |
+| `enable_vision` | `true` | 是否启动视觉子系统；设为 `false` 时只启动机械臂 |
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
 | `debug` | `false` | 调试模式；默认打开 YOLO/PPOCR OpenCV 窗口 |
 | `show_window` | `$(var debug)` | YOLO 是否显示 OpenCV 窗口 |
@@ -229,6 +240,7 @@ ros2 run dogvision_vision math_generator_node
 | `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选及白色筛选状态 |
 | `ppocr_show_debug_panels` | `$(var debug)` | PPOCR 是否显示调试拼图窗口 |
 | `ppocr_enable_keyboard_trigger` | `true` | 组合启动时由 Enter 触发 OCR |
+| `ppocr_save_video` | `false` | 是否保存 PPOCR 推理视频 |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 
 ### `dogvision_vision yolo_accuracy_test.launch`
@@ -239,6 +251,7 @@ ros2 run dogvision_vision math_generator_node
 | `enable_undistort` | `true` | 是否启用去畸变 |
 | `output_dir` | `<share>/dogvision_vision/data/yolotest` | 测试视频输出目录 |
 | `video_fps` | `20.0` | 保存视频的帧率 |
+| `save_video` | `false` | 是否保存测试视频 |
 | `visual_nms_thresh` | `0.7` | 测试可视化 NMS 阈值，较高时更容易保留同帧多个目标 |
 
 ### `dogvision_arm arm_control.launch` 与 `arm_test.launch`
@@ -258,6 +271,9 @@ ros2 run dogvision_vision math_generator_node
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
+| `enable_camera` | `true` | 是否启动共享相机节点 |
+| `enable_yolo` | `true` | 是否启动 YOLO 节点 |
+| `enable_ppocr` | `true` | 是否启动 PPOCR 节点 |
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
 | `debug` | `false` | 调试模式；默认打开 YOLO/PPOCR OpenCV 窗口 |
 | `show_window` | `$(var debug)` | YOLO 是否显示 OpenCV 窗口 |
@@ -267,6 +283,7 @@ ros2 run dogvision_vision math_generator_node
 | `image_topic` | `/camera/image_raw` | `camera_node` 发布、YOLO/PPOCR 订阅的共享图像话题 |
 | `camera_frame_id` | `camera` | 共享图像消息的 `frame_id` |
 | `camera_publish_rate` | `30.0` | `camera_node` 发布帧率 |
+| `ppocr_save_video` | `false` | 是否保存 PPOCR 推理视频 |
 | `ppocr_mode` | `production` | PPOCR 模式 |
 | `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示可视化窗口 |
 | `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选窗口 |

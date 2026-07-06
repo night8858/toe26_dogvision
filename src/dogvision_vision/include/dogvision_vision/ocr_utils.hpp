@@ -14,6 +14,16 @@
 cv::Mat prepare_ocr_input(const cv::Mat& input, bool use_grayscale);
 
 /**
+ * @brief 按 OCR ROI 配置选择实际送入 PPOCR 检测的矩形区域。
+ * @param frame_size 当前 OCR 帧尺寸；ROI 比例坐标基于该尺寸换算。
+ * @param config OCR 配置。
+ * @retval cv::Rect 裁剪到图像边界内的 ROI；图像尺寸非法时返回空矩形。
+ * @throws std::invalid_argument ROI 模式或比例坐标非法时抛出。
+ */
+cv::Rect select_ocr_roi_rect(const cv::Size& frame_size,
+                             const s_detector_params& config);
+
+/**
  * @brief 使用透视变换裁剪四点 OCR 文本区域。
  * @param src 源 BGR 图像。
  * @param box 四点文本区域框。

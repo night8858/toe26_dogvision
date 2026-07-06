@@ -164,9 +164,38 @@ install(TARGETS
 install(DIRECTORY include/
   DESTINATION include
 )
-# 安装配置文件、模型和数据
-install(DIRECTORY config models data
+# 安装配置文件
+install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
+)
+# 只安装当前配置使用的推理模型，避免把训练/转换中间产物和备用模型放进安装空间。
+install(FILES
+  models/yolo/yolo/C2f-EMA_629_FP32/best.bin
+  models/yolo/yolo/C2f-EMA_629_FP32/best.xml
+  DESTINATION share/${PROJECT_NAME}/models/yolo/yolo/C2f-EMA_629_FP32
+)
+install(FILES
+  models/ppocr/PP-OCRv5_server_det_openvino/inference.bin
+  models/ppocr/PP-OCRv5_server_det_openvino/inference.xml
+  DESTINATION share/${PROJECT_NAME}/models/ppocr/PP-OCRv5_server_det_openvino
+)
+install(FILES
+  models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin
+  models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml
+  DESTINATION share/${PROJECT_NAME}/models/ppocr/PP-OCRv5_server_rec_openvino
+)
+install(FILES
+  models/ppocr/PP-OCRv5_server_rec_infer/inference.yml
+  DESTINATION share/${PROJECT_NAME}/models/ppocr/PP-OCRv5_server_rec_infer
+)
+install(FILES
+  models/ppocr/Dict/math_chars.txt
+  DESTINATION share/${PROJECT_NAME}/models/ppocr/Dict
+)
+# 仅安装运行输出目录骨架，避免历史测试视频、截图和 YAML 结果进入安装空间。
+install(DIRECTORY data/
+  DESTINATION share/${PROJECT_NAME}/data
+  FILES_MATCHING PATTERN ".gitkeep"
 )
 # 安装启动脚本
 install(DIRECTORY launch
