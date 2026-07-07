@@ -29,7 +29,7 @@
     "usbcamera0":
     {
       //给c920罗技相机使用的usb相机参数
-      "device_path": "/dev/video2",  // 可选：USB 设备路径；为空或缺失时使用 VideoCapture(0)
+      "device_path": "/dev/video0",  // 可选：USB 设备路径；为空或缺失时使用 VideoCapture(0)
       "device_id": 0,     // 设备编号
       "width": 1920,      // 采集宽度
       "height": 1080,     // 采集高度
@@ -86,7 +86,7 @@
     {
       "use_grayscale": false,             // true=OCR 输入转三通道灰度，false=原始彩色
       "roi_enabled": true,                // true=只对指定 ROI 做 OCR
-      "roi_mode": "quadrant",                // OCR ROI 模式：full/quadrant/ratio
+      "roi_mode": "ratio",                // OCR ROI 模式：full/quadrant/ratio
       "roi_quadrant": "top_right",        // roi_mode=quadrant 时使用：top_left/top_right/bottom_left/bottom_right/full
       "roi_rect_ratio":
       {
@@ -116,7 +116,6 @@
       "C": 3,           // 通道数
       "W": 640,         // 输入宽度
       "H": 640          // 输入高度
-      
     },
   
     // ── 图像属性 ──
