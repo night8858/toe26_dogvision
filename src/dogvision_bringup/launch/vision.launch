@@ -26,6 +26,10 @@
   <arg name="camera_frame_id" default="camera"/>
   <!-- 共享相机发布帧率 -->
   <arg name="camera_publish_rate" default="30.0"/>
+  <!-- 视觉空闲时是否自动暂停相机取流 -->
+  <arg name="auto_suspend_stream" default="true"/>
+  <!-- 没有图像订阅者后进入暂停前的宽限时间，单位 ms -->
+  <arg name="idle_grace_ms" default="500"/>
   <!-- YOLO 是否启用键盘触发检测 -->
   <arg name="yolo_enable_keyboard_trigger" default="false"/>
   <!-- PP-OCR 运行模式：production / test / visual_test -->
@@ -38,8 +42,8 @@
   <arg name="ppocr_show_debug_panels" default="$(var debug)"/>
   <!-- PP-OCR 是否启用键盘触发识别 -->
   <arg name="ppocr_enable_keyboard_trigger" default="true"/>
-  <!-- PP-OCR 是否保存推理视频；默认关闭，避免长期运行生成大文件 -->
-  <arg name="ppocr_save_video" default="false"/>
+  <!-- PP-OCR 是否保存推理视频；默认开启，便于后续调试 -->
+  <arg name="ppocr_save_video" default="true"/>
   <!-- PP-OCR 稳定识别后是否自动保存标注结果图 -->
   <arg name="ppocr_save_result_images" default="true"/>
   <!-- PP-OCR 自动结果图保存目录；留空时使用 debug_snapshot_dir/auto -->
@@ -55,6 +59,8 @@
     <param name="image_topic" value="$(var image_topic)" type="str"/>
     <param name="frame_id" value="$(var camera_frame_id)" type="str"/>
     <param name="publish_rate" value="$(var camera_publish_rate)" type="float"/>
+    <param name="auto_suspend_stream" value="$(var auto_suspend_stream)" type="bool"/>
+    <param name="idle_grace_ms" value="$(var idle_grace_ms)" type="int"/>
   </node>
 
   <!-- YOLO 目标检测节点：实时检测图像中的目标物体 -->
@@ -67,6 +73,7 @@
     <param name="save_images" value="$(var save_images)" type="bool"/>
     <param name="save_dir" value="$(var save_dir)" type="str"/>
     <param name="enable_keyboard_trigger" value="$(var yolo_enable_keyboard_trigger)" type="bool"/>
+    <param name="dynamic_image_subscription" value="$(var auto_suspend_stream)" type="bool"/>
   </node>
 
   <!-- PP-OCR 文字识别节点：检测并识别图像中的文字信息 -->
@@ -84,5 +91,6 @@
     <param name="result_image_dir" value="$(var ppocr_result_image_dir)" type="str"/>
     <param name="max_result_images" value="$(var ppocr_max_result_images)" type="int"/>
     <param name="yaml_path" value="$(var ocr_yaml_path)" type="str"/>
+    <param name="dynamic_image_subscription" value="$(var auto_suspend_stream)" type="bool"/>
   </node>
 </launch>

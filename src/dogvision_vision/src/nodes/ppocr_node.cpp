@@ -165,6 +165,7 @@ public:
         : enabled_(config.save_ppocr_video)
         , save_dir_(config.ppocr_video_save_dir)
         , fps_(config.ppocr_video_fps)
+        , max_videos_(std::max(1, config.max_ppocr_videos))
         , name_prefix_(name_prefix)
         , logger_(logger)
     {
@@ -215,6 +216,8 @@ private:
             return false;
         }
 
+        prune_old_videos();
+
         const auto now = std::chrono::system_clock::now().time_since_epoch();
         const auto ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
@@ -237,9 +240,63 @@ private:
         return true;
     }
 
+    void prune_old_videos()
+    {
+        std::error_code ec;
+        std::vector<fs::directory_entry> videos;
+        for (const auto& entry : fs::directory_iterator(save_dir_, ec))
+        {
+            if (ec)
+            {
+                RCLCPP_WARN(logger_, "Cannot scan PP-OCR video dir '%s': %s",
+                            save_dir_.c_str(), ec.message().c_str());
+                return;
+            }
+            if (!entry.is_regular_file(ec))
+            {
+                ec.clear();
+                continue;
+            }
+            const fs::path path = entry.path();
+            const std::string filename = path.filename().string();
+            if (filename.rfind("ppocr_", 0) == 0 && path.extension() == ".mp4")
+            {
+                videos.push_back(entry);
+            }
+        }
+        if (videos.size() < static_cast<std::size_t>(max_videos_))
+        {
+            return;
+        }
+
+        std::sort(videos.begin(), videos.end(),
+                  [](const fs::directory_entry& a,
+                     const fs::directory_entry& b) {
+                      std::error_code ea;
+                      std::error_code eb;
+                      return a.last_write_time(ea) < b.last_write_time(eb);
+                  });
+
+        const std::size_t keep_existing =
+            static_cast<std::size_t>(max_videos_ - 1);
+        const std::size_t remove_count = videos.size() - keep_existing;
+        for (std::size_t i = 0; i < remove_count; ++i)
+        {
+            const fs::path path = videos[i].path();
+            std::error_code remove_ec;
+            fs::remove(path, remove_ec);
+            if (remove_ec)
+            {
+                RCLCPP_WARN(logger_, "Cannot remove old PP-OCR video '%s': %s",
+                            path.string().c_str(), remove_ec.message().c_str());
+            }
+        }
+    }
+
     bool enabled_;
     std::string save_dir_;
     double fps_;
+    int max_videos_;
     std::string name_prefix_;
     rclcpp::Logger logger_;
     cv::VideoWriter writer_;
@@ -633,6 +690,33 @@ static bool take_latest_ocr_frame(const std::shared_ptr<LatestImageFrameBuffer>&
     }
     frame = buffer->frame.clone();
     return true;
+}
+
+static void reset_latest_ocr_frame(
+    const std::shared_ptr<LatestImageFrameBuffer>& buffer)
+{
+    if (!buffer)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(buffer->mutex);
+    buffer->frame.release();
+    buffer->stamp = rclcpp::Time();
+    buffer->has_frame = false;
+}
+
+static rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr
+create_ocr_image_subscription(
+    const rclcpp::Node::SharedPtr& node,
+    const std::string& image_topic,
+    const std::shared_ptr<LatestImageFrameBuffer>& buffer)
+{
+    return node->create_subscription<sensor_msgs::msg::Image>(
+        image_topic, rclcpp::SensorDataQoS(),
+        [buffer, logger = node->get_logger()](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+            ocr_image_callback(msg, buffer, logger);
+        });
 }
 
 static bool acquire_ocr_frame(OCRFrameSource& source,
@@ -1195,7 +1279,8 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                                const std::string& debug_snapshot_dir,
                                bool save_result_images,
                                const std::string& result_image_dir,
-                               int max_result_images)
+                               int max_result_images,
+                               bool dynamic_image_subscription)
 {
     auto logger = node->get_logger();
     auto latched_qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
@@ -1236,6 +1321,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     cv::Mat last_debug_panel;
     OCRDebugFrame last_debug;
     OcrVideoRecorder video_recorder(ocr_config, "ppocr_production", logger);
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub;
     rclcpp::WallRate idle_rate(20);
     while (rclcpp::ok())
     {
@@ -1246,6 +1332,14 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             stable_roi = cv::Rect2f();
             has_stable_roi = false;
             tracking_active = true;
+            if (frame_source.use_topic && dynamic_image_subscription)
+            {
+                reset_latest_ocr_frame(frame_source.topic_buffer);
+                image_sub = create_ocr_image_subscription(
+                    node, frame_source.image_topic, frame_source.topic_buffer);
+                RCLCPP_INFO(logger, "Subscribed to %s for this OCR trigger.",
+                            frame_source.image_topic.c_str());
+            }
             RCLCPP_INFO(logger, "Trigger received, OCR tracking reset and started.");
         }
 
@@ -1347,6 +1441,12 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
             }
 
             tracking_active = false;
+            if (frame_source.use_topic && dynamic_image_subscription)
+            {
+                image_sub.reset();
+                RCLCPP_INFO(logger,
+                            "Released image subscription after OCR result.");
+            }
             RCLCPP_INFO(logger, "OCR cycle complete. Waiting for next trigger.");
         }
         else if (event == OCRVoteEvent::StableLost)
@@ -1384,6 +1484,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     }
 
     (void)trigger_sub;
+    (void)image_sub;
     g_ocr_running.store(false);
     if (keyboard_thread.joinable())
     {
@@ -1588,6 +1689,7 @@ int main(int argc, char** argv)
     node->declare_parameter<int>("wait_ms", 1000);
     node->declare_parameter<std::string>("image_source", "camera");
     node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<bool>("dynamic_image_subscription", true);
     node->declare_parameter<bool>("save_video", config.detect_config.save_ppocr_video);
     node->declare_parameter<bool>(
         "save_result_images", config.detect_config.save_ocr_result_images);
@@ -1611,6 +1713,8 @@ int main(int argc, char** argv)
     const int wait_ms = node->get_parameter("wait_ms").as_int();
     const std::string image_source = node->get_parameter("image_source").as_string();
     const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const bool dynamic_image_subscription =
+        node->get_parameter("dynamic_image_subscription").as_bool();
     const bool save_video = node->get_parameter("save_video").as_bool();
     const bool save_result_images =
         node->get_parameter("save_result_images").as_bool();
@@ -1676,12 +1780,8 @@ int main(int argc, char** argv)
     if (config.detect_config.enable_undistort)
     {
         init_fisheye_undistort(
-            config.camera_type == "usb"
-                ? config.usbcamera_config[config.usb_camera_index].width
-                : config.hikcamera_config.width,
-            config.camera_type == "usb"
-                ? config.usbcamera_config[config.usb_camera_index].height
-                : config.hikcamera_config.height);
+            config.usbcamera_config[config.usb_camera_index].width,
+            config.usbcamera_config[config.usb_camera_index].height);
     }
     else
     {
@@ -1722,13 +1822,18 @@ int main(int argc, char** argv)
         {
             topic_buffer = std::make_shared<LatestImageFrameBuffer>();
             frame_source.topic_buffer = topic_buffer;
-            image_sub = node->create_subscription<sensor_msgs::msg::Image>(
-                image_topic, rclcpp::SensorDataQoS(),
-                [topic_buffer, logger](sensor_msgs::msg::Image::ConstSharedPtr msg) {
-                    ocr_image_callback(msg, topic_buffer, logger);
-                });
+            if (mode != "production" || !dynamic_image_subscription)
+            {
+                image_sub = create_ocr_image_subscription(
+                    node, image_topic, topic_buffer);
+            }
             // 组合启动时 PPOCR 不再打开相机，只消费 camera_node 发布的共享图像。
-            RCLCPP_INFO(logger, "Image input: topic %s", image_topic.c_str());
+            RCLCPP_INFO(logger,
+                        "Image input: topic %s (%s subscription)",
+                        image_topic.c_str(),
+                        (mode == "production" && dynamic_image_subscription)
+                            ? "dynamic"
+                            : "continuous");
         }
         else
         {
@@ -1752,7 +1857,8 @@ int main(int argc, char** argv)
                 node, frame_source, det, rec, config.detect_config,
                 show_visual, show_ocr_roi, show_debug_panels,
                 enable_keyboard_trigger, debug_snapshot_dir,
-                save_result_images, result_image_dir, max_result_images);
+                save_result_images, result_image_dir, max_result_images,
+                dynamic_image_subscription);
         }
         else
         {

@@ -114,6 +114,16 @@ sudo mv l_openvino_toolkit_ubuntu24_2024.6.0.17404.4c0f47d2335_x86_64 /opt/intel
 source /opt/intel/openvino_2024.6.0/setupvars.sh
 ```
 
+如需启用 OpenVINO GPU 推理，还需要安装 Intel GPU OpenCL/Level Zero 运行时：
+
+```bash
+sudo apt update
+sudo apt install -y ocl-icd-libopencl1 intel-opencl-icd intel-level-zero-gpu level-zero
+sudo usermod -a -G render $LOGNAME
+```
+
+执行 `usermod` 后需要重新登录或重启终端会话。Intel 独显环境可能还需要额外安装 Intel graphics APT 仓库中的内核模块与驱动，具体以 OpenVINO 官方 GPU 配置文档为准。
+
 ### 3.3 海康 MVS SDK（强制依赖）
 
 从海康官网下载 Linux MVS SDK，安装到 `/opt/MVS/`，确保以下文件存在：
@@ -196,7 +206,7 @@ source install/setup.bash
     "ppocr_cls_model_path": "",                          // 文字方向分类（暂未使用）
     "ppocr_dict_path": "models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
     "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt",
-    "yolo_device": "CPU"                        // YOLO 推理设备：CPU / GPU / AUTO:GPU,CPU
+    "openvino_device": "CPU"                              // 默认 OpenVINO 推理设备：CPU / GPU / AUTO:GPU,CPU
   },
 
   // OCR 数学题后置筛选
@@ -243,10 +253,11 @@ source install/setup.bash
 
   // 推理结果保存
   "output_save": {
-    "save_ppocr_video": false,
+    "save_ppocr_video": true,
     "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
     "ppocr_video_fps": 20.0,
-    "save_yolo_test_video": false
+    "max_ppocr_videos": 10,
+    "save_yolo_test_video": true
   },
 
   // 类别数量与名称（最多 4 类）
@@ -280,11 +291,15 @@ OCR 数学题筛选参数：
 | `white_s_max` | `110` | HSV 白色判定的 S 通道上限，范围 `[0,255]` |
 | `white_v_min` | `50` | HSV 白色判定的 V 通道下限，范围 `[0,255]` |
 
-YOLO 推理设备：
+OpenVINO 推理设备（`path` 节）：
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `yolo_device` | `"CPU"` | 推理设备：`"CPU"` / `"GPU"` / `"AUTO:GPU,CPU"`（GPU 不可用时自动回退 CPU） |
+| `openvino_device` | `"CPU"` | YOLO 和 PPOCR 默认推理设备：`"CPU"` / `"GPU"` / `"AUTO:GPU,CPU"`（GPU 不可用时自动回退 CPU） |
+| `yolo_device` | 缺省 | 可选覆盖项，仅覆盖 YOLO 推理设备；未配置时使用 `openvino_device` |
+| `ppocr_det_device` | 缺省 | 可选覆盖项，仅覆盖 PPOCR det 模型推理设备；未配置时使用 `openvino_device` |
+| `ppocr_rec_device` | 缺省 | 可选覆盖项，仅覆盖 PPOCR rec 模型推理设备；未配置时使用 `openvino_device` |
+| `ppocr_cls_device` | 缺省 | 可选覆盖项，预留给 PPOCR cls 模型；未配置时使用 `openvino_device` |
 
 YOLO 图像增强参数（`yolo_enhance` 节）：
 
@@ -299,16 +314,17 @@ YOLO 图像增强参数（`yolo_enhance` 节）：
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `save_ppocr_video` | `false` | 是否保存 PP-OCR 在线推理主标注视频 |
+| `save_ppocr_video` | `true` | 是否保存 PP-OCR 在线推理主标注视频 |
 | `ppocr_video_save_dir` | `data/ocr_output/video` | PP-OCR 视频保存目录 |
 | `ppocr_video_fps` | `20.0` | PP-OCR 视频帧率，必须大于 0 |
+| `max_ppocr_videos` | `10` | PP-OCR 视频最多保留条数，仅清理 `ppocr_*.mp4` |
 | `save_ocr_result_images` | `true` | 是否保存 OCR 稳定结果标注图 |
 | `ocr_result_image_dir` | `data/ocr_debug/auto` | OCR 稳定结果图保存目录 |
 | `max_ocr_result_images` | `30` | OCR 稳定结果图最多保留张数 |
-| `save_yolo_test_video` | `false` | 是否保存 YOLO 准确率测试视频 |
+| `save_yolo_test_video` | `true` | 是否保存 YOLO 准确率测试视频 |
 
 视频文件统一保存为 MP4，文件名格式为 `<前缀>_<毫秒时间戳>.mp4`。图片文件统一保存为 JPG，文件名格式为 `<前缀>_<毫秒时间戳>.jpg` 或 `<前缀>_<毫秒时间戳>_<后缀>.jpg`。
-实际运行节点会自动保留最近的调试结果图：YOLO 的 `yolo_*.jpg` 在 `save_dir` 中最多 30 张；PPOCR 的 `ocr_*.jpg` 默认保存在 `output_save.ocr_result_image_dir`，数量由 `max_ocr_result_images` 控制。
+实际运行节点会自动保留最近的调试文件：PPOCR 的 `ppocr_*.mp4` 在 `ppocr_video_save_dir` 中最多保留 `max_ppocr_videos` 条；YOLO 的 `yolo_*.jpg` 在 `save_dir` 中最多 30 张；PPOCR 的 `ocr_*.jpg` 默认保存在 `output_save.ocr_result_image_dir`，数量由 `max_ocr_result_images` 控制。
 
 PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对应的 `inference.yml`，确保字符表类别数与模型输出一致。`math_chars.txt` 是解码白名单，当前允许：
 
@@ -356,6 +372,8 @@ PP-OCRv5 OpenVINO 部署时，`ppocr_dict_path` 应指向同一识别模型对�
 | `save_dir` | string | `<share>/data/yolorun` | 结果图保存目录 |
 | `image_source` | string | `camera` | 图像来源：`camera` 直接打开相机，`topic` 订阅共享图像 |
 | `image_topic` | string | `/camera/image_raw` | `image_source:=topic` 时订阅的图像话题 |
+| `dynamic_image_subscription` | bool | true | topic 模式下是否只在触发期间订阅图像；组合 launch 默认跟随 `auto_suspend_stream` |
+| `image_wait_timeout_ms` | int | 2000 | 触发后等待共享图像首帧的超时时间 |
 
 **启动方式**：
 
@@ -476,6 +494,7 @@ ros2 run dogvision_vision yolo_accuracy_test_node
 | `wait_ms` | int | 1000 | visual_test 离线目录每张图片自动播放间隔 |
 | `image_source` | string | `camera` | 图像来源：`camera` 直接打开相机，`topic` 订阅共享图像 |
 | `image_topic` | string | `/camera/image_raw` | `image_source:=topic` 时订阅的图像话题 |
+| `dynamic_image_subscription` | bool | true | production topic 模式下是否只在触发期间订阅图像；test/visual_test 仍连续订阅 |
 | `save_result_images` | bool | `output_save.save_ocr_result_images` | 稳定识别完成后是否自动保存 OCR 标注结果图 |
 | `result_image_dir` | string | `output_save.ocr_result_image_dir` | 自动结果图目录；传空字符串时使用 `<debug_snapshot_dir>/auto` |
 | `max_result_images` | int | `output_save.max_ocr_result_images` | 自动结果图最多保留张数，仅清理 `ocr_*.jpg` |
@@ -635,7 +654,7 @@ public:
 ```
 
 内部使用 letterbox 预处理（保持宽高比填充），支持 FP32/FP16/INT8 精度模型。
-支持通过 `yolo_device` 配置切换 CPU / GPU 推理设备，GPU 模式下自动启用低延迟优化。
+默认使用 `openvino_device` 配置选择 CPU / GPU 推理设备，也可通过 `yolo_device` 单独覆盖 YOLO。
 
 ### 6.4 PP-OCR 系列 (`ocr_detect.hpp`)
 
@@ -796,14 +815,14 @@ public:
 | `enable_undistort` | bool | true | 是否启用去畸变 |
 | `output_dir` | string | `<share>/data/yolotest` | 测试视频输出目录 |
 | `video_fps` | double | 20.0 | 输出视频帧率 |
-| `save_video` | bool | false | 是否保存测试视频 |
+| `save_video` | bool | true | 是否保存测试视频 |
 | `visual_nms_thresh` | double | 0.7 | 可视化 NMS 阈值 |
 
-是否保存测试视频由 `save_video` 参数控制；默认关闭以避免长期生成大文件。
+是否保存测试视频由 `save_video` 参数控制；默认开启，传 `save_video:=false` 可临时关闭。
 
 ```bash
 ros2 launch dogvision_vision yolo_accuracy_test.launch
-ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false video_fps:=30.0 save_video:=true
+ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false video_fps:=30.0 save_video:=false
 ```
 
 ### 7.2 `ppocr_test.launch`
@@ -815,7 +834,7 @@ ros2 launch dogvision_vision yolo_accuracy_test.launch enable_undistort:=false v
 | `config_path` | string | `<share>/config/settings.json` | 视觉配置文件 |
 | `yaml_path` | string | `<share>/data/ocr_output/ocr_results.yaml` | 输出 YAML 路径 |
 | `debug_snapshot_dir` | string | `<share>/data/ocr_debug` | 按 `s` 保存调试快照的目录 |
-| `save_video` | bool | false | 是否保存 PPOCR 推理视频 |
+| `save_video` | bool | true | 是否保存 PPOCR 推理视频 |
 
 test 模式窗口由 `settings.json` 中 `ocr_test_visualization` 控制：
 
@@ -825,7 +844,7 @@ test 模式窗口由 `settings.json` 中 `ocr_test_visualization` 控制：
 | `show_ocr_roi` | true | 是否显示当前最优算术候选及筛选状态 |
 | `show_debug_panels` | true | 是否显示原图、OCR 输入、白色 mask、ROI 的调试拼图 |
 
-test/production 在线推理会按 `save_video` 参数决定是否保存 `"Math OCR"` 主标注视频，默认关闭以避免长期生成大文件。
+test/production 在线推理会按 `save_video` 参数决定是否保存 `"Math OCR"` 主标注视频，默认开启；PPOCR 视频最多保留最近 10 条。
 
 ```bash
 ros2 launch dogvision_vision ppocr_test.launch
@@ -897,13 +916,18 @@ ros2 launch dogvision_bringup full_system.launch enable_vision:=false
 # 仅视觉（camera_node + yolo_node + ppocr_node production 模式）
 ros2 launch dogvision_bringup vision.launch
 
+# 空闲时不自动停相机，恢复旧的持续取流行为
+ros2 launch dogvision_bringup vision.launch auto_suspend_stream:=false
+
 # 仅启动相机 + PPOCR，不启动 YOLO
 ros2 launch dogvision_bringup vision.launch enable_yolo:=false
 ```
 
 `vision.launch` 默认只有 `camera_node` 打开物理相机，`yolo_node` 和
 `ppocr_node` 订阅 `/camera/image_raw`。这样可以避免两个推理节点同时占用
-同一个 USB 相机。
+同一个 USB 相机。默认启用 `auto_suspend_stream` 时，YOLO/OCR 只在触发期间
+临时订阅图像；两者都完成后，相机会暂停物理取流，避免视觉空闲时影响其他
+高频节点。
 
 ---
 
@@ -1126,7 +1150,7 @@ A: 检查相机物理连接，确认设备号与配置一致。PPOCR 节点有�
 A: 先确认 `settings.json` 中 `lens_distortion.enable_undistort=true`；YOLO 节点还需 ROS 参数 `enable_undistort=true`。若仍无效，再检查 K/D 矩阵与标定结果是否一致。
 
 **Q: 如何启用 GPU 推理？**
-A: 在 `settings.json` 的 `path` 节中将 `yolo_device` 设为 `"GPU"` 或 `"AUTO:GPU,CPU"`。需确保系统安装了 Intel GPU 驱动（`intel-opencl-icd`）且 OpenVINO GPU 插件可用。推荐配合 FP16 精度模型获得最佳性能。
+A: 在 `settings.json` 的 `path` 节中将 `openvino_device` 设为 `"GPU"` 或 `"AUTO:GPU,CPU"`，该配置会同时作用于 YOLO 和 PPOCR。系统侧需安装 `ocl-icd-libopencl1`、`intel-opencl-icd`、`intel-level-zero-gpu`、`level-zero`，并执行 `sudo usermod -a -G render $LOGNAME` 后重新登录。若只想单独切换某个模块，可配置 `yolo_device`、`ppocr_det_device` 或 `ppocr_rec_device`。
 
 **Q: 如何关闭图像增强？**
 A: 在 `settings.json` 的 `yolo_enhance` 节中将 `enabled` 设为 `false` 即可完全回退到原始图像输入，无需重新编译。

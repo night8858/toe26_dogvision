@@ -2,7 +2,7 @@
   //当前使用的相机类型
     "camera":
     {
-      "type": "hik",
+      "type": "usb",
       "usb_index": 0
     },
 
@@ -61,6 +61,7 @@
     {
       "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
       "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
+      "openvino_device": "CPU",
 
       "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
       "ppocr_det_model_xml_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.xml",
@@ -118,6 +119,18 @@
         "bbox_conf_thresh": 0.6,
         "merge_thresh": 0.8,
         "max_wellid_distance": 8
+    },
+
+    "output_save":
+    {
+      "save_ppocr_video": true,
+      "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
+      "ppocr_video_fps": 20.0,
+      "max_ppocr_videos": 10,
+      "save_ocr_result_images": true,
+      "ocr_result_image_dir": "src/dogvision_vision/data/ocr_debug/auto",
+      "max_ocr_result_images": 30,
+      "save_yolo_test_video": true
     },
 
     //类别数量设置

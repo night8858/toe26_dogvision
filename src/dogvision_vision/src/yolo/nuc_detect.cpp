@@ -55,7 +55,7 @@ float calc_iou(const cv::Rect2f& a, const cv::Rect2f& b)
  *   1. 从基类配置中读取模型路径和输入尺寸
  *   2. 读取 OpenVINO IR 模型（.xml + .bin）
  *   3. 设置输入形状（NCHW 格式）
- *   4. 编译模型到 CPU 设备
+ *   4. 编译模型到配置指定的 OpenVINO 设备
  *   5. 创建推理请求并分配输入张量
  *   6. 预读输出张量形状，缓存 anchor/class/channel 数量以供推理时使用
  *
@@ -94,8 +94,9 @@ bool detect_oponvino::inference_init(void)
                                   static_cast<size_t>(input_width_)};
         model->reshape({{input_name, input_shape}});
 
-        //测试先用着cpu，实际部署时根据需要选择设备用GPU
-        model_ = core_.compile_model(model, "CPU");
+        const std::string device =
+            detect_config_.yolo_device.empty() ? "CPU" : detect_config_.yolo_device;
+        model_ = core_.compile_model(model, device);
 
         infer_request_ = model_.create_infer_request();
         
@@ -127,6 +128,7 @@ bool detect_oponvino::inference_init(void)
         //非调试状态需要注释掉这些打印，避免频繁输出影响性能
         std::cout << "OpenVINO model loaded successfully!" << std::endl;
         std::cout << "  Model: " << xml_path << std::endl;
+        std::cout << "  Device: " << device << std::endl;
         std::cout << "  Input precision: " << precision_str << std::endl;
         std::cout << "  Input shape: [" << batch_size << ", " << detect_config_.c 
                   << ", " << input_height_ << ", " << input_width_ << "]" << std::endl;
@@ -465,4 +467,3 @@ void detect_oponvino::nms(void)
         }
     }
 }
-

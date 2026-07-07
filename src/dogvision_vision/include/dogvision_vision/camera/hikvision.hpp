@@ -9,6 +9,9 @@
 
 #pragma once
 
+// Hik/MVS support is currently disabled from CMake and CameraSource.
+// Keep this header for future restore.
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -40,13 +43,15 @@ class HikGrab
 private:
     s_camera_params params_;   ///< 相机初始化参数
     cv::Mat img_bayerrg_;      ///< Bayer RG 原始格式缓存
-    void* handle;              ///< MVS 设备句柄
-    int nRet;                  ///< MVS API 返回值暂存
-    MVCC_INTVALUE stParam;     ///< 传输层参数（如 PayloadSize）
-    MV_FRAME_OUT_INFO_EX stImageInfo; ///< 帧信息（宽、高、时间戳等）
+    void* handle = nullptr;    ///< MVS 设备句柄
+    int nRet = 0;              ///< MVS API 返回值暂存
+    MVCC_INTVALUE stParam{};   ///< 传输层参数（如 PayloadSize）
+    MV_FRAME_OUT_INFO_EX stImageInfo{}; ///< 帧信息（宽、高、时间戳等）
 
-    unsigned char * pData;     ///< 帧数据缓冲区
-    unsigned int nDataSize;    ///< 缓冲区大小
+    unsigned char * pData = nullptr; ///< 帧数据缓冲区
+    unsigned int nDataSize = 0;      ///< 缓冲区大小
+    bool device_open_ = false;       ///< 设备是否已打开
+    bool grabbing_ = false;          ///< 是否正在取流
 
 
 public:
@@ -85,6 +90,18 @@ public:
      * @retval void
      */
     void Hik_end();
+
+    /**
+     * @brief 开始海康相机取流，保留已打开设备句柄。
+     * @retval bool 成功或已在取流时返回 true。
+     */
+    bool start_grabbing();
+
+    /**
+     * @brief 暂停海康相机取流，保留已打开设备句柄。
+     * @retval bool 成功或已暂停时返回 true。
+     */
+    bool stop_grabbing();
 
 
 };

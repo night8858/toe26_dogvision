@@ -12,8 +12,8 @@
   <arg name="output_dir" default="$(find-pkg-share dogvision_vision)/data/yolotest"/>
   <!-- 录制视频帧率 -->
   <arg name="video_fps" default="30.0"/>
-  <!-- 是否保存测试视频；默认关闭，避免安装目录产生大文件 -->
-  <arg name="save_video" default="false"/>
+  <!-- 是否保存测试视频；默认开启，便于调试观察 -->
+  <arg name="save_video" default="true"/>
   <!-- 可视化 NMS 阈值，用于过滤低置信度检测框 -->
   <arg name="visual_nms_thresh" default="0.7"/>
 

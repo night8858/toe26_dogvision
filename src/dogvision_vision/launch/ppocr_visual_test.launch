@@ -22,8 +22,8 @@
   <arg name="yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
   <!-- 调试快照保存目录 -->
   <arg name="debug_snapshot_dir" default="$(find-pkg-share dogvision_vision)/data/ocr_debug"/>
-  <!-- 是否保存 PPOCR 推理视频；默认关闭，避免安装目录产生大文件 -->
-  <arg name="save_video" default="false"/>
+  <!-- 是否保存 PPOCR 推理视频；默认开启，便于调试观察 -->
+  <arg name="save_video" default="true"/>
 
   <!-- PP-OCR 节点（可视化测试模式）：实时显示 OCR 检测与识别过程 -->
   <node pkg="dogvision_vision" exec="ppocr_node" name="ppocr_node" output="screen">

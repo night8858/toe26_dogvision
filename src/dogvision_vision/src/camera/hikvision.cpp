@@ -1,4 +1,8 @@
 #include <dogvision_vision/camera/hikvision.hpp>
+
+// Hik/MVS support is currently disabled from CMake and CameraSource.
+// Keep this implementation for future restore.
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -73,6 +77,7 @@ void HikGrab::Hik_init()
         printf("MV_CC_OpenDevice fail! nRet [%x]\n", nRet);
         return ;
     }
+    device_open_ = true;
     
     // 设置触发模式为off
     // set trigger mode as off
@@ -100,10 +105,8 @@ void HikGrab::Hik_init()
     */
     // 开始取流
     // start grab image
-    nRet = MV_CC_StartGrabbing(handle);
-    if (MV_OK != nRet)
+    if (!start_grabbing())
     {
-        printf("MV_CC_StartGrabbing fail! nRet [%x]\n", nRet);
         return ;
     }
     nRet = MV_OK;
@@ -139,42 +142,76 @@ void HikGrab::Hik_init()
  */
 void HikGrab::Hik_end()
 {
-
-    // 停止取流
-    nRet = MV_CC_StopGrabbing(handle);
-    if (MV_OK != nRet)
-    {
-        printf("MV_CC_StopGrabbing fail! nRet [%x]\n", nRet);
-        return ;
-    }
+    stop_grabbing();
 
     // 关闭设备
     // close device
-    nRet = MV_CC_CloseDevice(handle);
-    if (MV_OK != nRet)
+    if (handle != nullptr && device_open_)
     {
-        printf("MV_CC_CloseDevice fail! nRet [%x]\n", nRet);
-        return ;
+        nRet = MV_CC_CloseDevice(handle);
+        if (MV_OK != nRet)
+        {
+            printf("MV_CC_CloseDevice fail! nRet [%x]\n", nRet);
+        }
+        device_open_ = false;
     }
 
     // 销毁句柄
     // destroy handle
-    nRet = MV_CC_DestroyHandle(handle);
+    if (handle != nullptr)
+    {
+        nRet = MV_CC_DestroyHandle(handle);
+        if (MV_OK != nRet)
+        {
+            printf("MV_CC_DestroyHandle fail! nRet [%x]\n", nRet);
+        }
+        handle = nullptr;
+    }
+
+    if (pData != nullptr)
+    {
+        free(pData);
+        pData = nullptr;
+        nDataSize = 0;
+    }
+}
+
+bool HikGrab::start_grabbing()
+{
+    if (handle == nullptr)
+    {
+        return false;
+    }
+    if (grabbing_)
+    {
+        return true;
+    }
+
+    nRet = MV_CC_StartGrabbing(handle);
     if (MV_OK != nRet)
     {
-        printf("MV_CC_DestroyHandle fail! nRet [%x]\n", nRet);
-        return ;
+        printf("MV_CC_StartGrabbing fail! nRet [%x]\n", nRet);
+        return false;
     }
+    grabbing_ = true;
+    return true;
+}
 
-
-    if (nRet != MV_OK)
+bool HikGrab::stop_grabbing()
+{
+    if (handle == nullptr || !grabbing_)
     {
-        if (handle != NULL)
-        {
-            MV_CC_DestroyHandle(handle);
-            handle = NULL;
-        }
+        return true;
     }
+
+    nRet = MV_CC_StopGrabbing(handle);
+    if (MV_OK != nRet)
+    {
+        printf("MV_CC_StopGrabbing fail! nRet [%x]\n", nRet);
+        return false;
+    }
+    grabbing_ = false;
+    return true;
 }
 
 
@@ -193,6 +230,11 @@ void HikGrab::Hik_end()
  */
 bool HikGrab::get_one_frame(cv::Mat& img, int id)
 {
+    if (!grabbing_)
+    {
+        return false;
+    }
+
     // 同步取帧，超时 1000ms
     nRet = MV_CC_GetOneFrameTimeout(handle, pData, nDataSize, &stImageInfo, 1000);
     if (nRet != MV_OK) return false;

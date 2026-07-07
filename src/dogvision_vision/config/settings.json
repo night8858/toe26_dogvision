@@ -66,6 +66,7 @@
     {
       "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
       "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
+      "openvino_device": "CPU",  // OpenVINO 推理设备：CPU / GPU / AUTO:GPU,CPU
 
       // 使用 PP-OCRv5，已转换为 OpenVINO IR 模型
       "ppocr_det_model_bin_path": "models/ppocr/PP-OCRv5_server_det_openvino/inference.bin",
@@ -85,7 +86,7 @@
     {
       "use_grayscale": false,             // true=OCR 输入转三通道灰度，false=原始彩色
       "roi_enabled": true,                // true=只对指定 ROI 做 OCR
-      "roi_mode": "ratio",                // OCR ROI 模式：full/quadrant/ratio
+      "roi_mode": "quadrant",                // OCR ROI 模式：full/quadrant/ratio
       "roi_quadrant": "top_right",        // roi_mode=quadrant 时使用：top_left/top_right/bottom_left/bottom_right/full
       "roi_rect_ratio":
       {
@@ -148,13 +149,14 @@
     // ── 推理结果保存参数 ──
     "output_save":
     {
-      "save_ppocr_video": false,     // 是否保存 PP-OCR 推理可视化视频
+      "save_ppocr_video": true,      // 是否保存 PP-OCR 推理可视化视频
       "ppocr_video_save_dir": "src/dogvision_vision/data/ocr_output/video",
       "ppocr_video_fps": 20.0,       // PP-OCR 推理视频帧率
+      "max_ppocr_videos": 10,        // PP-OCR 推理视频最多保留条数
       "save_ocr_result_images": true, // 是否保存 OCR 稳定结果标注图
       "ocr_result_image_dir": "src/dogvision_vision/data/ocr_debug/auto",
       "max_ocr_result_images": 30,    // OCR 稳定结果图最多保留张数
-      "save_yolo_test_video": false  // 是否保存 YOLO 准确率测试视频
+      "save_yolo_test_video": true   // 是否保存 YOLO 准确率测试视频
     },
 
     // ── 类别名称设置 ──

@@ -18,7 +18,9 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/string.hpp>
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -99,6 +101,12 @@ static void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg,
 static bool take_latest_frame(const std::shared_ptr<LatestFrameBuffer>& buffer,
                               cv::Mat& frame)
 {
+    if (!buffer)
+    {
+        frame.release();
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(buffer->mutex);
     if (!buffer->has_frame || buffer->frame.empty())
     {
@@ -107,6 +115,58 @@ static bool take_latest_frame(const std::shared_ptr<LatestFrameBuffer>& buffer,
     }
     frame = buffer->frame.clone();
     return true;
+}
+
+static void reset_latest_frame(const std::shared_ptr<LatestFrameBuffer>& buffer)
+{
+    if (!buffer)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(buffer->mutex);
+    buffer->frame.release();
+    buffer->stamp = rclcpp::Time();
+    buffer->has_frame = false;
+}
+
+static rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr
+create_image_subscription(const rclcpp::Node::SharedPtr& node,
+                          const std::string& image_topic,
+                          const std::shared_ptr<LatestFrameBuffer>& buffer)
+{
+    return node->create_subscription<sensor_msgs::msg::Image>(
+        image_topic, rclcpp::SensorDataQoS(),
+        [buffer, logger = node->get_logger()](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+            image_callback(msg, buffer, logger);
+        });
+}
+
+static bool wait_for_latest_frame(const rclcpp::Node::SharedPtr& node,
+                                  const std::shared_ptr<LatestFrameBuffer>& buffer,
+                                  const std::string& image_topic,
+                                  cv::Mat& frame,
+                                  int timeout_ms)
+{
+    const auto timeout = std::chrono::milliseconds(std::max(1, timeout_ms));
+    const auto start = std::chrono::steady_clock::now();
+    rclcpp::WallRate wait_rate(100);
+    while (rclcpp::ok() &&
+           std::chrono::steady_clock::now() - start < timeout)
+    {
+        rclcpp::spin_some(node);
+        if (take_latest_frame(buffer, frame))
+        {
+            return true;
+        }
+        wait_rate.sleep();
+    }
+
+    RCLCPP_WARN(node->get_logger(),
+                "No image received on %s within %d ms.",
+                image_topic.c_str(), timeout_ms);
+    frame.release();
+    return false;
 }
 
 static bool run_detection_on_frame(cv::Mat frame,
@@ -171,6 +231,8 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("save_dir", share_dir + "/data/yolorun");
     node->declare_parameter<std::string>("image_source", "camera");
     node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<bool>("dynamic_image_subscription", true);
+    node->declare_parameter<int>("image_wait_timeout_ms", 2000);
 
     const std::string config_path  = node->get_parameter("config_path").as_string();
     const std::string result_topic = node->get_parameter("result_topic").as_string();
@@ -182,6 +244,10 @@ int main(int argc, char** argv)
     const std::string save_dir     = node->get_parameter("save_dir").as_string();
     const std::string image_source = node->get_parameter("image_source").as_string();
     const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const bool dynamic_image_subscription =
+        node->get_parameter("dynamic_image_subscription").as_bool();
+    const int image_wait_timeout_ms =
+        node->get_parameter("image_wait_timeout_ms").as_int();
     const bool use_topic_image = image_source == "topic";
     if (image_source != "camera" && image_source != "topic")
     {
@@ -220,11 +286,10 @@ int main(int argc, char** argv)
     if (use_topic_image)
     {
         frame_buffer = std::make_shared<LatestFrameBuffer>();
-        image_sub = node->create_subscription<sensor_msgs::msg::Image>(
-            image_topic, rclcpp::SensorDataQoS(),
-            [frame_buffer, logger = node->get_logger()](sensor_msgs::msg::Image::ConstSharedPtr msg) {
-                image_callback(msg, frame_buffer, logger);
-            });
+        if (!dynamic_image_subscription)
+        {
+            image_sub = create_image_subscription(node, image_topic, frame_buffer);
+        }
     }
     else
     {
@@ -266,7 +331,10 @@ int main(int argc, char** argv)
                 save_images ? "true" : "false");
     if (use_topic_image)
     {
-        RCLCPP_INFO(node->get_logger(), "Image input: topic %s", image_topic.c_str());
+        RCLCPP_INFO(node->get_logger(),
+                    "Image input: topic %s (%s subscription)",
+                    image_topic.c_str(),
+                    dynamic_image_subscription ? "dynamic" : "continuous");
     }
     else
     {
@@ -315,11 +383,25 @@ int main(int argc, char** argv)
         if (use_topic_image)
         {
             cv::Mat topic_frame;
-            if (!take_latest_frame(frame_buffer, topic_frame))
+            if (dynamic_image_subscription)
             {
-                RCLCPP_WARN(node->get_logger(),
-                            "No image received on %s; skip this YOLO trigger.",
+                reset_latest_frame(frame_buffer);
+                image_sub = create_image_subscription(node, image_topic, frame_buffer);
+                RCLCPP_INFO(node->get_logger(),
+                            "Subscribed to %s for this YOLO trigger.",
                             image_topic.c_str());
+            }
+
+            if (!wait_for_latest_frame(
+                    node, frame_buffer, image_topic, topic_frame,
+                    std::max(1, image_wait_timeout_ms)))
+            {
+                if (dynamic_image_subscription)
+                {
+                    image_sub.reset();
+                    RCLCPP_INFO(node->get_logger(),
+                                "Released image subscription after YOLO timeout.");
+                }
                 continue;
             }
             inference_ok = run_detection_on_frame(
@@ -373,6 +455,12 @@ int main(int argc, char** argv)
         show_viz_image(final_dets, last_frame, class_names, show_window);
         RCLCPP_INFO(node->get_logger(), "Published to %s and %s. Waiting for next trigger.",
                     result_topic.c_str(), kGridTopic);
+        if (use_topic_image && dynamic_image_subscription)
+        {
+            image_sub.reset();
+            RCLCPP_INFO(node->get_logger(),
+                        "Released image subscription after YOLO result.");
+        }
     }
 
     g_running.store(false);

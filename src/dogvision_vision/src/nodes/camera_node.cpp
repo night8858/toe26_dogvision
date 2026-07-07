@@ -12,6 +12,7 @@
 #include <sensor_msgs/msg/image.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 
 #include <opencv2/opencv.hpp>
@@ -32,6 +33,8 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("frame_id", "camera");
     node->declare_parameter<double>("publish_rate", 30.0);
     node->declare_parameter<int>("recover_max_retries", 5);
+    node->declare_parameter<bool>("auto_suspend_stream", true);
+    node->declare_parameter<int>("idle_grace_ms", 500);
 
     const std::string config_path = node->get_parameter("config_path").as_string();
     const std::string image_topic = node->get_parameter("image_topic").as_string();
@@ -39,6 +42,11 @@ int main(int argc, char** argv)
     double publish_rate = node->get_parameter("publish_rate").as_double();
     const int recover_max_retries =
         node->get_parameter("recover_max_retries").as_int();
+    const bool auto_suspend_stream =
+        node->get_parameter("auto_suspend_stream").as_bool();
+    const int idle_grace_ms =
+        static_cast<int>(std::max<int64_t>(
+            0, node->get_parameter("idle_grace_ms").as_int()));
 
     Appconfig config;
     detect_det_ppocr config_loader(nullptr);
@@ -65,11 +73,66 @@ int main(int argc, char** argv)
                 camera.type_name().c_str(), camera.device_id(),
                 camera.width(), camera.height(), publish_rate);
     RCLCPP_INFO(logger, "Publishing raw BGR frames to %s", image_topic.c_str());
+    RCLCPP_INFO(logger, "Auto suspend stream: %s (idle_grace_ms=%d)",
+                auto_suspend_stream ? "enabled" : "disabled", idle_grace_ms);
 
     rclcpp::WallRate rate(publish_rate);
+    const auto idle_grace = std::chrono::milliseconds(idle_grace_ms);
+    std::chrono::steady_clock::time_point no_subscriber_since;
+    bool has_no_subscriber_since = false;
+    bool stream_suspended = false;
     while (rclcpp::ok())
     {
         rclcpp::spin_some(node);
+
+        if (auto_suspend_stream)
+        {
+            const size_t subscriber_count = image_pub->get_subscription_count();
+            const auto now = std::chrono::steady_clock::now();
+            if (subscriber_count == 0)
+            {
+                if (!has_no_subscriber_since)
+                {
+                    no_subscriber_since = now;
+                    has_no_subscriber_since = true;
+                }
+                if (!stream_suspended && now - no_subscriber_since >= idle_grace)
+                {
+                    if (camera.pause_stream())
+                    {
+                        stream_suspended = true;
+                        RCLCPP_INFO(logger,
+                                    "No image subscribers; camera stream suspended.");
+                    }
+                    else
+                    {
+                        RCLCPP_WARN(logger, "Failed to suspend camera stream.");
+                    }
+                }
+                rate.sleep();
+                continue;
+            }
+
+            has_no_subscriber_since = false;
+            if (stream_suspended)
+            {
+                RCLCPP_INFO(logger,
+                            "Image subscriber detected; resuming camera stream.");
+                if (!camera.resume_stream())
+                {
+                    RCLCPP_WARN(logger,
+                                "Failed to resume camera stream, trying recovery...");
+                    if (!camera.recover(std::max(1, recover_max_retries)))
+                    {
+                        RCLCPP_ERROR(logger,
+                                     "Camera recover failed while resuming stream.");
+                        rate.sleep();
+                        continue;
+                    }
+                }
+                stream_suspended = false;
+            }
+        }
 
         cv::Mat frame;
         if (!camera.get_frame(frame))

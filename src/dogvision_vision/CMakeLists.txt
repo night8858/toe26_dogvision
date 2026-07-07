@@ -13,7 +13,7 @@
 #   - OpenVINO 2025 Runtime
 #   - OpenCV 4.x
 #   - jsoncpp
-#   - Hikvision MVS SDK（/opt/MVS）
+#   - Hikvision MVS SDK（/opt/MVS，当前停用）
 #   - libusb-1.0
 # =============================================================================
 
@@ -40,26 +40,27 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
-# ── 海康 MVS SDK 路径 ──
-find_path(MVS_INCLUDE_DIR
-  NAMES MvCameraControl.h
-  PATHS /opt/MVS/include
-  NO_DEFAULT_PATH
-)
-find_library(MVS_LIB
-  NAMES MvCameraControl
-  PATHS /opt/MVS/lib /opt/MVS/lib/64 /opt/MVS/lib/32
-  NO_DEFAULT_PATH
-)
+# # ── 海康 MVS SDK 路径 ──   目前不使用
+# find_path(MVS_INCLUDE_DIR
+#   NAMES MvCameraControl.h
+#   PATHS /opt/MVS/include
+#   NO_DEFAULT_PATH
+# )
+# find_library(MVS_LIB
+#   NAMES MvCameraControl
+#   PATHS /opt/MVS/lib /opt/MVS/lib/64 /opt/MVS/lib/32
+#   NO_DEFAULT_PATH
+# )
 
-if(NOT MVS_INCLUDE_DIR OR NOT MVS_LIB)
-  message(FATAL_ERROR "Hikvision MVS SDK is required. Expected /opt/MVS/include/MvCameraControl.h and MvCameraControl library.")
-endif()
+# 当前不使用 Hik/MVS，保留上方查找逻辑供以后恢复。
+# if(NOT MVS_INCLUDE_DIR OR NOT MVS_LIB)
+#   message(FATAL_ERROR "Hikvision MVS SDK is required. Expected /opt/MVS/include/MvCameraControl.h and MvCameraControl library.")
+# endif()
 
 # ── 核心库：包含所有非节点模块 ──
 add_library(dogvision_vision_lib
   src/camera/camera_source.cpp   # settings.json 驱动的相机适配层
-  src/camera/hikvision.cpp       # 海康 MVS 相机封装
+  #src/camera/hikvision.cpp       # 海康 MVS 相机封装
   src/camera/usbcam.cpp          # USB 相机封装
   src/core/detector.cpp          # 检测器基类（加载配置、鱼眼去畸变）
   src/math/math_generator.cpp    # 数学题生成器
@@ -75,13 +76,13 @@ target_include_directories(dogvision_vision_lib PUBLIC
   $<INSTALL_INTERFACE:include>
   ${JSONCPP_INCLUDE_DIRS}
   ${LIBUSB_INCLUDE_DIRS}
-  ${MVS_INCLUDE_DIR}
+  # ${MVS_INCLUDE_DIR}
 )
 target_link_libraries(dogvision_vision_lib
   ${OpenCV_LIBRARIES}
   ${JSONCPP_LIBRARIES}
   ${LIBUSB_LIBRARIES}
-  ${MVS_LIB}
+  # ${MVS_LIB}
   Threads::Threads
 )
 
@@ -204,7 +205,7 @@ install(DIRECTORY launch
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_include_directories(include ${JSONCPP_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIRS} ${MVS_INCLUDE_DIR})
-ament_export_libraries(dogvision_vision_lib ${JSONCPP_LIBRARIES} ${LIBUSB_LIBRARIES} ${MVS_LIB})
+ament_export_include_directories(include ${JSONCPP_INCLUDE_DIRS} ${LIBUSB_INCLUDE_DIRS})
+ament_export_libraries(dogvision_vision_lib ${JSONCPP_LIBRARIES} ${LIBUSB_LIBRARIES})
 ament_export_dependencies(OpenCV OpenVINO)
 ament_package()

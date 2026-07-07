@@ -127,13 +127,14 @@ typedef struct
     float yolo_enhance_saturation_scale = 1.3f;   ///< 饱和度缩放系数
 
     // ── 输出保存参数 ──
-    bool save_ppocr_video = false; ///< 是否保存 PP-OCR 推理可视化视频
+    bool save_ppocr_video = true; ///< 是否保存 PP-OCR 推理可视化视频
     std::string ppocr_video_save_dir; ///< PP-OCR 推理视频保存目录
     double ppocr_video_fps = 20.0; ///< PP-OCR 推理视频帧率
+    int max_ppocr_videos = 10; ///< PP-OCR 推理视频最多保留条数
     bool save_ocr_result_images = true; ///< 是否保存 OCR 稳定结果标注图
     std::string ocr_result_image_dir; ///< OCR 稳定结果图保存目录
     int max_ocr_result_images = 30; ///< OCR 稳定结果图最多保留张数
-    bool save_yolo_test_video = false; ///< 是否保存 YOLO 准确率测试视频
+    bool save_yolo_test_video = true; ///< 是否保存 YOLO 准确率测试视频
 
     bool enable_undistort = true; ///< 是否启用鱼眼去畸变
     float D_matrix[4]; ///< 鱼眼畸变参数 D 矩阵（4×1）
@@ -183,9 +184,9 @@ typedef struct
 typedef struct
 {
     s_detector_params detect_config;          ///< 检测器全局参数
-    std::string camera_type = "hik";          ///< 当前相机类型（hik / usb）
+    std::string camera_type = "usb";          ///< 当前相机类型（当前仅启用 usb）
     int usb_camera_index = 0;                 ///< USB 相机配置索引（0-3）
-    s_hikcamera_params hikcamera_config;      ///< 海康相机参数
+    s_hikcamera_params hikcamera_config;      ///< 海康相机参数（当前停用）
     s_usbcamera_params usbcamera_config[4];   ///< USB 相机参数（最多 4 个）
 
 }Appconfig;

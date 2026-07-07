@@ -7,12 +7,13 @@
 CameraSource::CameraSource(const Appconfig& config)
     : camera_type_(config.camera_type)
 {
-    hik_params_.device_id = config.hikcamera_config.device_id;
-    hik_params_.width = config.hikcamera_config.width;
-    hik_params_.height = config.hikcamera_config.height;
-    hik_params_.offset_x = config.hikcamera_config.offset_x;
-    hik_params_.offset_y = config.hikcamera_config.offset_y;
-    hik_params_.exposure = config.hikcamera_config.exposure;
+    // Hik/MVS is currently disabled. Keep this block for future restore.
+    // hik_params_.device_id = config.hikcamera_config.device_id;
+    // hik_params_.width = config.hikcamera_config.width;
+    // hik_params_.height = config.hikcamera_config.height;
+    // hik_params_.offset_x = config.hikcamera_config.offset_x;
+    // hik_params_.offset_y = config.hikcamera_config.offset_y;
+    // hik_params_.exposure = config.hikcamera_config.exposure;
 
     const int usb_index = config.usb_camera_index;
     usb_params_ = config.usbcamera_config[usb_index];
@@ -25,6 +26,10 @@ CameraSource::~CameraSource()
 
 bool CameraSource::init()
 {
+    if (stream_paused_)
+    {
+        return resume_stream();
+    }
     if (initialized_)
     {
         return true;
@@ -32,7 +37,9 @@ bool CameraSource::init()
 
     if (camera_type_ == "hik")
     {
-        return init_hik();
+        std::cerr << "Hik/MVS camera support is disabled. Set camera.type to \"usb\"."
+                  << std::endl;
+        return false;
     }
     if (camera_type_ == "usb")
     {
@@ -43,13 +50,15 @@ bool CameraSource::init()
     return false;
 }
 
-bool CameraSource::init_hik()
-{
-    hik_ = std::make_unique<HikGrab>(hik_params_);
-    hik_->Hik_init();
-    initialized_ = true;
-    return true;
-}
+// Hik/MVS is currently disabled. Keep this implementation for future restore.
+// bool CameraSource::init_hik()
+// {
+//     hik_ = std::make_unique<HikGrab>(hik_params_);
+//     hik_->Hik_init();
+//     initialized_ = true;
+//     stream_paused_ = false;
+//     return true;
+// }
 
 bool CameraSource::init_usb()
 {
@@ -87,6 +96,7 @@ bool CameraSource::init_usb()
     }
 
     initialized_ = true;
+    stream_paused_ = false;
     std::cout << "USB camera initialized successfully (source "
               << usb_source << ", " << usb_params_.width << "x"
               << usb_params_.height << " @" << usb_params_.fps << " FPS)" << std::endl;
@@ -96,6 +106,10 @@ bool CameraSource::init_usb()
 bool CameraSource::get_frame(cv::Mat& frame)
 {
     frame.release();
+    if (stream_paused_ && !resume_stream())
+    {
+        return false;
+    }
     if (!initialized_ && !init())
     {
         return false;
@@ -103,7 +117,9 @@ bool CameraSource::get_frame(cv::Mat& frame)
 
     if (camera_type_ == "hik")
     {
-        return hik_ && hik_->get_one_frame(frame, hik_params_.device_id) && !frame.empty();
+        std::cerr << "Hik/MVS camera support is disabled. Set camera.type to \"usb\"."
+                  << std::endl;
+        return false;
     }
 
     if (camera_type_ == "usb")
@@ -142,17 +158,14 @@ void CameraSource::shutdown()
 {
     if (camera_type_ == "hik")
     {
-        if (hik_)
-        {
-            hik_->Hik_end();
-            hik_.reset();
-        }
+        // Hik/MVS is currently disabled. Restore Hik_end() here if needed.
     }
     else if (camera_type_ == "usb")
     {
         shutdown_usb();
     }
     initialized_ = false;
+    stream_paused_ = false;
 }
 
 void CameraSource::shutdown_usb()
@@ -163,19 +176,67 @@ void CameraSource::shutdown_usb()
     }
 }
 
+bool CameraSource::pause_stream()
+{
+    if (!initialized_ || stream_paused_)
+    {
+        return true;
+    }
+
+    if (camera_type_ == "hik")
+    {
+        std::cerr << "Hik/MVS camera support is disabled. Set camera.type to \"usb\"."
+                  << std::endl;
+        return false;
+    }
+
+    if (camera_type_ == "usb")
+    {
+        shutdown_usb();
+        initialized_ = false;
+        stream_paused_ = true;
+        return true;
+    }
+
+    return false;
+}
+
+bool CameraSource::resume_stream()
+{
+    if (!stream_paused_)
+    {
+        return initialized_ || init();
+    }
+
+    if (camera_type_ == "hik")
+    {
+        std::cerr << "Hik/MVS camera support is disabled. Set camera.type to \"usb\"."
+                  << std::endl;
+        return false;
+    }
+
+    if (camera_type_ == "usb")
+    {
+        stream_paused_ = false;
+        return init_usb();
+    }
+
+    return false;
+}
+
 int CameraSource::device_id() const
 {
-    return camera_type_ == "usb" ? usb_params_.device_id : hik_params_.device_id;
+    return usb_params_.device_id;
 }
 
 int CameraSource::width() const
 {
-    return camera_type_ == "usb" ? usb_params_.width : hik_params_.width;
+    return usb_params_.width;
 }
 
 int CameraSource::height() const
 {
-    return camera_type_ == "usb" ? usb_params_.height : hik_params_.height;
+    return usb_params_.height;
 }
 
 int CameraSource::fps() const

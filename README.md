@@ -53,6 +53,16 @@ sudo mv l_openvino_toolkit_ubuntu24_2024.6.0.17404.4c0f47d2335_x86_64 /opt/intel
 source /opt/intel/openvino_2024.6.0/setupvars.sh
 ```
 
+如需使用 OpenVINO GPU 推理，除 OpenVINO 本体外，还需要安装 Intel GPU 的 OpenCL/Level Zero 运行时，并把当前用户加入 `render` 组：
+
+```bash
+sudo apt update
+sudo apt install -y ocl-icd-libopencl1 intel-opencl-icd intel-level-zero-gpu level-zero
+sudo usermod -a -G render $LOGNAME
+```
+
+执行 `usermod` 后需要重新登录或重启终端会话。Intel 独显环境可能还需要额外安装 Intel graphics APT 仓库中的内核模块与驱动，具体以 OpenVINO 官方 GPU 配置文档为准。
+
 Hikvision MVS SDK 是强制依赖。请安装到默认路径，使以下文件存在：
 
 ```text
@@ -109,10 +119,13 @@ src/dogvision_vision/config/settings.json
     "ppocr_rec_model_xml_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.xml",
     "ppocr_rec_model_bin_path": "models/ppocr/PP-OCRv5_server_rec_openvino/inference.bin",
     "ppocr_dict_path": "models/ppocr/PP-OCRv5_server_rec_infer/inference.yml",
-    "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
+    "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt",
+    "openvino_device": "CPU"
   }
 }
 ```
+
+`openvino_device` 控制 YOLO 和 PPOCR 的默认 OpenVINO 推理设备，可设为 `"CPU"`、`"GPU"` 或 `"AUTO:GPU,CPU"`。如果只想单独覆盖某个模块，可在同一 `path` 节中添加 `yolo_device`、`ppocr_det_device`、`ppocr_rec_device` 或 `ppocr_cls_device`。
 
 机械臂任务位置参数位于：
 
@@ -150,11 +163,18 @@ ros2 launch dogvision_bringup full_system.launch enable_vision:=false
 ros2 launch dogvision_bringup vision.launch
 ```
 
-YOLO 准确性测试，会打开可视化窗口；需要保存 MP4 标注视频时显式开启 `save_video`：
+默认启动时，视觉空闲后会自动暂停相机取流；下一次 `/yolo/trigger` 或
+`/ocr/trigger` 会自动恢复。需要恢复旧的持续取流行为时：
+
+```bash
+ros2 launch dogvision_bringup vision.launch auto_suspend_stream:=false
+```
+
+YOLO 准确性测试，会打开可视化窗口并默认保存 MP4 标注视频；需要关闭时传 `save_video:=false`：
 
 ```bash
 ros2 launch dogvision_vision yolo_accuracy_test.launch
-ros2 launch dogvision_vision yolo_accuracy_test.launch save_video:=true
+ros2 launch dogvision_vision yolo_accuracy_test.launch save_video:=false
 ```
 
 PPOCR 连续测试模式：
@@ -234,13 +254,15 @@ ros2 run dogvision_vision math_generator_node
 | `enable_undistort` | `true` | YOLO 是否启用去畸变 |
 | `save_images` | `true` | 是否保存每次触发后的 YOLO 标注结果图，自动保留最新 30 张 |
 | `save_dir` | `<share>/dogvision_vision/data/yolorun` | YOLO 结果图保存目录，匹配 `yolo_*.jpg` 的旧图会自动清理 |
+| `auto_suspend_stream` | `true` | 视觉空闲时暂停相机取流；设为 `false` 时持续发布 `/camera/image_raw` |
+| `idle_grace_ms` | `500` | 图像话题没有订阅者后，进入暂停前等待的毫秒数 |
 | `yolo_enable_keyboard_trigger` | `false` | 组合启动时关闭 YOLO Enter，避免争抢 stdin |
 | `ppocr_mode` | `production` | PPOCR 模式，支持 `production` 或 `test` |
 | `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示整帧结果窗口 |
 | `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选及白色筛选状态 |
 | `ppocr_show_debug_panels` | `$(var debug)` | PPOCR 是否显示调试拼图窗口 |
 | `ppocr_enable_keyboard_trigger` | `true` | 组合启动时由 Enter 触发 OCR |
-| `ppocr_save_video` | `false` | 是否保存 PPOCR 推理视频 |
+| `ppocr_save_video` | `true` | 是否保存 PPOCR 推理视频；默认开启，传 `false` 可临时关闭 |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
 
 ### `dogvision_vision yolo_accuracy_test.launch`
@@ -250,8 +272,8 @@ ros2 run dogvision_vision math_generator_node
 | `config_path` | `<share>/dogvision_vision/config/settings.json` | 视觉配置文件 |
 | `enable_undistort` | `true` | 是否启用去畸变 |
 | `output_dir` | `<share>/dogvision_vision/data/yolotest` | 测试视频输出目录 |
-| `video_fps` | `20.0` | 保存视频的帧率 |
-| `save_video` | `false` | 是否保存测试视频 |
+| `video_fps` | `30.0` | 保存视频的帧率 |
+| `save_video` | `true` | 是否保存测试视频；默认开启，传 `false` 可临时关闭 |
 | `visual_nms_thresh` | `0.7` | 测试可视化 NMS 阈值，较高时更容易保留同帧多个目标 |
 
 ### `dogvision_arm arm_control.launch` 与 `arm_test.launch`
@@ -283,7 +305,9 @@ ros2 run dogvision_vision math_generator_node
 | `image_topic` | `/camera/image_raw` | `camera_node` 发布、YOLO/PPOCR 订阅的共享图像话题 |
 | `camera_frame_id` | `camera` | 共享图像消息的 `frame_id` |
 | `camera_publish_rate` | `30.0` | `camera_node` 发布帧率 |
-| `ppocr_save_video` | `false` | 是否保存 PPOCR 推理视频 |
+| `auto_suspend_stream` | `true` | YOLO/OCR 未触发时自动暂停相机取流，并让推理节点只在触发期间订阅图像 |
+| `idle_grace_ms` | `500` | 没有图像订阅者后进入暂停前的宽限时间 |
+| `ppocr_save_video` | `true` | 是否保存 PPOCR 推理视频；默认开启，最多保留最近 10 条 PPOCR 视频 |
 | `ppocr_mode` | `production` | PPOCR 模式 |
 | `ppocr_show_visual` | `$(var debug)` | PPOCR 是否显示可视化窗口 |
 | `ppocr_show_ocr_roi` | `$(var debug)` | PPOCR 是否显示当前最佳算术候选窗口 |
