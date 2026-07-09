@@ -316,6 +316,7 @@ ros2 run dogvision_vision math_generator_node
 | `ppocr_result_image_dir` | 空字符串 | PPOCR 自动结果图目录；为空时使用 `<debug_snapshot_dir>/auto` |
 | `ppocr_max_result_images` | `30` | PPOCR 自动结果图最多保留张数 |
 | `ocr_yaml_path` | `<share>/dogvision_vision/data/ocr_output/ocr_results.yaml` | PPOCR test 模式输出 YAML |
+| `task_topic` | `/task` | PPOCR production 模式左右 ROI 选择输入，接收 `left`/`right` |
 
 `ppocr_result_image_dir` 留空时，`ppocr_node` 使用 `settings.json` 中
 `output_save.ocr_result_image_dir`；ROS 参数仍可临时覆盖该配置。
@@ -331,6 +332,7 @@ ros2 run dogvision_vision math_generator_node
 | `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `start_infer` 触发一次单帧推理 |
 | `/yolo/result` | `std_msgs/msg/String` | 发布 | transient_local YOLO JSON 结果 |
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | transient_local 2x4 网格 JSON |
+| `/task` | `std_msgs/msg/String` | 订阅 | PPOCR 下一次触发使用的 ROI 侧别，`left` 或 `right` |
 | `/ocr/trigger` | `std_msgs/msg/String` | 订阅 | 启动或重置生产模式 OCR 持续跟踪 |
 | `/ocr/result` | `std_msgs/msg/String` | 发布 | transient_local 稳定 OCR JSON 结果 |
 

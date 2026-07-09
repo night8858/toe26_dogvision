@@ -48,6 +48,37 @@ void write_file(const std::string& path, const std::string& content)
     out << content;
 }
 
+std::string make_loader_config_json(const std::string& ocr_math_filter)
+{
+    return std::string(R"({
+  "path": {
+    "openvino_bin_file_path": "",
+    "openvino_xml_file_path": "",
+    "openvino_device": "CPU",
+    "ppocr_det_model_path": "",
+    "ppocr_rec_model_path": "",
+    "ppocr_cls_model_path": "",
+    "ppocr_det_model_xml_path": "",
+    "ppocr_det_model_bin_path": "",
+    "ppocr_rec_model_xml_path": "",
+    "ppocr_rec_model_bin_path": "",
+    "ppocr_dict_path": "",
+    "ppocr_allowed_chars_path": ""
+  },
+  "ocr_math_filter": )") + ocr_math_filter + R"(,
+  "NCHW": { "batch_size": 1, "C": 3, "W": 640, "H": 640 },
+  "img": { "type": 0, "width": 1920, "height": 1080 },
+  "lens_distortion": { "enable_undistort": false },
+  "thresh": { "nms_thresh": 0.45, "bbox_conf_thresh": 0.25, "merge_thresh": 0.5 },
+  "nums": { "classes": 4, "cls0": "0", "cls1": "1", "cls2": "2", "cls3": "3" },
+  "camera": { "type": "usb", "usb_index": 0 },
+  "usbcamera0": { "device_path": "", "device_id": 0, "width": 640, "height": 480, "FPS": 30 },
+  "usbcamera1": { "device_path": "", "device_id": 1, "width": 640, "height": 480, "FPS": 30 },
+  "usbcamera2": { "device_path": "", "device_id": 2, "width": 640, "height": 480, "FPS": 30 },
+  "usbcamera3": { "device_path": "", "device_id": 3, "width": 640, "height": 480, "FPS": 30 }
+})";
+}
+
 OCRItem make_item(
     const std::string& text,
     const cv::Rect& bounds,
@@ -124,6 +155,22 @@ void test_ocr_roi_selection()
     expect(roi == cv::Rect(960, 0, 960, 540),
            "ratio OCR ROI was not converted to top-right half frame");
 
+    config.ocr_roi_rect_ratio = config.ocr_left_roi_rect_ratio;
+    roi = select_ocr_roi_rect(frame_size, config);
+    expect(roi == cv::Rect(0, 0, 1920, 1080),
+           "default left task ROI should initially match full-frame fallback");
+
+    config.ocr_left_roi_rect_ratio = cv::Rect2d(0.0, 0.0, 0.5, 0.5);
+    config.ocr_right_roi_rect_ratio = cv::Rect2d(0.5, 0.0, 0.5, 0.5);
+    config.ocr_roi_rect_ratio = config.ocr_left_roi_rect_ratio;
+    roi = select_ocr_roi_rect(frame_size, config);
+    expect(roi == cv::Rect(0, 0, 960, 540),
+           "left task OCR ROI was not converted to top-left half frame");
+    config.ocr_roi_rect_ratio = config.ocr_right_roi_rect_ratio;
+    roi = select_ocr_roi_rect(frame_size, config);
+    expect(roi == cv::Rect(960, 0, 960, 540),
+           "right task OCR ROI was not converted to top-right half frame");
+
     config.ocr_roi_mode = "quadrant";
     config.ocr_roi_quadrant = "bottom_left";
     roi = select_ocr_roi_rect(frame_size, config);
@@ -138,6 +185,91 @@ void test_ocr_roi_selection()
     config.ocr_roi_rect_ratio = cv::Rect2d(0.8, 0.0, 0.3, 0.5);
     expect_throw([&] { select_ocr_roi_rect(frame_size, config); },
                  "out-of-bounds ratio OCR ROI must be rejected");
+}
+
+void test_ocr_task_roi_config_loading()
+{
+    const std::string fallback_path =
+        "/tmp/dogvision_test_ppocr_task_roi_fallback.json";
+    write_file(
+        fallback_path,
+        make_loader_config_json(R"({
+    "use_grayscale": false,
+    "roi_enabled": true,
+    "roi_mode": "ratio",
+    "roi_quadrant": "top_right",
+    "roi_rect_ratio": { "x": 0.25, "y": 0.10, "w": 0.50, "h": 0.40 },
+    "min_surround_white_ratio": 0.50,
+    "surround_margin_ratio": 0.50,
+    "white_s_max": 110,
+    "white_v_min": 50
+  })"));
+
+    Appconfig fallback_config;
+    detect_rec_ppocr fallback_loader(nullptr);
+    fallback_loader.load_config(fallback_config, fallback_path);
+    const cv::Rect2d expected_fallback(0.25, 0.10, 0.50, 0.40);
+    expect(fallback_config.detect_config.ocr_roi_rect_ratio == expected_fallback,
+           "base OCR ROI ratio was not loaded");
+    expect(fallback_config.detect_config.ocr_left_roi_rect_ratio == expected_fallback,
+           "left OCR ROI did not fall back to base ratio");
+    expect(fallback_config.detect_config.ocr_right_roi_rect_ratio == expected_fallback,
+           "right OCR ROI did not fall back to base ratio");
+
+    const std::string explicit_path =
+        "/tmp/dogvision_test_ppocr_task_roi_explicit.json";
+    write_file(
+        explicit_path,
+        make_loader_config_json(R"({
+    "use_grayscale": false,
+    "roi_enabled": true,
+    "roi_mode": "ratio",
+    "roi_quadrant": "top_right",
+    "roi_rect_ratio": { "x": 0.50, "y": 0.00, "w": 0.50, "h": 0.50 },
+    "left_roi_rect_ratio": { "x": 0.00, "y": 0.00, "w": 0.50, "h": 0.50 },
+    "right_roi_rect_ratio": { "x": 0.50, "y": 0.00, "w": 0.50, "h": 0.50 },
+    "min_surround_white_ratio": 0.50,
+    "surround_margin_ratio": 0.50,
+    "white_s_max": 110,
+    "white_v_min": 50
+  })"));
+
+    Appconfig explicit_config;
+    detect_rec_ppocr explicit_loader(nullptr);
+    explicit_loader.load_config(explicit_config, explicit_path);
+    expect(explicit_config.detect_config.ocr_left_roi_rect_ratio ==
+               cv::Rect2d(0.0, 0.0, 0.5, 0.5),
+           "explicit left OCR ROI was not loaded");
+    expect(explicit_config.detect_config.ocr_right_roi_rect_ratio ==
+               cv::Rect2d(0.5, 0.0, 0.5, 0.5),
+           "explicit right OCR ROI was not loaded");
+
+    const std::string invalid_path =
+        "/tmp/dogvision_test_ppocr_task_roi_invalid.json";
+    write_file(
+        invalid_path,
+        make_loader_config_json(R"({
+    "use_grayscale": false,
+    "roi_enabled": true,
+    "roi_mode": "ratio",
+    "roi_quadrant": "top_right",
+    "roi_rect_ratio": { "x": 0.50, "y": 0.00, "w": 0.50, "h": 0.50 },
+    "left_roi_rect_ratio": { "x": 0.00, "y": 0.00, "w": 0.50, "h": 0.50 },
+    "right_roi_rect_ratio": { "x": 0.80, "y": 0.00, "w": 0.50, "h": 0.50 },
+    "min_surround_white_ratio": 0.50,
+    "surround_margin_ratio": 0.50,
+    "white_s_max": 110,
+    "white_v_min": 50
+  })"));
+
+    Appconfig invalid_config;
+    detect_rec_ppocr invalid_loader(nullptr);
+    expect_throw([&] { invalid_loader.load_config(invalid_config, invalid_path); },
+                 "out-of-bounds right OCR ROI must be rejected");
+
+    std::remove(fallback_path.c_str());
+    std::remove(explicit_path.c_str());
+    std::remove(invalid_path.c_str());
 }
 
 void test_strict_expression_parser()
@@ -307,6 +439,7 @@ int main()
 {
     test_full_frame_grayscale();
     test_ocr_roi_selection();
+    test_ocr_task_roi_config_loading();
     test_strict_expression_parser();
     test_surround_white_ratio_and_edge_clipping();
     test_candidate_grouping_and_selection();

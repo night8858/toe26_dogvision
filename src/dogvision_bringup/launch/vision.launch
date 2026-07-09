@@ -52,6 +52,8 @@
   <arg name="ppocr_max_result_images" default="30"/>
   <!-- OCR 结果 YAML 输出路径 -->
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
+  <!-- OCR 左右任务选择话题，std_msgs/msg/String: left/right -->
+  <arg name="task_topic" default="/task"/>
 
   <!-- 共享相机采集节点：组合启动时唯一直接访问物理相机的节点 -->
   <node pkg="dogvision_vision" exec="camera_node" name="camera_node" output="screen" if="$(var enable_camera)">
@@ -91,6 +93,7 @@
     <param name="result_image_dir" value="$(var ppocr_result_image_dir)" type="str"/>
     <param name="max_result_images" value="$(var ppocr_max_result_images)" type="int"/>
     <param name="yaml_path" value="$(var ocr_yaml_path)" type="str"/>
+    <param name="task_topic" value="$(var task_topic)" type="str"/>
     <param name="dynamic_image_subscription" value="$(var auto_suspend_stream)" type="bool"/>
   </node>
 </launch>

@@ -69,6 +69,8 @@
   <arg name="ppocr_max_result_images" default="30"/>
   <!-- OCR 结果 YAML 输出路径 -->
   <arg name="ocr_yaml_path" default="$(find-pkg-share dogvision_vision)/data/ocr_output/ocr_results.yaml"/>
+  <!-- OCR 左右任务选择话题，std_msgs/msg/String: left/right -->
+  <arg name="task_topic" default="/task"/>
 
   <!-- ==================== 包含子启动文件 ==================== -->
   <!-- 引入机械臂控制启动文件 -->
@@ -107,5 +109,6 @@
     <arg name="ppocr_result_image_dir" value="$(var ppocr_result_image_dir)"/>
     <arg name="ppocr_max_result_images" value="$(var ppocr_max_result_images)"/>
     <arg name="ocr_yaml_path" value="$(var ocr_yaml_path)"/>
+    <arg name="task_topic" value="$(var task_topic)"/>
   </include>
 </launch>

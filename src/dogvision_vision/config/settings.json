@@ -90,10 +90,24 @@
       "roi_quadrant": "top_right",        // roi_mode=quadrant 时使用：top_left/top_right/bottom_left/bottom_right/full
       "roi_rect_ratio":
       {
-        "x": 0.50,                        // roi_mode=ratio 时使用，左上角 X 比例 [0,1)
+        "x": 0.00,                        // roi_mode=ratio 时使用，左上角 X 比例 [0,1)
         "y": 0.00,                        // roi_mode=ratio 时使用，左上角 Y 比例 [0,1)
         "w": 0.50,                        // roi_mode=ratio 时使用，宽度比例 (0,1]
         "h": 0.50                         // roi_mode=ratio 时使用，高度比例 (0,1]
+      },
+      "left_roi_rect_ratio":
+      {
+        "x": 0.00,                        // /task=left 时使用，左上角 X 比例 [0,1)
+        "y": 0.00,                        // /task=left 时使用，左上角 Y 比例 [0,1)
+        "w": 0.50,                        // /task=left 时使用，宽度比例 (0,1]
+        "h": 0.50                         // /task=left 时使用，高度比例 (0,1]
+      },
+      "right_roi_rect_ratio":
+      {
+        "x": 0.50,                        // /task=right 时使用，左上角 X 比例 [0,1)
+        "y": 0.00,                        // /task=right 时使用，左上角 Y 比例 [0,1)
+        "w": 0.50,                        // /task=right 时使用，宽度比例 (0,1]
+        "h": 0.50                         // /task=right 时使用，高度比例 (0,1]
       },
       "min_surround_white_ratio": 0.50,   // 数学题外围环带最小白色比例
       "surround_margin_ratio": 0.50,      // 环带宽度/平均文字高度

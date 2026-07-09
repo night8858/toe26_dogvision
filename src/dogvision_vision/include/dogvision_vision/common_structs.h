@@ -104,6 +104,9 @@ typedef struct
     std::string ocr_roi_mode = "full"; ///< OCR ROI 模式：full/quadrant/ratio
     std::string ocr_roi_quadrant = "full"; ///< OCR ROI 象限：full/top_left/top_right/bottom_left/bottom_right
     cv::Rect2d ocr_roi_rect_ratio{0.0, 0.0, 1.0, 1.0}; ///< 自定义 OCR ROI 比例坐标 x/y/w/h
+    cv::Rect2d ocr_left_roi_rect_ratio{0.0, 0.0, 1.0, 1.0}; ///< 左侧任务 OCR ROI 比例坐标 x/y/w/h
+    cv::Rect2d ocr_right_roi_rect_ratio{0.0, 0.0, 1.0, 1.0}; ///< 右侧任务 OCR ROI 比例坐标 x/y/w/h
+    std::string ocr_roi_runtime_label; ///< 运行时 ROI 标签，用于日志显示 left/right
     double ocr_math_min_surround_white_ratio = 0.50; ///< 最小外围白色比例
     double ocr_math_surround_margin_ratio = 0.50; ///< 外围环带宽度/平均文字高度
     int ocr_math_white_s_max = 110; ///< HSV 白色区域 S 通道上限

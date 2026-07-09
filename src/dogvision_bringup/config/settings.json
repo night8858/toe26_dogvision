@@ -90,6 +90,20 @@
         "w": 0.50,
         "h": 0.50
       },
+      "left_roi_rect_ratio":
+      {
+        "x": 0.00,
+        "y": 0.00,
+        "w": 0.50,
+        "h": 0.50
+      },
+      "right_roi_rect_ratio":
+      {
+        "x": 0.50,
+        "y": 0.00,
+        "w": 0.50,
+        "h": 0.50
+      },
       "min_surround_white_ratio": 0.50,
       "surround_margin_ratio": 0.50,
       "white_s_max": 110,

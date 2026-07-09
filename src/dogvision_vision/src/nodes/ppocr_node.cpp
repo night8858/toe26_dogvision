@@ -62,6 +62,12 @@ constexpr char kOcrDebugWindowName[] = "Math OCR Debug";
 std::atomic<bool> g_ocr_triggered{false};
 std::atomic<bool> g_ocr_running{true};
 
+struct OcrTaskState
+{
+    std::mutex mutex;
+    std::string side = "right";
+};
+
 struct OCRModelPaths
 {
     std::string model_path;
@@ -119,11 +125,44 @@ static OcrRoiSelection select_ocr_roi(const cv::Mat& frame,
 {
     cv::Rect roi = select_ocr_roi_rect(frame.size(), ocr_config);
     std::string name = "full";
-    if (ocr_config.ocr_roi_enabled && ocr_config.ocr_roi_mode == "quadrant")
+    if (ocr_config.ocr_roi_enabled && !ocr_config.ocr_roi_runtime_label.empty())
+        name = ocr_config.ocr_roi_runtime_label;
+    else if (ocr_config.ocr_roi_enabled && ocr_config.ocr_roi_mode == "quadrant")
         name = ocr_config.ocr_roi_quadrant;
     else if (ocr_config.ocr_roi_enabled && ocr_config.ocr_roi_mode == "ratio")
         name = "ratio";
     return OcrRoiSelection{name, roi};
+}
+
+static std::string normalize_task_side(std::string value)
+{
+    const auto not_space = [](unsigned char ch)
+    {
+        return !std::isspace(ch);
+    };
+    value.erase(value.begin(),
+                std::find_if(value.begin(), value.end(), not_space));
+    value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(),
+                value.end());
+    std::transform(
+        value.begin(), value.end(), value.begin(),
+        [](unsigned char ch)
+        {
+            return static_cast<char>(std::tolower(ch));
+        });
+    return value;
+}
+
+static s_detector_params task_roi_config(const s_detector_params& base_config,
+                                         const std::string& task_side)
+{
+    s_detector_params config = base_config;
+    config.ocr_roi_runtime_label = task_side;
+    if (task_side == "left")
+        config.ocr_roi_rect_ratio = base_config.ocr_left_roi_rect_ratio;
+    else
+        config.ocr_roi_rect_ratio = base_config.ocr_right_roi_rect_ratio;
+    return config;
 }
 
 static OCRBox offset_ocr_box(OCRBox box, const cv::Point2f& offset)
@@ -1280,12 +1319,34 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                                bool save_result_images,
                                const std::string& result_image_dir,
                                int max_result_images,
-                               bool dynamic_image_subscription)
+                               bool dynamic_image_subscription,
+                               const std::string& task_topic)
 {
     auto logger = node->get_logger();
     auto latched_qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
     auto trigger_sub = node->create_subscription<std_msgs::msg::String>(
         "/ocr/trigger", rclcpp::QoS(1), ocr_trigger_callback);
+    auto task_state = std::make_shared<OcrTaskState>();
+    auto task_sub = node->create_subscription<std_msgs::msg::String>(
+        task_topic, rclcpp::QoS(10),
+        [task_state, task_topic, logger](const std_msgs::msg::String::SharedPtr msg)
+        {
+            const std::string side = normalize_task_side(msg->data);
+            if (side != "left" && side != "right")
+            {
+                RCLCPP_WARN(
+                    logger,
+                    "Ignoring %s value '%s'; expected 'left' or 'right'.",
+                    task_topic.c_str(),
+                    msg->data.c_str());
+                return;
+            }
+
+            std::lock_guard<std::mutex> lock(task_state->mutex);
+            task_state->side = side;
+            RCLCPP_INFO(logger, "Task side  : %s (next OCR trigger)",
+                        side.c_str());
+        });
     auto result_pub = node->create_publisher<std_msgs::msg::String>("/ocr/result", latched_qos);
     auto answer_qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile();
     auto answer_pub = node->create_publisher<std_msgs::msg::UInt8>("/ocr/answer", answer_qos);
@@ -1305,6 +1366,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
 
     RCLCPP_INFO(logger, "MODE       : PRODUCTION (trigger-based)");
     RCLCPP_INFO(logger, "Subscribed : /ocr/trigger");
+    RCLCPP_INFO(logger, "Subscribed : %s (left/right)", task_topic.c_str());
     RCLCPP_INFO(logger, "Publishing : /ocr/result (transient_local)");
     RCLCPP_INFO(logger, "Publishing : /ocr/answer (UInt8, volatile)");
     RCLCPP_INFO(logger, "Keyboard   : %s",
@@ -1323,11 +1385,16 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     OcrVideoRecorder video_recorder(ocr_config, "ppocr_production", logger);
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub;
     rclcpp::WallRate idle_rate(20);
+    std::string active_task_side = "right";
     while (rclcpp::ok())
     {
         rclcpp::spin_some(node);
         if (g_ocr_triggered.exchange(false))
         {
+            {
+                std::lock_guard<std::mutex> lock(task_state->mutex);
+                active_task_side = task_state->side;
+            }
             voter.reset();
             stable_roi = cv::Rect2f();
             has_stable_roi = false;
@@ -1340,7 +1407,9 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
                 RCLCPP_INFO(logger, "Subscribed to %s for this OCR trigger.",
                             frame_source.image_topic.c_str());
             }
-            RCLCPP_INFO(logger, "Trigger received, OCR tracking reset and started.");
+            RCLCPP_INFO(logger,
+                        "Trigger received, OCR tracking reset and started (task=%s).",
+                        active_task_side.c_str());
         }
 
         if (!tracking_active)
@@ -1398,8 +1467,10 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         cv::Mat ocr_roi;
         OCRDebugFrame debug;
         std::optional<OCRVoteResult> frame_result;
+        const s_detector_params frame_ocr_config =
+            task_roi_config(ocr_config, active_task_side);
         if (run_ocr_pipeline(
-                frame, det, rec, ocr_config, logger,
+                frame, det, rec, frame_ocr_config, logger,
                 expr_str, int_result, mod_result, &math_roi,
                 &ocr_roi, &debug))
         {
@@ -1689,6 +1760,7 @@ int main(int argc, char** argv)
     node->declare_parameter<int>("wait_ms", 1000);
     node->declare_parameter<std::string>("image_source", "camera");
     node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<std::string>("task_topic", "/task");
     node->declare_parameter<bool>("dynamic_image_subscription", true);
     node->declare_parameter<bool>("save_video", config.detect_config.save_ppocr_video);
     node->declare_parameter<bool>(
@@ -1713,6 +1785,7 @@ int main(int argc, char** argv)
     const int wait_ms = node->get_parameter("wait_ms").as_int();
     const std::string image_source = node->get_parameter("image_source").as_string();
     const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const std::string task_topic = node->get_parameter("task_topic").as_string();
     const bool dynamic_image_subscription =
         node->get_parameter("dynamic_image_subscription").as_bool();
     const bool save_video = node->get_parameter("save_video").as_bool();
@@ -1858,7 +1931,7 @@ int main(int argc, char** argv)
                 show_visual, show_ocr_roi, show_debug_panels,
                 enable_keyboard_trigger, debug_snapshot_dir,
                 save_result_images, result_image_dir, max_result_images,
-                dynamic_image_subscription);
+                dynamic_image_subscription, task_topic);
         }
         else
         {

@@ -110,6 +110,14 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             resolve(value["path"]["ppocr_allowed_chars_path"].asString());
 
         const Json::Value& math_filter = value["ocr_math_filter"];
+        auto read_roi_ratio = [](const Json::Value& roi_ratio) -> cv::Rect2d
+        {
+            return cv::Rect2d(
+                roi_ratio.get("x", 0.0).asDouble(),
+                roi_ratio.get("y", 0.0).asDouble(),
+                roi_ratio.get("w", 1.0).asDouble(),
+                roi_ratio.get("h", 1.0).asDouble());
+        };
         if (!math_filter.isNull())
         {
             config.detect_config.ocr_math_use_grayscale =
@@ -127,12 +135,21 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             const Json::Value& roi_ratio = math_filter["roi_rect_ratio"];
             if (!roi_ratio.isNull())
             {
-                config.detect_config.ocr_roi_rect_ratio = cv::Rect2d(
-                    roi_ratio.get("x", 0.0).asDouble(),
-                    roi_ratio.get("y", 0.0).asDouble(),
-                    roi_ratio.get("w", 1.0).asDouble(),
-                    roi_ratio.get("h", 1.0).asDouble());
+                config.detect_config.ocr_roi_rect_ratio =
+                    read_roi_ratio(roi_ratio);
             }
+            const Json::Value& left_roi_ratio =
+                math_filter["left_roi_rect_ratio"];
+            config.detect_config.ocr_left_roi_rect_ratio =
+                left_roi_ratio.isNull()
+                    ? config.detect_config.ocr_roi_rect_ratio
+                    : read_roi_ratio(left_roi_ratio);
+            const Json::Value& right_roi_ratio =
+                math_filter["right_roi_rect_ratio"];
+            config.detect_config.ocr_right_roi_rect_ratio =
+                right_roi_ratio.isNull()
+                    ? config.detect_config.ocr_roi_rect_ratio
+                    : read_roi_ratio(right_roi_ratio);
             config.detect_config.ocr_math_min_surround_white_ratio =
                 math_filter.get("min_surround_white_ratio", 0.50).asDouble();
             config.detect_config.ocr_math_surround_margin_ratio =
@@ -164,6 +181,22 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             config.detect_config.ocr_roi_quadrant;
         const std::string& roi_mode =
             config.detect_config.ocr_roi_mode;
+        auto validate_roi_ratio = [](const cv::Rect2d& ratio,
+                                     const std::string& label)
+        {
+            constexpr double eps = 1e-9;
+            if (ratio.x < 0.0 || ratio.x >= 1.0 ||
+                ratio.y < 0.0 || ratio.y >= 1.0 ||
+                ratio.width <= 0.0 || ratio.width > 1.0 ||
+                ratio.height <= 0.0 || ratio.height > 1.0 ||
+                ratio.x + ratio.width > 1.0 + eps ||
+                ratio.y + ratio.height > 1.0 + eps)
+            {
+                throw std::invalid_argument(
+                    label + " requires x/y in [0,1), "
+                    "w/h in (0,1], and x+w/y+h <= 1");
+            }
+        };
         if (roi_mode != "full" &&
             roi_mode != "quadrant" &&
             roi_mode != "ratio")
@@ -188,20 +221,15 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
                 throw std::invalid_argument(
                     "ocr_math_filter.roi_rect_ratio is required when roi_mode=ratio");
             }
-            const cv::Rect2d& ratio =
-                config.detect_config.ocr_roi_rect_ratio;
-            constexpr double eps = 1e-9;
-            if (ratio.x < 0.0 || ratio.x >= 1.0 ||
-                ratio.y < 0.0 || ratio.y >= 1.0 ||
-                ratio.width <= 0.0 || ratio.width > 1.0 ||
-                ratio.height <= 0.0 || ratio.height > 1.0 ||
-                ratio.x + ratio.width > 1.0 + eps ||
-                ratio.y + ratio.height > 1.0 + eps)
-            {
-                throw std::invalid_argument(
-                    "ocr_math_filter.roi_rect_ratio requires x/y in [0,1), "
-                    "w/h in (0,1], and x+w/y+h <= 1");
-            }
+            validate_roi_ratio(
+                config.detect_config.ocr_roi_rect_ratio,
+                "ocr_math_filter.roi_rect_ratio");
+            validate_roi_ratio(
+                config.detect_config.ocr_left_roi_rect_ratio,
+                "ocr_math_filter.left_roi_rect_ratio");
+            validate_roi_ratio(
+                config.detect_config.ocr_right_roi_rect_ratio,
+                "ocr_math_filter.right_roi_rect_ratio");
         }
 
         // ── OCR 测试模式窗口显示参数 ──
@@ -505,6 +533,12 @@ detector::detector(Appconfig *config)
         config->detect_config.ocr_roi_quadrant;
     detect_config_.ocr_roi_rect_ratio =
         config->detect_config.ocr_roi_rect_ratio;
+    detect_config_.ocr_left_roi_rect_ratio =
+        config->detect_config.ocr_left_roi_rect_ratio;
+    detect_config_.ocr_right_roi_rect_ratio =
+        config->detect_config.ocr_right_roi_rect_ratio;
+    detect_config_.ocr_roi_runtime_label =
+        config->detect_config.ocr_roi_runtime_label;
     detect_config_.ocr_math_min_surround_white_ratio =
         config->detect_config.ocr_math_min_surround_white_ratio;
     detect_config_.ocr_math_surround_margin_ratio =
