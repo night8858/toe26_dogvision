@@ -378,6 +378,14 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
             config.usbcamera_config[i].width = value[key]["width"].asInt();
             config.usbcamera_config[i].height = value[key]["height"].asInt();
             config.usbcamera_config[i].fps = value[key].get("FPS", 120).asInt();
+            config.usbcamera_config[i].brightness =
+                value[key].get("brightness", -1.0).asDouble();
+            config.usbcamera_config[i].exposure =
+                value[key].get("exposure", -1.0).asDouble();
+            config.usbcamera_config[i].contrast =
+                value[key].get("contrast", -1.0).asDouble();
+            config.usbcamera_config[i].software_brightness_offset =
+                value[key].get("software_brightness_offset", 0.0).asDouble();
         }
 
 #ifdef TWO_CAMERAS

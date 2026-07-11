@@ -86,6 +86,82 @@ bool CameraSource::init_usb()
     usb_capture_.set(cv::CAP_PROP_FRAME_HEIGHT, usb_params_.height);
     usb_capture_.set(cv::CAP_PROP_FPS, usb_params_.fps);
 
+    const bool manual_exposure = usb_params_.exposure >= 0.0;
+    const double auto_exposure_value = manual_exposure ? 0.25 : 0.75;
+    const bool auto_exposure_set =
+        usb_capture_.set(cv::CAP_PROP_AUTO_EXPOSURE, auto_exposure_value);
+    if (!auto_exposure_set)
+    {
+        std::cerr << "Warning: USB camera driver rejected "
+                  << (manual_exposure ? "manual" : "automatic")
+                  << " exposure mode; continuing with driver mode." << std::endl;
+    }
+    if (manual_exposure)
+    {
+        const bool exposure_set =
+            usb_capture_.set(cv::CAP_PROP_EXPOSURE, usb_params_.exposure);
+        const double actual_exposure = usb_capture_.get(cv::CAP_PROP_EXPOSURE);
+        if (!exposure_set)
+        {
+            std::cerr << "Warning: USB camera driver rejected exposure "
+                      << usb_params_.exposure << " (readback "
+                      << actual_exposure << "); continuing with driver value."
+                      << std::endl;
+        }
+        else
+        {
+            std::cout << "USB camera exposure requested="
+                      << usb_params_.exposure << ", readback="
+                      << actual_exposure << std::endl;
+        }
+    }
+    else
+    {
+        std::cout << "USB camera automatic exposure requested, readback="
+                  << usb_capture_.get(cv::CAP_PROP_AUTO_EXPOSURE) << std::endl;
+    }
+
+    if (usb_params_.brightness >= 0.0)
+    {
+        const bool brightness_set =
+            usb_capture_.set(cv::CAP_PROP_BRIGHTNESS, usb_params_.brightness);
+        const double actual_brightness =
+            usb_capture_.get(cv::CAP_PROP_BRIGHTNESS);
+        if (!brightness_set)
+        {
+            std::cerr << "Warning: USB camera driver rejected brightness "
+                      << usb_params_.brightness << " (readback "
+                      << actual_brightness << "); continuing with driver value."
+                      << std::endl;
+        }
+        else
+        {
+            std::cout << "USB camera brightness requested="
+                      << usb_params_.brightness << ", readback="
+                      << actual_brightness << std::endl;
+        }
+    }
+
+    if (usb_params_.contrast >= 0.0)
+    {
+        const bool contrast_set =
+            usb_capture_.set(cv::CAP_PROP_CONTRAST, usb_params_.contrast);
+        const double actual_contrast = usb_capture_.get(cv::CAP_PROP_CONTRAST);
+        if (!contrast_set)
+        {
+            std::cerr << "Warning: USB camera driver rejected contrast "
+                      << usb_params_.contrast << " (readback "
+                      << actual_contrast << "); continuing with driver value."
+                      << std::endl;
+        }
+        else
+        {
+            std::cout << "USB camera contrast requested="
+                      << usb_params_.contrast << ", readback="
+                      << actual_contrast << std::endl;
+        }
+    }
+
     cv::Mat test;
     if (!usb_capture_.read(test) || test.empty())
     {
@@ -124,7 +200,16 @@ bool CameraSource::get_frame(cv::Mat& frame)
 
     if (camera_type_ == "usb")
     {
-        return usb_capture_.isOpened() && usb_capture_.read(frame) && !frame.empty();
+        if (!usb_capture_.isOpened() || !usb_capture_.read(frame) || frame.empty())
+        {
+            return false;
+        }
+        if (usb_params_.software_brightness_offset != 0.0)
+        {
+            frame.convertTo(
+                frame, -1, 1.0, usb_params_.software_brightness_offset);
+        }
+        return true;
     }
 
     return false;

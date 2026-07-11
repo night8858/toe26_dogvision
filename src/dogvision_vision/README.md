@@ -6,11 +6,12 @@ ROS 2 相机采集、YOLO 目标检测、PP-OCR 文字识别与算术题识别�
 
 ## 1. 功能概述
 
-本包提供五个独立节点和一个共享库，覆盖完整的视觉感知流水线：
+本包提供六个独立节点和一个共享库，覆盖完整的视觉感知流水线：
 
 | 可执行文件 | 节点名 | 功能 |
 |---|---|---|
 | `camera_node` | `camera_node` | 独占打开物理相机 → 发布共享原始图像 `/camera/image_raw` |
+| `video_replay_node` | `video_replay_node` | 等待测试模块就绪 → 按录像帧率发布图像 → 发布 EOF |
 | `yolo_node` | `yolo_node` | 触发式单帧 YOLO 推理 → 2×4 网格分配 → JSON 发布；组合启动时订阅共享图像 |
 | `yolo_accuracy_test_node` | `yolo_accuracy_test_node` | 连续实时 YOLO 推理 → 标注可视化 → 带标注视频录制 |
 | `ppocr_node` | `ppocr_node` | 共享图像/相机取帧 → 整帧 PP-OCR → 算术候选筛选 → 表达式计算 → 多帧投票稳定 → JSON/YAML 输出 |
@@ -188,10 +189,10 @@ source install/setup.bash
   },
 
   // USB 相机参数；camera.type="usb" 时使用 usbcamera{usb_index}
-  "usbcamera0": { "device_id": 0, "width": 1920, "height": 1080, "FPS": 120 },
-  "usbcamera1": { "device_id": 1, "width": 1920, "height": 1080, "FPS": 120 },
-  "usbcamera2": { "device_id": 2, "width": 1920, "height": 1080, "FPS": 120 },
-  "usbcamera3": { "device_id": 3, "width": 1920, "height": 1080, "FPS": 120 },
+  "usbcamera0": { "device_id": 0, "width": 1920, "height": 1080, "FPS": 120, "brightness": 128, "exposure": -1, "contrast": 128, "software_brightness_offset": 0.0 },
+  "usbcamera1": { "device_id": 1, "width": 1920, "height": 1080, "FPS": 120, "brightness": -1, "exposure": -1, "contrast": -1, "software_brightness_offset": 0.0 },
+  "usbcamera2": { "device_id": 2, "width": 1920, "height": 1080, "FPS": 120, "brightness": -1, "exposure": -1, "contrast": -1, "software_brightness_offset": 0.0 },
+  "usbcamera3": { "device_id": 3, "width": 1920, "height": 1080, "FPS": 120, "brightness": -1, "exposure": -1, "contrast": -1, "software_brightness_offset": 0.0 },
 
   // 模型路径（相对于包 share 目录）
   "path": {
@@ -270,6 +271,22 @@ source install/setup.bash
   }
 }
 ```
+
+`brightness` 是相机驱动的原始硬件亮度值，`-1` 表示不覆盖驱动默认值。
+C920 通常使用 `0~255`，但实际范围应以
+`v4l2-ctl --device /dev/videoX --list-ctrls` 的结果为准。修改后需重启
+相机节点；设置失败只会记录告警，不会中断取流。
+
+`exposure` 是相机驱动的原始硬件曝光值。`-1` 会启用自动曝光；设为
+非负值时会先切换到手动曝光，再写入该值。不同驱动的可用范围不同，
+请使用上述 `v4l2-ctl` 命令查看 `exposure_absolute` 范围。
+
+`contrast` 是相机驱动的原始硬件对比度值，`-1` 表示不覆盖驱动默认值。
+C920 通常使用 `0~255`，但应以 `v4l2-ctl` 显示的 `contrast` 范围为准。
+
+`software_brightness_offset` 在 USB 相机取帧后通过 OpenCV `convertTo()` 修改像素亮度。
+`0.0` 不处理，负数降低亮度（例如 `-40.0`），正数提高亮度。OpenCV 会将
+输出自动限制在 `0~255`。该参数不修改硬件相机控件，也不影响录像回放节点。
 
 鱼眼去畸变参数：
 
@@ -607,7 +624,7 @@ math_problems:
 |---|---|
 | `s_detector_params` | 检测器参数聚合（模型路径、NCHW 尺寸、阈值、PPOCR 参数、类别名称） |
 | `s_hikcamera_params` | 海康相机参数（device_id, width, height, offset, exposure） |
-| `s_usbcamera_params` | USB 相机参数（device_id, width, height, FPS） |
+| `s_usbcamera_params` | USB 相机参数（device_id, width, height, FPS, brightness, exposure, contrast, software_brightness_offset） |
 | `Appconfig` | 顶层应用配置，包含 `detect_config`, `camera_type`, `usb_camera_index`, `hikcamera_config`, `usbcamera_config[4]` |
 | `Detection` | YOLO 检测结果（bbox[4], conf, class_id） |
 | `OCRBox` | OCR 四点文本框（pts[4]） |
@@ -904,7 +921,31 @@ ros2 launch dogvision_vision math_generator.launch
 ros2 launch dogvision_vision math_generator.launch interval:=5 min_val:=1 max_val:=20
 ```
 
-### 7.4 通过 `dogvision_bringup` 启动
+### 7.5 `video_module_test.launch.py`
+
+将一个录像原速播放一次，可单独测试 YOLO、PPOCR，或让两个模块消费
+同一路 `/camera/image_raw`。回放节点会等待所有选中的模块完成模型加载和
+订阅，因此不会丢失录像开头。
+
+```bash
+# 同时测试 YOLO + PPOCR（默认 target=all）
+ros2 launch dogvision_vision video_module_test.launch.py \
+  input_video:=/absolute/path/to/input.mp4
+
+# 仅 YOLO
+ros2 launch dogvision_vision video_module_test.launch.py \
+  input_video:=/absolute/path/to/input.mp4 target:=yolo
+
+# 仅 PPOCR，并显示结果窗口
+ros2 launch dogvision_vision video_module_test.launch.py \
+  input_video:=/absolute/path/to/input.mp4 target:=ppocr show_window:=true
+```
+
+YOLO 标注视频保存到 `data/yolotest`；PPOCR 标注视频、YAML 和结果图仍使用
+`output_save` 及 launch 参数指定的现有目录。可用 `save_video:=false` 禁止两个
+模块录制标注视频。
+
+### 7.6 通过 `dogvision_bringup` 启动
 
 ```bash
 # 全系统（含机械臂 + 视觉）
@@ -936,6 +977,7 @@ ros2 launch dogvision_bringup vision.launch enable_yolo:=false
 | 话题 | 类型 | 方向 | 说明 | 所属节点 |
 |---|---|---|---|---|
 | `/camera/image_raw` | `sensor_msgs/msg/Image` | 发布/订阅 | 共享原始 BGR 图像；组合启动时 YOLO/PPOCR 都从这里取帧 | `camera_node` |
+| `/video_replay/eof` | `std_msgs/msg/Bool` | 发布/订阅 | 录像播放完成通知，测试节点处理末帧后退出 | `video_replay_node` |
 | `/yolo/trigger` | `std_msgs/msg/String` | 订阅 | 发布 `"start_infer"` 触发单帧 YOLO 推理 | `yolo_node` |
 | `/yolo/result` | `std_msgs/msg/String` | 发布 | YOLO 检测结果 JSON（transient_local） | `yolo_node` |
 | `/yolo/block_grid` | `std_msgs/msg/String` | 发布 | 2×4 类别网格 JSON（transient_local） | `yolo_node` |

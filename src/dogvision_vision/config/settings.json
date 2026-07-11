@@ -29,11 +29,15 @@
     "usbcamera0":
     {
       //给c920罗技相机使用的usb相机参数
-      "device_path": "/dev/video0",  // 可选：USB 设备路径；为空或缺失时使用 VideoCapture(0)
+      "device_path": "/dev/video2",  // 可选：USB 设备路径；为空或缺失时使用 VideoCapture(0)
       "device_id": 0,     // 设备编号
       "width": 1920,      // 采集宽度
       "height": 1080,     // 采集高度
-      "FPS":30            // 目标帧率
+      "FPS":30,           // 目标帧率
+      "brightness": 128,  // 硬件亮度；C920 常用范围 0~255，-1 表示使用驱动默认值
+      "exposure": 50,     // -1=自动曝光，非负值=手动曝光值
+      "contrast": 150,    // 硬件对比度；C920 常用范围 0~255，-1 表示使用驱动默认值
+      "software_brightness_offset": -40.0 // OpenCV 亮度偏移；负数变暗，正数变亮，0 不处理
     },
     
     "usbcamera1":
@@ -42,7 +46,11 @@
       "device_id": 1,
       "width": 1920,
       "height": 1080,
-      "FPS":120
+      "FPS":120,
+      "brightness": -1,
+      "exposure": 20,
+      "contrast": -1,
+      "software_brightness_offset": -50.0
     },
     "usbcamera2":
     {
@@ -50,7 +58,11 @@
       "device_id": 2,
       "width": 1920,
       "height": 1080,
-      "FPS":120
+      "FPS":120,
+      "brightness": -1,
+      "exposure": -1,
+      "contrast": -1,
+      "software_brightness_offset": 0.0
     },
     "usbcamera3":
     {
@@ -58,7 +70,11 @@
       "device_id": 3,
       "width": 1920,
       "height": 1080,
-      "FPS":120
+      "FPS":120,
+      "brightness": -1,
+      "exposure": -1,
+      "contrast": -1,
+      "software_brightness_offset": 0.0
     },
 
     // ── OpenVINO 模型路径和 PPOCR 模型路径 ──
@@ -86,11 +102,11 @@
     {
       "use_grayscale": false,             // true=OCR 输入转三通道灰度，false=原始彩色
       "roi_enabled": true,                // true=只对指定 ROI 做 OCR
-      "roi_mode": "ratio",                // OCR ROI 模式：full/quadrant/ratio
+      "roi_mode": "ratio",              // OCR ROI 模式：full/quadrant/ratio
       "roi_quadrant": "top_right",        // roi_mode=quadrant 时使用：top_left/top_right/bottom_left/bottom_right/full
       "roi_rect_ratio":
       {
-        "x": 0.00,                        // roi_mode=ratio 时使用，左上角 X 比例 [0,1)
+        "x": 0.50,                        // roi_mode=ratio 时使用，左上角 X 比例 [0,1)
         "y": 0.00,                        // roi_mode=ratio 时使用，左上角 Y 比例 [0,1)
         "w": 0.50,                        // roi_mode=ratio 时使用，宽度比例 (0,1]
         "h": 0.50                         // roi_mode=ratio 时使用，高度比例 (0,1]
@@ -109,10 +125,10 @@
         "w": 0.50,                        // /task=right 时使用，宽度比例 (0,1]
         "h": 0.50                         // /task=right 时使用，高度比例 (0,1]
       },
-      "min_surround_white_ratio": 0.50,   // 数学题外围环带最小白色比例
-      "surround_margin_ratio": 0.50,      // 环带宽度/平均文字高度
-      "white_s_max": 110,                 // HSV 白色区域 S 通道上限
-      "white_v_min": 50                   // HSV 白色区域 V 通道下限
+      "min_surround_white_ratio": 0.10,   // 数学题外围环带最小白色比例
+      "surround_margin_ratio": 0.35,      // 环带宽度/平均文字高度；避免小字环带仅有 1~3 像素
+      "white_s_max": 160,                 // HSV 白色区域 S 通道上限
+      "white_v_min": 30                   // HSV 白色区域 V 通道下限
     },
 
     // ── OCR test 模式可视化窗口配置 ──
@@ -145,7 +161,7 @@
     "thresh":
     {
         "nms_thresh": 0.7,          // NMS IoU 阈值
-        "bbox_conf_thresh": 0.72,    // 边界框置信度阈值
+        "bbox_conf_thresh": 0.50,    // 边界框置信度阈值
         "merge_thresh": 0.8,        // 多帧融合阈值
         "max_wellid_distance": 8    // 最大焊点距离
     },

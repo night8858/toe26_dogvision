@@ -107,12 +107,20 @@ add_executable(camera_node
 target_link_libraries(camera_node dogvision_vision_lib Threads::Threads)
 ament_target_dependencies(camera_node rclcpp sensor_msgs cv_bridge ament_index_cpp)
 
+# ── 可执行目标：录像原速回放节点 ──
+add_executable(video_replay_node
+  src/nodes/video_replay_node.cpp
+)
+target_link_libraries(video_replay_node ${OpenCV_LIBRARIES})
+ament_target_dependencies(video_replay_node rclcpp std_msgs sensor_msgs cv_bridge)
+
 # ── 可执行目标：YOLO 准确性测试节点（视频录制） ──
 add_executable(yolo_accuracy_test_node
   src/nodes/yolo_accuracy_test_node.cpp
 )
 target_link_libraries(yolo_accuracy_test_node dogvision_vision_lib Threads::Threads)
-ament_target_dependencies(yolo_accuracy_test_node rclcpp ament_index_cpp)
+ament_target_dependencies(yolo_accuracy_test_node
+  rclcpp std_msgs sensor_msgs cv_bridge ament_index_cpp)
 
 # ── 可执行目标：PPOCR 算术题识别节点 ──
 add_executable(ppocr_node
@@ -152,6 +160,7 @@ endif()
 install(TARGETS
   dogvision_vision_lib           # 核心库
   camera_node                    # 共享相机采集节点
+  video_replay_node              # 录像回放图像源
   yolo_node                      # YOLO 检测节点
   yolo_accuracy_test_node        # YOLO 准确性测试节点
   ppocr_node                     # PPOCR 识别节点
@@ -201,7 +210,9 @@ install(DIRECTORY data/
 # 安装启动脚本
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
-  FILES_MATCHING PATTERN "*.launch"
+  FILES_MATCHING
+    PATTERN "*.launch"
+    PATTERN "*.launch.py"
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)

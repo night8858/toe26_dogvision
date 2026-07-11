@@ -178,6 +178,10 @@ typedef struct
     int width;     ///< 采集宽度（像素）
     int height;    ///< 采集高度（像素）
     int fps;       ///< 目标帧率
+    double brightness; ///< 硬件亮度；负值表示不覆盖驱动默认值
+    double exposure; ///< 硬件曝光；负值表示启用自动曝光
+    double contrast; ///< 硬件对比度；负值表示不覆盖驱动默认值
+    double software_brightness_offset; ///< OpenCV 像素亮度偏移；0 表示不处理
 
 }s_usbcamera_params;
 

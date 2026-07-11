@@ -48,7 +48,9 @@ void write_file(const std::string& path, const std::string& content)
     out << content;
 }
 
-std::string make_loader_config_json(const std::string& ocr_math_filter)
+std::string make_loader_config_json(
+    const std::string& ocr_math_filter,
+    const std::string& camera0_controls = "")
 {
     return std::string(R"({
   "path": {
@@ -72,8 +74,8 @@ std::string make_loader_config_json(const std::string& ocr_math_filter)
   "thresh": { "nms_thresh": 0.45, "bbox_conf_thresh": 0.25, "merge_thresh": 0.5 },
   "nums": { "classes": 4, "cls0": "0", "cls1": "1", "cls2": "2", "cls3": "3" },
   "camera": { "type": "usb", "usb_index": 0 },
-  "usbcamera0": { "device_path": "", "device_id": 0, "width": 640, "height": 480, "FPS": 30 },
-  "usbcamera1": { "device_path": "", "device_id": 1, "width": 640, "height": 480, "FPS": 30 },
+  "usbcamera0": { "device_path": "", "device_id": 0, "width": 640, "height": 480, "FPS": 30 )" + camera0_controls + R"( },
+  "usbcamera1": { "device_path": "", "device_id": 1, "width": 640, "height": 480, "FPS": 30, "brightness": -1, "exposure": -1, "contrast": -1, "software_brightness_offset": 0.0 },
   "usbcamera2": { "device_path": "", "device_id": 2, "width": 640, "height": 480, "FPS": 30 },
   "usbcamera3": { "device_path": "", "device_id": 3, "width": 640, "height": 480, "FPS": 30 }
 })";
@@ -215,6 +217,22 @@ void test_ocr_task_roi_config_loading()
            "left OCR ROI did not fall back to base ratio");
     expect(fallback_config.detect_config.ocr_right_roi_rect_ratio == expected_fallback,
            "right OCR ROI did not fall back to base ratio");
+    expect(fallback_config.usbcamera_config[0].brightness == -1.0,
+           "missing camera brightness did not default to -1");
+    expect(fallback_config.usbcamera_config[1].brightness == -1.0,
+           "explicit disabled camera brightness was not loaded");
+    expect(fallback_config.usbcamera_config[0].exposure == -1.0,
+           "missing camera exposure did not default to -1");
+    expect(fallback_config.usbcamera_config[1].exposure == -1.0,
+           "explicit automatic camera exposure was not loaded");
+    expect(fallback_config.usbcamera_config[0].contrast == -1.0,
+           "missing camera contrast did not default to -1");
+    expect(fallback_config.usbcamera_config[1].contrast == -1.0,
+           "explicit disabled camera contrast was not loaded");
+    expect(fallback_config.usbcamera_config[0].software_brightness_offset == 0.0,
+           "missing software brightness offset did not default to zero");
+    expect(fallback_config.usbcamera_config[1].software_brightness_offset == 0.0,
+           "explicit zero software brightness offset was not loaded");
 
     const std::string explicit_path =
         "/tmp/dogvision_test_ppocr_task_roi_explicit.json";
@@ -232,7 +250,7 @@ void test_ocr_task_roi_config_loading()
     "surround_margin_ratio": 0.50,
     "white_s_max": 110,
     "white_v_min": 50
-  })"));
+  })", R"(, "brightness": 73.5, "exposure": 220, "contrast": 91.5, "software_brightness_offset": -35.0)"));
 
     Appconfig explicit_config;
     detect_rec_ppocr explicit_loader(nullptr);
@@ -243,6 +261,14 @@ void test_ocr_task_roi_config_loading()
     expect(explicit_config.detect_config.ocr_right_roi_rect_ratio ==
                cv::Rect2d(0.5, 0.0, 0.5, 0.5),
            "explicit right OCR ROI was not loaded");
+    expect(std::abs(explicit_config.usbcamera_config[0].brightness - 73.5) < 1e-9,
+           "explicit camera brightness was not loaded");
+    expect(explicit_config.usbcamera_config[0].exposure == 220.0,
+           "explicit manual camera exposure was not loaded");
+    expect(std::abs(explicit_config.usbcamera_config[0].contrast - 91.5) < 1e-9,
+           "explicit camera contrast was not loaded");
+    expect(explicit_config.usbcamera_config[0].software_brightness_offset == -35.0,
+           "explicit software brightness offset was not loaded");
 
     const std::string invalid_path =
         "/tmp/dogvision_test_ppocr_task_roi_invalid.json";

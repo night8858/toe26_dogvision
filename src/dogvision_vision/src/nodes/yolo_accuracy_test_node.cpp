@@ -12,14 +12,21 @@
  */
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cv_bridge/cv_bridge.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <std_msgs/msg/bool.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <opencv2/opencv.hpp>
@@ -32,6 +39,64 @@ namespace fs = std::filesystem;
 namespace
 {
 constexpr char kWindowName[] = "yolo_accuracy_test"; ///< 可视化窗口名称
+
+struct LatestTestFrame
+{
+    std::mutex mutex;
+    cv::Mat frame;
+    bool has_frame = false;
+};
+
+void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg,
+                    const std::shared_ptr<LatestTestFrame>& buffer,
+                    const rclcpp::Logger& logger)
+{
+    try
+    {
+        auto cv_ptr = cv_bridge::toCvShare(msg, "bgr8");
+        std::lock_guard<std::mutex> lock(buffer->mutex);
+        buffer->frame = cv_ptr->image.clone();
+        buffer->has_frame = true;
+    }
+    catch (const cv_bridge::Exception& e)
+    {
+        RCLCPP_WARN(logger, "Failed to convert replay frame: %s", e.what());
+    }
+}
+
+bool take_latest_frame(const std::shared_ptr<LatestTestFrame>& buffer, cv::Mat& frame)
+{
+    std::lock_guard<std::mutex> lock(buffer->mutex);
+    if (!buffer->has_frame || buffer->frame.empty())
+    {
+        frame.release();
+        return false;
+    }
+    frame = buffer->frame.clone();
+    buffer->frame.release();
+    buffer->has_frame = false;
+    return true;
+}
+
+bool run_detection_on_frame(cv::Mat input,
+                            detect_oponvino& detector,
+                            bool enable_undistort,
+                            cv::Mat& processed_frame,
+                            std::vector<Detection>& dets)
+{
+    if (input.empty())
+    {
+        processed_frame.release();
+        dets.clear();
+        return false;
+    }
+    if (enable_undistort)
+        input = detector.diatorion(input);
+    processed_frame = input;
+    dets.clear();
+    detector.yolo_run(processed_frame, dets);
+    return true;
+}
 
 /**
  * @brief 将类别名称拼接成便于日志输出的字符串。
@@ -84,10 +149,26 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("output_dir", share_dir + "/data/yolotest");
     node->declare_parameter<double>("video_fps", 20.0);
     node->declare_parameter<double>("visual_nms_thresh", 0.7);
+    node->declare_parameter<bool>("show_window", true);
+    node->declare_parameter<std::string>("image_source", "camera");
+    node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<std::string>("eof_topic", "/video_replay/eof");
 
     const std::string config_path = node->get_parameter("config_path").as_string();
     const bool enable_undistort_param = node->get_parameter("enable_undistort").as_bool();
     const std::string output_dir = node->get_parameter("output_dir").as_string();
+    const bool show_window = node->get_parameter("show_window").as_bool();
+    const std::string image_source = node->get_parameter("image_source").as_string();
+    const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const std::string eof_topic = node->get_parameter("eof_topic").as_string();
+    const bool use_topic_image = image_source == "topic";
+    if (image_source != "camera" && !use_topic_image)
+    {
+        RCLCPP_ERROR(logger, "Unsupported image_source '%s'. Use 'camera' or 'topic'.",
+                     image_source.c_str());
+        rclcpp::shutdown();
+        return 1;
+    }
     double video_fps = node->get_parameter("video_fps").as_double();
     const double visual_nms_thresh = std::clamp(
         node->get_parameter("visual_nms_thresh").as_double(), 0.0, 1.0);
@@ -135,19 +216,47 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    CameraSource camera(config);
-    if (!camera.init())
+    std::unique_ptr<CameraSource> camera;
+    std::shared_ptr<LatestTestFrame> topic_buffer;
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr eof_sub;
+    std::atomic<bool> replay_eof{false};
+    if (use_topic_image)
     {
-        RCLCPP_ERROR(logger, "Failed to initialize %s camera",
-                     camera.type_name().c_str());
-        rclcpp::shutdown();
-        return 1;
+        topic_buffer = std::make_shared<LatestTestFrame>();
+        image_sub = node->create_subscription<sensor_msgs::msg::Image>(
+            image_topic, rclcpp::SensorDataQoS(),
+            [topic_buffer, logger](sensor_msgs::msg::Image::ConstSharedPtr msg) {
+                image_callback(msg, topic_buffer, logger);
+            });
+        const auto eof_qos =
+            rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+        eof_sub = node->create_subscription<std_msgs::msg::Bool>(
+            eof_topic, eof_qos,
+            [&replay_eof](const std_msgs::msg::Bool::ConstSharedPtr msg) {
+                if (msg->data)
+                    replay_eof.store(true);
+            });
+        RCLCPP_INFO(logger, "Image input: topic %s; EOF topic: %s",
+                    image_topic.c_str(), eof_topic.c_str());
     }
-    RCLCPP_INFO(logger, "Camera: type=%s device=%d %dx%d",
-                camera.type_name().c_str(), camera.device_id(),
-                camera.width(), camera.height());
+    else
+    {
+        camera = std::make_unique<CameraSource>(config);
+        if (!camera->init())
+        {
+            RCLCPP_ERROR(logger, "Failed to initialize %s camera",
+                         camera->type_name().c_str());
+            rclcpp::shutdown();
+            return 1;
+        }
+        RCLCPP_INFO(logger, "Camera: type=%s device=%d %dx%d",
+                    camera->type_name().c_str(), camera->device_id(),
+                    camera->width(), camera->height());
+    }
 
-    cv::namedWindow(kWindowName, cv::WINDOW_NORMAL);
+    if (show_window)
+        cv::namedWindow(kWindowName, cv::WINDOW_NORMAL);
     cv::VideoWriter writer;
     int frame_count = 0;
     int ret = 0;
@@ -164,14 +273,38 @@ int main(int argc, char** argv)
 
         cv::Mat frame;
         std::vector<Detection> dets;
-        if (!run_single_detection(camera, detector, enable_undistort, frame, dets))
+        bool detection_ok = false;
+        if (use_topic_image)
         {
-            RCLCPP_WARN_THROTTLE(logger, *node->get_clock(), 1000, "Failed to grab frame.");
-            const int key = cv::waitKey(1);
+            cv::Mat topic_frame;
+            if (take_latest_frame(topic_buffer, topic_frame))
+            {
+                detection_ok = run_detection_on_frame(
+                    topic_frame, detector, enable_undistort, frame, dets);
+            }
+            else if (replay_eof.load())
+            {
+                RCLCPP_INFO(logger, "Replay EOF received; YOLO test is complete.");
+                break;
+            }
+        }
+        else
+        {
+            detection_ok = run_single_detection(
+                *camera, detector, enable_undistort, frame, dets);
+        }
+
+        if (!detection_ok)
+        {
+            if (!use_topic_image)
+                RCLCPP_WARN_THROTTLE(logger, *node->get_clock(), 1000,
+                                     "Failed to grab frame.");
+            const int key = show_window ? cv::waitKey(1) : -1;
             if (key == 'q' || key == 'Q' || key == 27)
             {
                 break;
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
 
@@ -204,8 +337,9 @@ int main(int argc, char** argv)
                         frame_count, dets.size());
         }
 
-        cv::imshow(kWindowName, vis);
-        const int key = cv::waitKey(1);
+        if (show_window)
+            cv::imshow(kWindowName, vis);
+        const int key = show_window ? cv::waitKey(1) : -1;
         if (key == 'q' || key == 'Q' || key == 27)
         {
             RCLCPP_INFO(logger, "Exit by user key.");
@@ -223,8 +357,12 @@ int main(int argc, char** argv)
         RCLCPP_WARN(logger, "No video saved because no valid frame was written.");
     }
 
-    cv::destroyWindow(kWindowName);
-    camera.shutdown();
+    if (show_window)
+        cv::destroyWindow(kWindowName);
+    if (camera)
+        camera->shutdown();
+    (void)image_sub;
+    (void)eof_sub;
     rclcpp::shutdown();
     return ret;
 }

@@ -21,6 +21,7 @@
 #include <cv_bridge/cv_bridge.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 
@@ -728,6 +729,8 @@ static bool take_latest_ocr_frame(const std::shared_ptr<LatestImageFrameBuffer>&
         return false;
     }
     frame = buffer->frame.clone();
+    buffer->frame.release();
+    buffer->has_frame = false;
     return true;
 }
 
@@ -770,7 +773,7 @@ static bool acquire_ocr_frame(OCRFrameSource& source,
         {
             RCLCPP_WARN_THROTTLE(
                 node->get_logger(), *node->get_clock(), 2000,
-                "No image received on %s; OCR is waiting for camera_node.",
+                "No image received on %s; OCR is waiting for its image publisher.",
                 source.image_topic.c_str());
             return false;
         }
@@ -1163,7 +1166,8 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
                          const std::string& debug_snapshot_dir,
                          bool save_result_images,
                          const std::string& result_image_dir,
-                         int max_result_images)
+                         int max_result_images,
+                         const std::shared_ptr<std::atomic<bool>>& replay_eof)
 {
     auto logger = node->get_logger();
     int problem_id = 0;
@@ -1188,6 +1192,11 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         {
             if (fatal_error)
             {
+                break;
+            }
+            if (replay_eof && replay_eof->load())
+            {
+                RCLCPP_INFO(logger, "Replay EOF received; PPOCR test is complete.");
                 break;
             }
             idle_rate.sleep();
@@ -1760,6 +1769,7 @@ int main(int argc, char** argv)
     node->declare_parameter<int>("wait_ms", 1000);
     node->declare_parameter<std::string>("image_source", "camera");
     node->declare_parameter<std::string>("image_topic", "/camera/image_raw");
+    node->declare_parameter<std::string>("eof_topic", "/video_replay/eof");
     node->declare_parameter<std::string>("task_topic", "/task");
     node->declare_parameter<bool>("dynamic_image_subscription", true);
     node->declare_parameter<bool>("save_video", config.detect_config.save_ppocr_video);
@@ -1785,6 +1795,7 @@ int main(int argc, char** argv)
     const int wait_ms = node->get_parameter("wait_ms").as_int();
     const std::string image_source = node->get_parameter("image_source").as_string();
     const std::string image_topic = node->get_parameter("image_topic").as_string();
+    const std::string eof_topic = node->get_parameter("eof_topic").as_string();
     const std::string task_topic = node->get_parameter("task_topic").as_string();
     const bool dynamic_image_subscription =
         node->get_parameter("dynamic_image_subscription").as_bool();
@@ -1887,6 +1898,8 @@ int main(int argc, char** argv)
         std::unique_ptr<CameraSource> camera;
         std::shared_ptr<LatestImageFrameBuffer> topic_buffer;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub;
+        rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr eof_sub;
+        std::shared_ptr<std::atomic<bool>> replay_eof;
         OCRFrameSource frame_source;
         frame_source.use_topic = use_topic_image;
         frame_source.image_topic = image_topic;
@@ -1899,6 +1912,19 @@ int main(int argc, char** argv)
             {
                 image_sub = create_ocr_image_subscription(
                     node, image_topic, topic_buffer);
+            }
+            if (mode == "test")
+            {
+                replay_eof = std::make_shared<std::atomic<bool>>(false);
+                const auto eof_qos =
+                    rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+                eof_sub = node->create_subscription<std_msgs::msg::Bool>(
+                    eof_topic, eof_qos,
+                    [replay_eof](const std_msgs::msg::Bool::ConstSharedPtr msg) {
+                        if (msg->data)
+                            replay_eof->store(true);
+                    });
+                RCLCPP_INFO(logger, "Replay EOF : %s", eof_topic.c_str());
             }
             // 组合启动时 PPOCR 不再打开相机，只消费 camera_node 发布的共享图像。
             RCLCPP_INFO(logger,
@@ -1939,13 +1965,15 @@ int main(int argc, char** argv)
                 node, frame_source, det, rec, config.detect_config, yaml_path,
                 show_visual, show_ocr_roi, show_debug_panels,
                 debug_snapshot_dir,
-                save_result_images, result_image_dir, max_result_images);
+                save_result_images, result_image_dir, max_result_images,
+                replay_eof);
         }
         if (camera)
         {
             camera->shutdown();
         }
         (void)image_sub;
+        (void)eof_sub;
     }
     else
     {
