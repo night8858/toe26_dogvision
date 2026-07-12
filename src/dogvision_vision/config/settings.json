@@ -35,9 +35,9 @@
       "height": 1080,     // 采集高度
       "FPS":30,           // 目标帧率
       "brightness": 128,  // 硬件亮度；C920 常用范围 0~255，-1 表示使用驱动默认值
-      "exposure": 50,     // -1=自动曝光，非负值=手动曝光值
-      "contrast": 150,    // 硬件对比度；C920 常用范围 0~255，-1 表示使用驱动默认值
-      "software_brightness_offset": -40.0 // OpenCV 亮度偏移；负数变暗，正数变亮，0 不处理
+      "exposure": 60,     // -1=自动曝光，非负值=手动曝光值
+      "contrast": 100,    // 硬件对比度；C920 常用范围 0~255，-1 表示使用驱动默认值
+      "software_brightness_offset": -20.0 // OpenCV 亮度偏移；负数变暗，正数变亮，0 不处理
     },
     
     "usbcamera1":
@@ -80,8 +80,8 @@
     // ── OpenVINO 模型路径和 PPOCR 模型路径 ──
     "path":
     {
-      "openvino_bin_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.bin",
-      "openvino_xml_file_path": "models/yolo/yolo/C2f-EMA_629_FP32/best.xml",
+      "openvino_bin_file_path": "src/dogvision_vision/models/yolo/yolov8-C2f-EMA_color4/best.bin",
+      "openvino_xml_file_path": "src/dogvision_vision/models/yolo/yolov8-C2f-EMA_color4/best.xml",
       "openvino_device": "CPU",  // OpenVINO 推理设备：CPU / GPU / AUTO:GPU,CPU
 
       // 使用 PP-OCRv5，已转换为 OpenVINO IR 模型
@@ -161,8 +161,8 @@
     "thresh":
     {
         "nms_thresh": 0.7,          // NMS IoU 阈值
-        "bbox_conf_thresh": 0.50,    // 边界框置信度阈值
-        "merge_thresh": 0.8,        // 多帧融合阈值
+        "bbox_conf_thresh": 0.55,    // 边界框置信度阈值
+        "merge_thresh": 0.6,        // 多帧融合阈值
         "max_wellid_distance": 8    // 最大焊点距离
     },
 
