@@ -97,12 +97,33 @@
       "ppocr_allowed_chars_path": "models/ppocr/Dict/math_chars.txt"
     },
 
+    // ── OCR 检测与识别推理参数 ──
+    "ocr_inference":
+    {
+      "det_limit_side_len": 960,     // DB 检测输入边长限制；越小越快，小字召回越低
+      "det_limit_type": "max",       // max=限制最长边，min=保证最短边
+      "det_db_thresh": 0.30,         // DB 概率图二值化阈值；降低可增加召回
+      "det_db_box_thresh": 0.60,     // 文本框平均置信度阈值；降低可保留更多候选
+      "det_db_unclip_ratio": 1.50,   // 检测框外扩比例；增大可减少文字边缘截断
+      "rec_max_width": 320,          // 识别输入最大宽度；长算式可适当增大
+      "rec_min_score": 0.25          // 识别结果最低平均置信度
+    },
+
+    // ── OCR 多帧投票参数 ──
+    "ocr_multi_frame_voter":
+    {
+      "window_size": 3,              // 滑动窗口保留的最近帧数
+      "min_occurrences": 2,          // 同一表达式成为稳定结果所需最低票数
+      "min_valid_ratio": 0.66,       // 该表达式在有效 OCR 帧中的最低占比
+      "lost_after_invalid_frames": 3 // 连续无有效结果多少帧后清除稳定结果
+    },
+
     // ── OCR 数学题后置筛选参数 ──
     "ocr_math_filter":
     {
       "use_grayscale": false,             // true=OCR 输入转三通道灰度，false=原始彩色
       "roi_enabled": true,                // true=只对指定 ROI 做 OCR
-      "roi_mode": "ratio",              // OCR ROI 模式：full/quadrant/ratio
+      "roi_mode": "full",              // OCR ROI 模式：full/quadrant/ratio
       "roi_quadrant": "top_right",        // roi_mode=quadrant 时使用：top_left/top_right/bottom_left/bottom_right/full
       "roi_rect_ratio":
       {
@@ -125,10 +146,10 @@
         "w": 0.50,                        // /task=right 时使用，宽度比例 (0,1]
         "h": 0.50                         // /task=right 时使用，高度比例 (0,1]
       },
-      "min_surround_white_ratio": 0.10,   // 数学题外围环带最小白色比例
-      "surround_margin_ratio": 0.35,      // 环带宽度/平均文字高度；避免小字环带仅有 1~3 像素
-      "white_s_max": 160,                 // HSV 白色区域 S 通道上限
-      "white_v_min": 30                   // HSV 白色区域 V 通道下限
+      "min_surround_white_ratio": 0.08,   // 数学题外围环带最小白色比例
+      "surround_margin_ratio": 0.12,      // 环带宽度/平均文字高度；避免小字环带仅有 1~3 像素
+      "white_s_max": 180,                 // HSV 白色区域 S 通道上限
+      "white_v_min": 25                   // HSV 白色区域 V 通道下限
     },
 
     // ── OCR test 模式可视化窗口配置 ──

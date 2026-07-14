@@ -9,6 +9,8 @@
  *   - 同一稳定结果不重复触发
  *   - 新稳定结果替换旧结果
  *   - 3 帧无效后稳定结果丢失
+ *   - 自定义窗口/票数/共识比例与最近结果并列优先
+ *   - 独立连续无效帧阈值和非法参数校验
  *   - reset 清空功能
  */
 
@@ -17,6 +19,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 namespace
@@ -39,6 +42,20 @@ void expect(bool condition, const char* message)
         std::cerr << "FAILED: " << message << std::endl;
         std::exit(1);
     }
+}
+
+template <typename Function>
+void expect_throw(Function&& function, const char* message)
+{
+    try
+    {
+        function();
+    }
+    catch (const std::invalid_argument&)
+    {
+        return;
+    }
+    expect(false, message);
 }
 
 /**
@@ -126,6 +143,63 @@ int main()
         expect(!voter.has_stable_result(), "reset should clear stable result");
         expect(voter.frame_count() == 0, "reset should clear frame history");
     }
+
+    {
+        OCRMultiFrameVoter voter(OCRVoterConfig{3, 2, 0.66, 3});
+        add(voter, result("10+1", 11));
+        add(voter, result("10+1", 11), OCRVoteEvent::StableChanged);
+        expect(voter.stable_result().expr == "10+1",
+               "configured fast 2/3 voter should stabilize after two votes");
+    }
+
+    {
+        OCRMultiFrameVoter voter(OCRVoterConfig{5, 2, 0.75, 5});
+        add(voter, result("1+2", 3));
+        add(voter, result("9+9", 18));
+        add(voter, result("1+2", 3));
+        expect(!voter.has_stable_result(),
+               "2/3 valid votes must not pass a 0.75 consensus ratio");
+        add(voter, result("1+2", 3), OCRVoteEvent::StableChanged);
+        expect(voter.stable_result().expr == "1+2",
+               "3/4 valid votes should pass a 0.75 consensus ratio");
+    }
+
+    {
+        OCRMultiFrameVoter voter(OCRVoterConfig{4, 2, 0.50, 4});
+        add(voter, result("2+3", 5));
+        add(voter, result("2+3", 5), OCRVoteEvent::StableChanged);
+        add(voter, result("4+5", 9));
+        add(voter, result("4+5", 9), OCRVoteEvent::StableChanged);
+        expect(voter.stable_result().expr == "4+5",
+               "most recently seen expression should win an eligible tie");
+    }
+
+    {
+        OCRMultiFrameVoter voter(OCRVoterConfig{5, 2, 0.50, 2});
+        add(voter, result("6+7", 13));
+        add(voter, result("6+7", 13), OCRVoteEvent::StableChanged);
+        add(voter, std::nullopt);
+        expect(voter.has_stable_result(),
+               "stable result should survive one invalid frame");
+        add(voter, std::nullopt, OCRVoteEvent::StableLost);
+        expect(!voter.has_stable_result(),
+               "independent invalid-frame threshold should clear stability");
+        expect(voter.frame_count() == 0,
+               "losing stability should clear stale voting history");
+    }
+
+    expect_throw(
+        [] { OCRMultiFrameVoter voter(OCRVoterConfig{0, 1, 1.0, 1}); },
+        "zero voter window must be rejected");
+    expect_throw(
+        [] { OCRMultiFrameVoter voter(OCRVoterConfig{3, 4, 1.0, 1}); },
+        "min occurrences above window must be rejected");
+    expect_throw(
+        [] { OCRMultiFrameVoter voter(OCRVoterConfig{3, 2, 0.0, 1}); },
+        "zero consensus ratio must be rejected");
+    expect_throw(
+        [] { OCRMultiFrameVoter voter(OCRVoterConfig{3, 2, 1.0, 0}); },
+        "zero invalid-frame loss threshold must be rejected");
 
     std::cout << "OCRMultiFrameVoter tests passed" << std::endl;
     return 0;

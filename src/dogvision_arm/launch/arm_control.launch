@@ -11,7 +11,7 @@
   <arg name="baud_rate" default="115200"/>
   <!-- 串口端口号，留空则自动搜索 -->
   <arg name="port" default=""/>
-  <!-- 关节位置缩放系数 -->
+  <!-- 关节位置缩放系数 -->]
   <arg name="pos_scale" default="0.01"/>
   <!-- OCR 答案输出话题 -->
   <arg name="ocr_answer_topic" default="/ocr/answer"/>

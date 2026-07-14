@@ -210,6 +210,25 @@ source install/setup.bash
     "openvino_device": "CPU"                              // 默认 OpenVINO 推理设备：CPU / GPU / AUTO:GPU,CPU
   },
 
+  // OCR 检测与识别推理参数
+  "ocr_inference": {
+    "det_limit_side_len": 960,
+    "det_limit_type": "max",
+    "det_db_thresh": 0.30,
+    "det_db_box_thresh": 0.60,
+    "det_db_unclip_ratio": 1.50,
+    "rec_max_width": 320,
+    "rec_min_score": 0.35
+  },
+
+  // OCR 多帧投票参数（快速 3/2 配置）
+  "ocr_multi_frame_voter": {
+    "window_size": 3,
+    "min_occurrences": 2,
+    "min_valid_ratio": 0.66,
+    "lost_after_invalid_frames": 3
+  },
+
   // OCR 数学题后置筛选
   "ocr_math_filter": {
     "use_grayscale": false,
@@ -293,6 +312,31 @@ C920 通常使用 `0~255`，但应以 `v4l2-ctl` 显示的 `contrast` 范围为�
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
 | `lens_distortion.enable_undistort` | `true` | `true` 启用鱼眼去畸变，`false` 所有视觉节点直接使用原图 |
+
+OCR 推理参数：
+
+| 参数 | 配置值 | 有效范围 | 说明 |
+|---|---:|---:|---|
+| `det_limit_side_len` | `960` | `>=32` | DB 检测输入边长限制；减小可加速，但可能漏掉小字 |
+| `det_limit_type` | `max` | `max` / `min` | 限制最长边或保证最短边 |
+| `det_db_thresh` | `0.30` | `[0,1]` | 概率图二值化阈值；降低可提高召回并增加噪声 |
+| `det_db_box_thresh` | `0.60` | `[0,1]` | 检测框平均置信度阈值 |
+| `det_db_unclip_ratio` | `1.50` | `>0` | 检测框外扩比例 |
+| `rec_max_width` | `320` | `>=32` | 识别输入最大宽度；增大可容纳更长算式但更慢 |
+| `rec_min_score` | `0.35` | `[0,1]` | 低于该平均置信度的识别结果不参与候选组合和投票 |
+
+OCR 多帧投票参数：
+
+| 参数 | 配置值 | 有效范围 | 说明 |
+|---|---:|---:|---|
+| `window_size` | `3` | `>=1` | 滑动窗口保留的最近帧数 |
+| `min_occurrences` | `2` | `[1,window_size]` | 同一表达式成为稳定结果所需最低票数 |
+| `min_valid_ratio` | `0.66` | `(0,1]` | 候选票数占有效 OCR 帧数的最低比例；无效帧不进入分母 |
+| `lost_after_invalid_frames` | `3` | `>=1` | 连续无效帧达到该值后清除稳定结果和旧投票历史 |
+
+若多个合格表达式票数相同，选择在窗口中最近出现的表达式。旧配置缺少
+`ocr_multi_frame_voter` 时保持严格 `3/3/1.0`；缺少 `ocr_inference.rec_min_score`
+时使用 `0.0`，保持旧版不过滤行为。
 
 OCR 数学题筛选参数：
 
@@ -567,11 +611,11 @@ ocr_results:
 ```
 
 **多帧投票机制**：
-- 滑动窗口大小：3 帧
-- 最近 3 帧均为有效识别且全部为同一表达式才标记为"稳定结果"
+- 窗口、最低票数、有效帧共识比例和连续无效帧阈值均来自 `ocr_multi_frame_voter`
+- 当前快速配置在 3 帧窗口内取得 2 票且共识比例至少为 0.66 时标记为"稳定结果"
 - `StableChanged` 表示一次新的识别成功，同一稳定结果不会重复触发
-- 新表达式连续 3 次一致后替换旧稳定结果
-- 连续 3 帧全为无效帧 → 稳定结果丢失
+- 合格候选票数并列时采用最近出现的表达式
+- 连续无效帧达到 `lost_after_invalid_frames` 后稳定结果丢失
 
 ---
 
@@ -707,12 +751,16 @@ void set_max_wh_ratio(float r);
 ### 6.5 `OCRMultiFrameVoter` — 多帧投票器 (`ocr_MultiFrameVoter.hpp`)
 
 ```cpp
+struct OCRVoterConfig {
+    std::size_t window_size = 3;
+    std::size_t min_occurrences = 3;
+    double min_valid_ratio = 1.0;
+    std::size_t lost_after_invalid_frames = 3;
+};
+
 class OCRMultiFrameVoter {
 public:
-    static constexpr std::size_t kWindowSize = 3;      // 滑动窗口大小
-    static constexpr std::size_t kMinOccurrences = 3;  // 最低出现次数
-    static constexpr double kMinValidRatio = 1.0;      // 有效帧最低占比
-
+    explicit OCRMultiFrameVoter(OCRVoterConfig config = {});
     OCRVoteEvent update(const std::optional<OCRVoteResult>& frame_result);
     void reset();
     bool has_stable_result() const;
@@ -728,7 +776,7 @@ public:
 |---|---|
 | `OCRVoteEvent::None` | 稳定结果未变化 |
 | `OCRVoteEvent::StableChanged` | 产生了新的稳定结果 |
-| `OCRVoteEvent::StableLost` | 稳定结果丢失（窗口满且无有效帧） |
+| `OCRVoteEvent::StableLost` | 连续无效帧达到配置阈值，稳定结果丢失 |
 
 ### 6.6 工具函数 (`yolo_utils.hpp`)
 
@@ -1025,18 +1073,19 @@ ctest --test-dir build/dogvision_vision --output-on-failure
 
 `test/ocr_multi_frame_voter_test.cpp` 覆盖：
 
-- 3/3 一致时触发 `StableChanged`
-- 2/3 一致时不触发
-- 2 同 1 异时不触发
+- 默认严格 3/3 行为和配置化快速 3/2 行为
+- 自定义窗口、最低票数和有效帧共识比例
+- 合格候选票数并列时最近结果优先
 - 同一稳定结果不重复触发
-- 新稳定结果 3/3 一致后替换旧结果
-- 稳定结果在 2 帧无效后仍保留，第 3 帧丢失
+- 独立连续无效帧阈值和稳定结果丢失
+- 非法投票器配置拒绝
 - `reset()` 清空状态
 
 `test/ocr_math_filter_decode_test.cpp` 覆盖：
 
 - 彩色整帧原样传递和可选三通道灰度转换
 - OCR ROI 比例坐标、象限兼容和非法配置校验
+- OCR 推理参数、多帧投票参数的加载、默认值和非法范围校验
 - 严格表达式语法、括号、小数和除零校验
 - 白色外围环带比例与图像边缘裁剪
 - 多 OCR 框单行组合、偏离中心候选和多候选排序

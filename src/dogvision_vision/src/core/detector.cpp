@@ -1,6 +1,7 @@
 #include <iostream>
 #include <dogvision_vision/detector.hpp>
 #include <dogvision_vision/common_structs.h>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <jsoncpp/json/json.h>
@@ -108,6 +109,94 @@ void detector::load_config(Appconfig &config, std::string json_file_path)
         config.detect_config.rec_char_dict_path = resolve(value["path"]["ppocr_dict_path"].asString());
         config.detect_config.rec_allowed_chars_path =
             resolve(value["path"]["ppocr_allowed_chars_path"].asString());
+
+        // ── OCR 检测/识别推理参数 ──
+        const Json::Value& ocr_inference = value["ocr_inference"];
+        if (!ocr_inference.isNull())
+        {
+            config.detect_config.det_limit_side_len =
+                ocr_inference.get("det_limit_side_len", 960).asInt();
+            config.detect_config.det_limit_type =
+                ocr_inference.get("det_limit_type", "max").asString();
+            config.detect_config.det_db_thresh =
+                ocr_inference.get("det_db_thresh", 0.3).asFloat();
+            config.detect_config.det_db_box_thresh =
+                ocr_inference.get("det_db_box_thresh", 0.6).asFloat();
+            config.detect_config.det_db_unclip_ratio =
+                ocr_inference.get("det_db_unclip_ratio", 1.5).asFloat();
+            config.detect_config.rec_img_w =
+                ocr_inference.get("rec_max_width", 320).asInt();
+            config.detect_config.rec_min_score =
+                ocr_inference.get("rec_min_score", 0.0).asFloat();
+        }
+        if (config.detect_config.det_limit_side_len < 32)
+            throw std::invalid_argument(
+                "ocr_inference.det_limit_side_len must be >= 32");
+        if (config.detect_config.det_limit_type != "max" &&
+            config.detect_config.det_limit_type != "min")
+        {
+            throw std::invalid_argument(
+                "ocr_inference.det_limit_type must be max or min");
+        }
+        auto validate_probability = [](float probability,
+                                       const std::string& label)
+        {
+            if (!std::isfinite(probability) ||
+                probability < 0.0f || probability > 1.0f)
+                throw std::invalid_argument(label + " must be in [0, 1]");
+        };
+        validate_probability(
+            config.detect_config.det_db_thresh,
+            "ocr_inference.det_db_thresh");
+        validate_probability(
+            config.detect_config.det_db_box_thresh,
+            "ocr_inference.det_db_box_thresh");
+        validate_probability(
+            config.detect_config.rec_min_score,
+            "ocr_inference.rec_min_score");
+        if (!std::isfinite(config.detect_config.det_db_unclip_ratio) ||
+            config.detect_config.det_db_unclip_ratio <= 0.0f)
+            throw std::invalid_argument(
+                "ocr_inference.det_db_unclip_ratio must be > 0");
+        if (config.detect_config.rec_img_w < 32)
+            throw std::invalid_argument(
+                "ocr_inference.rec_max_width must be >= 32");
+
+        // ── OCR 多帧投票参数 ──
+        const Json::Value& voter = value["ocr_multi_frame_voter"];
+        if (!voter.isNull())
+        {
+            config.detect_config.ocr_voter_window_size =
+                voter.get("window_size", 3).asInt();
+            config.detect_config.ocr_voter_min_occurrences =
+                voter.get("min_occurrences", 3).asInt();
+            config.detect_config.ocr_voter_min_valid_ratio =
+                voter.get("min_valid_ratio", 1.0).asDouble();
+            config.detect_config.ocr_voter_lost_after_invalid_frames =
+                voter.get("lost_after_invalid_frames", 3).asInt();
+        }
+        if (config.detect_config.ocr_voter_window_size < 1)
+            throw std::invalid_argument(
+                "ocr_multi_frame_voter.window_size must be > 0");
+        if (config.detect_config.ocr_voter_min_occurrences < 1 ||
+            config.detect_config.ocr_voter_min_occurrences >
+                config.detect_config.ocr_voter_window_size)
+        {
+            throw std::invalid_argument(
+                "ocr_multi_frame_voter.min_occurrences must be in "
+                "[1, window_size]");
+        }
+        if (!std::isfinite(
+                config.detect_config.ocr_voter_min_valid_ratio) ||
+            config.detect_config.ocr_voter_min_valid_ratio <= 0.0 ||
+            config.detect_config.ocr_voter_min_valid_ratio > 1.0)
+        {
+            throw std::invalid_argument(
+                "ocr_multi_frame_voter.min_valid_ratio must be in (0, 1]");
+        }
+        if (config.detect_config.ocr_voter_lost_after_invalid_frames < 1)
+            throw std::invalid_argument(
+                "ocr_multi_frame_voter.lost_after_invalid_frames must be > 0");
 
         const Json::Value& math_filter = value["ocr_math_filter"];
         auto read_roi_ratio = [](const Json::Value& roi_ratio) -> cv::Rect2d
@@ -531,6 +620,20 @@ detector::detector(Appconfig *config)
         config->detect_config.rec_device;
     detect_config_.cls_device =
         config->detect_config.cls_device;
+    detect_config_.det_limit_side_len =
+        config->detect_config.det_limit_side_len;
+    detect_config_.det_limit_type =
+        config->detect_config.det_limit_type;
+    detect_config_.det_db_thresh =
+        config->detect_config.det_db_thresh;
+    detect_config_.det_db_box_thresh =
+        config->detect_config.det_db_box_thresh;
+    detect_config_.det_db_unclip_ratio =
+        config->detect_config.det_db_unclip_ratio;
+    detect_config_.rec_img_c = config->detect_config.rec_img_c;
+    detect_config_.rec_img_h = config->detect_config.rec_img_h;
+    detect_config_.rec_img_w = config->detect_config.rec_img_w;
+    detect_config_.rec_min_score = config->detect_config.rec_min_score;
     detect_config_.ocr_math_use_grayscale =
         config->detect_config.ocr_math_use_grayscale;
     detect_config_.ocr_roi_enabled =

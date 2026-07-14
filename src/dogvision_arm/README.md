@@ -498,7 +498,7 @@ ros2 topic pub --once /arm/mission_cmd std_msgs/msg/String "data: 'GETBACKALL'"
 
 ```bash
 # 位姿控制（BB 02）
-ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'"
+ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: '4POSE,L,X:0.1,Y:0.2,Z:0.3,PITCH:0.4'"·
 
 # 预设动作（BB 03）
 ros2 topic pub --once /arm_internation/cmd std_msgs/msg/String "data: '4ACT,1'"

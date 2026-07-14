@@ -166,6 +166,17 @@ static s_detector_params task_roi_config(const s_detector_params& base_config,
     return config;
 }
 
+static OCRVoterConfig make_ocr_voter_config(
+    const s_detector_params& config)
+{
+    return OCRVoterConfig{
+        static_cast<std::size_t>(config.ocr_voter_window_size),
+        static_cast<std::size_t>(config.ocr_voter_min_occurrences),
+        config.ocr_voter_min_valid_ratio,
+        static_cast<std::size_t>(
+            config.ocr_voter_lost_after_invalid_frames)};
+}
+
 static OCRBox offset_ocr_box(OCRBox box, const cv::Point2f& offset)
 {
     for (auto& pt : box.pts)
@@ -905,6 +916,14 @@ static bool run_ocr_pipeline(cv::Mat& img,
 
         if (!rec.result.empty() && !rec.result[0].text.empty())
         {
+            if (rec.result[0].score < ocr_config.rec_min_score)
+            {
+                RCLCPP_INFO(
+                    logger,
+                    "  [%zu] rejected: score=%.3f < rec_min_score=%.3f",
+                    i, rec.result[0].score, ocr_config.rec_min_score);
+                continue;
+            }
             OCRItem item;
             item.box = offset_ocr_box(
                 all_boxes[i],
@@ -1172,7 +1191,7 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
     auto logger = node->get_logger();
     int problem_id = 0;
     bool yaml_header_written = false;
-    OCRMultiFrameVoter voter;
+    OCRMultiFrameVoter voter(make_ocr_voter_config(ocr_config));
     cv::Rect2f stable_roi;
     bool has_stable_roi = false;
     OcrVideoRecorder video_recorder(ocr_config, "ppocr_test", logger);
@@ -1272,7 +1291,9 @@ static int run_test_mode(const rclcpp::Node::SharedPtr& node,
         else if (event == OCRVoteEvent::StableLost)
         {
             has_stable_roi = false;
-            RCLCPP_INFO(logger, "Stable OCR lost after 10 invalid frames.");
+            RCLCPP_INFO(
+                logger, "Stable OCR lost after %d invalid frames.",
+                ocr_config.ocr_voter_lost_after_invalid_frames);
         }
 
         if (show_visual && voter.has_stable_result() && has_stable_roi)
@@ -1383,7 +1404,7 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
     RCLCPP_INFO(logger, "Waiting for trigger%s...",
                 enable_keyboard_trigger ? " or Enter" : "");
 
-    OCRMultiFrameVoter voter;
+    OCRMultiFrameVoter voter(make_ocr_voter_config(ocr_config));
     cv::Rect2f stable_roi;
     bool has_stable_roi = false;
     bool tracking_active = false;
@@ -1532,7 +1553,9 @@ static int run_production_mode(const rclcpp::Node::SharedPtr& node,
         else if (event == OCRVoteEvent::StableLost)
         {
             has_stable_roi = false;
-            RCLCPP_INFO(logger, "Stable OCR lost after 10 invalid frames.");
+            RCLCPP_INFO(
+                logger, "Stable OCR lost after %d invalid frames.",
+                ocr_config.ocr_voter_lost_after_invalid_frames);
         }
 
         if (show_visual && voter.has_stable_result() && has_stable_roi)
@@ -1635,7 +1658,7 @@ static int run_visual_test_mode(const rclcpp::Node::SharedPtr& node,
                 input_path.c_str(), inputs.size(), inputs.size() == 1 ? "" : "s");
     RCLCPP_INFO(logger, "Keys       : q/ESC exit, s save, space pause, n next");
 
-    OCRMultiFrameVoter voter;
+    OCRMultiFrameVoter voter(make_ocr_voter_config(ocr_config));
     bool paused = inputs.size() == 1 || wait_ms <= 0;
     std::size_t index = 0;
 
@@ -1836,6 +1859,25 @@ int main(int argc, char** argv)
     RCLCPP_INFO(logger, "OCR images : save=%s dir=%s max=%d",
                 save_result_images ? "true" : "false",
                 result_image_dir.c_str(), max_result_images);
+    RCLCPP_INFO(
+        logger,
+        "OCR infer  : det_side=%d(%s) db=%.2f box=%.2f unclip=%.2f "
+        "rec_width=%d rec_score=%.2f",
+        config.detect_config.det_limit_side_len,
+        config.detect_config.det_limit_type.c_str(),
+        config.detect_config.det_db_thresh,
+        config.detect_config.det_db_box_thresh,
+        config.detect_config.det_db_unclip_ratio,
+        config.detect_config.rec_img_w,
+        config.detect_config.rec_min_score);
+    RCLCPP_INFO(
+        logger,
+        "OCR voter  : window=%d occurrences=%d valid_ratio=%.2f lost=%d "
+        "tie=recent",
+        config.detect_config.ocr_voter_window_size,
+        config.detect_config.ocr_voter_min_occurrences,
+        config.detect_config.ocr_voter_min_valid_ratio,
+        config.detect_config.ocr_voter_lost_after_invalid_frames);
 
     detect_det_ppocr det(&config);
     const OCRModelPaths det_model = select_ocr_model_paths(

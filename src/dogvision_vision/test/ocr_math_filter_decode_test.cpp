@@ -50,7 +50,8 @@ void write_file(const std::string& path, const std::string& content)
 
 std::string make_loader_config_json(
     const std::string& ocr_math_filter,
-    const std::string& camera0_controls = "")
+    const std::string& camera0_controls = "",
+    const std::string& extra_top_level = "")
 {
     return std::string(R"({
   "path": {
@@ -68,6 +69,7 @@ std::string make_loader_config_json(
     "ppocr_allowed_chars_path": ""
   },
   "ocr_math_filter": )") + ocr_math_filter + R"(,
+  )" + extra_top_level + R"(
   "NCHW": { "batch_size": 1, "C": 3, "W": 640, "H": 640 },
   "img": { "type": 0, "width": 1920, "height": 1080 },
   "lens_distortion": { "enable_undistort": false },
@@ -233,6 +235,17 @@ void test_ocr_task_roi_config_loading()
            "missing software brightness offset did not default to zero");
     expect(fallback_config.usbcamera_config[1].software_brightness_offset == 0.0,
            "explicit zero software brightness offset was not loaded");
+    expect(fallback_config.detect_config.det_limit_side_len == 960,
+           "missing OCR inference section did not keep detector defaults");
+    expect(fallback_config.detect_config.rec_img_w == 320 &&
+               fallback_config.detect_config.rec_min_score == 0.0f,
+           "missing OCR inference section did not keep recognition defaults");
+    expect(fallback_config.detect_config.ocr_voter_window_size == 3 &&
+               fallback_config.detect_config.ocr_voter_min_occurrences == 3 &&
+               fallback_config.detect_config.ocr_voter_min_valid_ratio == 1.0 &&
+               fallback_config.detect_config
+                       .ocr_voter_lost_after_invalid_frames == 3,
+           "missing OCR voter section did not keep strict legacy defaults");
 
     const std::string explicit_path =
         "/tmp/dogvision_test_ppocr_task_roi_explicit.json";
@@ -296,6 +309,106 @@ void test_ocr_task_roi_config_loading()
     std::remove(fallback_path.c_str());
     std::remove(explicit_path.c_str());
     std::remove(invalid_path.c_str());
+}
+
+void test_ocr_runtime_parameter_config_loading()
+{
+    const std::string math_filter = R"({
+    "use_grayscale": false,
+    "roi_enabled": false,
+    "roi_mode": "full",
+    "roi_quadrant": "full",
+    "min_surround_white_ratio": 0.50,
+    "surround_margin_ratio": 0.50,
+    "white_s_max": 110,
+    "white_v_min": 50
+  })";
+
+    const std::string valid_path =
+        "/tmp/dogvision_test_ppocr_runtime_config_valid.json";
+    write_file(
+        valid_path,
+        make_loader_config_json(
+            math_filter, "", R"(
+  "ocr_inference": {
+    "det_limit_side_len": 736,
+    "det_limit_type": "min",
+    "det_db_thresh": 0.22,
+    "det_db_box_thresh": 0.48,
+    "det_db_unclip_ratio": 1.8,
+    "rec_max_width": 512,
+    "rec_min_score": 0.35
+  },
+  "ocr_multi_frame_voter": {
+    "window_size": 5,
+    "min_occurrences": 3,
+    "min_valid_ratio": 0.6,
+    "lost_after_invalid_frames": 4
+  },)"));
+
+    Appconfig valid_config;
+    detect_rec_ppocr valid_loader(nullptr);
+    valid_loader.load_config(valid_config, valid_path);
+    expect(valid_config.detect_config.det_limit_side_len == 736 &&
+               valid_config.detect_config.det_limit_type == "min",
+           "OCR detector resize parameters were not loaded");
+    expect(std::abs(valid_config.detect_config.det_db_thresh - 0.22f) < 1e-6f &&
+               std::abs(valid_config.detect_config.det_db_box_thresh - 0.48f) <
+                   1e-6f &&
+               std::abs(valid_config.detect_config.det_db_unclip_ratio - 1.8f) <
+                   1e-6f,
+           "OCR DB parameters were not loaded");
+    expect(valid_config.detect_config.rec_img_w == 512 &&
+               std::abs(valid_config.detect_config.rec_min_score - 0.35f) <
+                   1e-6f,
+           "OCR recognition parameters were not loaded");
+    expect(valid_config.detect_config.ocr_voter_window_size == 5 &&
+               valid_config.detect_config.ocr_voter_min_occurrences == 3 &&
+               std::abs(
+                   valid_config.detect_config.ocr_voter_min_valid_ratio - 0.6) <
+                   1e-9 &&
+               valid_config.detect_config
+                       .ocr_voter_lost_after_invalid_frames == 4,
+           "OCR voter parameters were not loaded");
+
+    const std::string invalid_inference_path =
+        "/tmp/dogvision_test_ppocr_runtime_config_bad_inference.json";
+    write_file(
+        invalid_inference_path,
+        make_loader_config_json(
+            math_filter, "",
+            R"("ocr_inference": { "det_limit_side_len": 31 },)"));
+    Appconfig invalid_inference_config;
+    detect_rec_ppocr invalid_inference_loader(nullptr);
+    expect_throw(
+        [&] {
+            invalid_inference_loader.load_config(
+                invalid_inference_config, invalid_inference_path);
+        },
+        "invalid OCR inference range must be rejected");
+
+    const std::string invalid_voter_path =
+        "/tmp/dogvision_test_ppocr_runtime_config_bad_voter.json";
+    write_file(
+        invalid_voter_path,
+        make_loader_config_json(
+            math_filter, "", R"(
+  "ocr_multi_frame_voter": {
+    "window_size": 3,
+    "min_occurrences": 4
+  },)"));
+    Appconfig invalid_voter_config;
+    detect_rec_ppocr invalid_voter_loader(nullptr);
+    expect_throw(
+        [&] {
+            invalid_voter_loader.load_config(
+                invalid_voter_config, invalid_voter_path);
+        },
+        "OCR voter occurrences above window must be rejected");
+
+    std::remove(valid_path.c_str());
+    std::remove(invalid_inference_path.c_str());
+    std::remove(invalid_voter_path.c_str());
 }
 
 void test_strict_expression_parser()
@@ -466,6 +579,7 @@ int main()
     test_full_frame_grayscale();
     test_ocr_roi_selection();
     test_ocr_task_roi_config_loading();
+    test_ocr_runtime_parameter_config_loading();
     test_strict_expression_parser();
     test_surround_white_ratio_and_edge_clipping();
     test_candidate_grouping_and_selection();

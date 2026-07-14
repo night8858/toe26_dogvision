@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     node->declare_parameter<std::string>("yaml_path", share_dir + "/data/math_generator/math_results.yaml");
     node->declare_parameter<int>("min_val", 1);                // 操作数范围（含）
     node->declare_parameter<int>("max_val", 100);              // 操作数范围（含）
-    node->declare_parameter<int>("interval", 10);          // 题目生成间隔（秒）
+    node->declare_parameter<int>("interval", 20);          // 题目生成间隔（秒）
     node->declare_parameter<int>("canvas_width", 2560);
     node->declare_parameter<int>("canvas_height", 1440);
 

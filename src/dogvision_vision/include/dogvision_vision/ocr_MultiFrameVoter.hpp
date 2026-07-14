@@ -18,6 +18,19 @@ struct OCRVoteResult
 };
 
 /**
+ * @brief OCR 多帧投票器运行参数。
+ *
+ * 默认值保持旧版严格 3/3 行为；节点可从 settings.json 传入其他配置。
+ */
+struct OCRVoterConfig
+{
+    std::size_t window_size = 3;
+    std::size_t min_occurrences = 3;
+    double min_valid_ratio = 1.0;
+    std::size_t lost_after_invalid_frames = 3;
+};
+
+/**
  * @brief 多帧投票器状态变更事件
  *
  * 标记稳定结果是否发生变化，供外部根据事件执行相应逻辑。
@@ -26,15 +39,15 @@ enum class OCRVoteEvent
 {
     None,           ///< 无事件，稳定结果未变化
     StableChanged,  ///< 产生了新的稳定结果（内容与之前不同）
-    StableLost      ///< 稳定结果丢失（窗口满且无有效帧）
+    StableLost      ///< 连续无效帧达到配置阈值，稳定结果丢失
 };
 
 /**
  * @brief 多帧滑动窗口投票器，用于提高 OCR 识别结果的稳定性
  *
- * 将最近 3 帧 OCR 结果存入滑动窗口，只有最近 3 帧均为有效识别且全部为
- * 同一个表达式时，才将其标记为"稳定结果"。同一稳定结果不会重复触发，
- * 新表达式连续 3 次一致后会替换旧稳定结果。
+ * 将最近若干帧 OCR 结果存入可配置滑动窗口，并按最低票数和有效结果
+ * 共识比例判定稳定表达式。同一稳定结果不会重复触发；票数并列时选择
+ * 最近出现的表达式。
  *
  * 用法：
  * @code
@@ -48,21 +61,19 @@ enum class OCRVoteEvent
 class OCRMultiFrameVoter
 {
 public:
-    /// 滑动窗口大小，最多保留最近的 N 帧数据
-    static constexpr std::size_t kWindowSize = 3;
-
-    /// 某表达式被认定为稳定所需的最低出现次数
-    static constexpr std::size_t kMinOccurrences = 3;
-
-    /// 某表达式在有效帧中所需的最低占比（0.0 ~ 1.0）
-    static constexpr double kMinValidRatio = 1.0;
+    /**
+     * @brief 使用给定参数构造投票器。
+     * @throws std::invalid_argument 参数范围或相互关系无效时抛出。
+     */
+    explicit OCRMultiFrameVoter(
+        OCRVoterConfig config = OCRVoterConfig{});
 
     /**
      * @brief 输入一帧 OCR 结果，更新投票状态
      *
      * 将当前帧结果加入滑动窗口尾部；若窗口已满，移除最早的一帧。
      * 随后遍历窗口中的有效帧，统计各 expression 出现次数和占比。
-     * 最近 3 帧都有效且表达式一致时，更新稳定结果。
+     * 候选满足配置的最低票数和共识比例时，更新稳定结果。
      *
      * @param frame_result  当前帧的 OCR 识别结果。
      *                      传入 std::nullopt 表示该帧识别失败（无效帧）。
@@ -89,16 +100,21 @@ public:
      */
     const OCRVoteResult& stable_result() const;
 
-    /** @brief 当前窗口中已积累的帧数（最多 kWindowSize） */
+    /** @brief 当前窗口中已积累的帧数（最多为配置的 window_size） */
     std::size_t frame_count() const;
 
     /** @brief 当前窗口中有效（非 nullopt）帧的数量 */
     std::size_t valid_result_count() const;
 
 private:
+    OCRVoterConfig config_;
+
     /// 滑动窗口：存储最近 N 帧的 OCR 结果
     std::deque<std::optional<OCRVoteResult>> history_;
 
     /// 当前稳定结果（若有）
     std::optional<OCRVoteResult> stable_result_;
+
+    /// 最近连续识别失败的帧数
+    std::size_t consecutive_invalid_frames_ = 0;
 };

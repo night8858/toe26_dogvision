@@ -92,7 +92,7 @@ typedef struct
     int cls_batch_num = 6;     ///< 分类批处理数量
     float cls_thresh = 0.9f;   ///< 方向分类置信度阈值
 
-    float drop_score = 0.5f;   ///< 低于此分数的识别结果将被丢弃
+    float rec_min_score = 0.0f; ///< 识别结果最低置信度；0 保持旧版不过滤行为
 
     // ── 字典与白名单 ──
     std::string rec_char_dict_path;      ///< 全量识别字典路径（如 PP-OCRv5 inference.yml）
@@ -111,6 +111,12 @@ typedef struct
     double ocr_math_surround_margin_ratio = 0.50; ///< 外围环带宽度/平均文字高度
     int ocr_math_white_s_max = 110; ///< HSV 白色区域 S 通道上限
     int ocr_math_white_v_min = 50; ///< HSV 白色区域 V 通道下限
+
+    // ── OCR 多帧投票参数 ──
+    int ocr_voter_window_size = 3; ///< 滑动窗口保留的最近帧数
+    int ocr_voter_min_occurrences = 3; ///< 稳定表达式所需最低出现次数
+    double ocr_voter_min_valid_ratio = 1.0; ///< 候选在有效 OCR 帧中的最低占比
+    int ocr_voter_lost_after_invalid_frames = 3; ///< 连续无效帧达到该值后清除稳定结果
 
     // ── OCR 测试模式窗口显示参数 ──
     bool ocr_test_show_visual = true; ///< test 模式是否显示整帧 OCR 结果窗口
